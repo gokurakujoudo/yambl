@@ -42,6 +42,20 @@ async function main() {
     checks++;
   }
 
+  // A new language-server keyword must also have a TextMate scope in this release.
+  const vocabulary = require('../lsp/language/syntax.cjs');
+  for (const keyword of vocabulary.keywords) {
+    const scope = keyword === 'entity' ? 'storage.type.yambl'
+      : ['namespace', 'from', 'import'].includes(keyword) ? 'keyword.control.yambl' : 'keyword.declaration.yambl';
+    const line = keyword === 'namespace' ? 'namespace core' : `${keyword} Thing`;
+    expectScope(line, keyword, scope);
+  }
+  for (const annotation of vocabulary.annotations) expectScope(`@${annotation}('x')`, '@' + annotation, 'entity.name.function.yambl');
+  for (const constant of vocabulary.constants) expectScope(constant, constant, 'constant.language.yambl');
+  for (const type of [...vocabulary.values, ...vocabulary.generics]) {
+    expectScope(`attr field: ${type}${vocabulary.generics.includes(type) ? '<Thing>' : ''}`, type, 'support.type.yambl');
+  }
+
   expectScope('namespace core', 'core', 'entity.name.namespace.yambl');
   expectScope('namespace decodes', 'decodes', 'entity.name.namespace.yambl');
   expectScope('from decodes import Currencies', 'from', 'keyword.control.yambl');

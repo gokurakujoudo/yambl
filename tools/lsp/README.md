@@ -1,0 +1,74 @@
+# YAMBL language server
+
+This server provides diagnostics, document formatting, completion, hover, definition
+lookup, and document symbols for the current YAMBL syntax. It communicates over
+stdio using [LSP 3.17](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/)
+with UTF-8 message bodies and UTF-16 document positions.
+
+The [VS Code extension](../vscode/README.md) includes all server files and starts
+the server with VS Code's own Node runtime. Users do not need Python, a separate
+Node installation, npm packages, another extension, or a network connection.
+There are no runtime downloads or external service calls.
+
+## Model checking
+
+The server reads the nearest `yambl-root.lclcfg` as a root marker and checks YAMBL
+files under that root. It does not execute the marker's contents. Without a marker,
+it checks only the open document, matching the Python CLI's single-file behavior.
+Hidden directories, virtual environments, build output, `node_modules`, and symbolic
+links encountered during scans are skipped. Separate roots have separate symbol tables.
+
+Unsaved editor buffers replace their disk versions during analysis. Opening,
+editing, saving, closing, and changes to watched files update diagnostics. Changes
+are coalesced over 120 ms. Closing a buffer restores its disk contents for other
+open documents in the same compilation unit.
+
+Checks cover namespace imports, types, metadata, configuration literals, dimensions,
+entity extensions, inherited field conflicts, and inheritance cycles. Undefined
+Decodes produce warnings at each occurrence. Extension fields belong to their
+target entity and retain their original definition locations and scopes.
+
+Formatting preserves comments and string spelling and ends with exactly one LF.
+A document with a syntax error produces no formatting edits. Completion offers
+built-ins and names visible in the current file. Definition lookup follows imports,
+entity references, inheritance, extension targets, and defined Decodes names,
+including quoted identifiers. External Decodes have no definition to navigate to.
+The outline shows extension attributes as `Entity.field`, without adding an entity.
+
+## Implementation and tests
+
+`language/` contains the parser, formatter, and validator. `service.cjs` handles
+source discovery and editor features. `protocol.cjs` frames JSON-RPC messages, and
+`server.cjs` implements the LSP lifecycle and document synchronization. The VS Code
+client uses native [language feature providers](https://code.visualstudio.com/api/references/vscode-api)
+and shares the framing implementation.
+
+Run the offline tests with VS Code's runtime from the `yambl` repository:
+
+```powershell
+.\tools\vscode\test.ps1
+```
+
+For development with Node installed, the server can also run as `node tools/lsp/server.cjs`.
+Its stdin/stdout are protocol streams, not an interactive command prompt. Cross-check
+the JavaScript implementation against the sibling Python compiler:
+
+```console
+node tools/lsp/tests/parity.cjs
+```
+
+The parity check uses the compiler's existing venv, or a Python executable supplied
+as its first argument. It compares syntax acceptance, diagnostics, and formatted
+output for the regression corpus and current FMC files. Python is a development
+test dependency only. New keywords must be added to both implementations and the
+TextMate grammar; the vocabulary tests check this link.
+
+The editor implementation is separate from the Python compiler so the VSIX can
+run by itself. Changes to language rules require updating both and extending the
+parity corpus. This is not a stable intermediate representation or a data runtime.
+
+Current limits: local desktop/remote extension hosts with file URIs and untitled
+buffers; no browser or virtual filesystem support, rename, references search,
+code actions, incremental text edits, or runtime evaluation. The server requests
+full document synchronization. It rescans an affected compilation unit rather than
+maintaining a dependency cache; large repositories may need indexing later.

@@ -13,8 +13,10 @@ examples, including attribute extensions, inheritance, and external Decodes.
   structure, and model repository structure.
 - [builtins/](builtins/README.md): built-in keywords, types, and constants.
 - [models/](models/README.md): built-in data models.
-- [tools/vscode/](tools/vscode/README.md): VS Code syntax highlighting and local
-  installation scripts.
+- [tools/vscode/](tools/vscode/README.md): VS Code highlighting, language features,
+  and local installation scripts.
+- [tools/lsp/](tools/lsp/README.md): a self-contained language server included in
+  the VS Code extension, with no external runtime or service setup.
 
 Draft examples illustrate proposed notation. Their semantics remain open unless
 explicitly marked as confirmed.

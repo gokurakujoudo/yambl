@@ -1,11 +1,15 @@
 {
   "name": "yambl",
   "displayName": "YAMBL",
-  "description": "Syntax highlighting for Yet Another Model-Based Language.",
-  "version": "0.0.1",
+  "description": "YAMBL highlighting and a self-contained language server.",
+  "version": "0.1.0",
   "publisher": "gokurakujoudo",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages"],
+  "main": "./extension.cjs",
+  "activationEvents": ["onLanguage:yambl"],
+  "extensionKind": ["workspace"],
+  "capabilities": { "untrustedWorkspaces": { "supported": true }, "virtualWorkspaces": false },
   "repository": {
     "type": "git",
     "url": "https://github.com/gokurakujoudo/yambl.git"
