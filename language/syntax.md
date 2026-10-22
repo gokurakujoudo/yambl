@@ -19,8 +19,8 @@
 namespace core
 ```
 
-`core/fund.yambl` 和 `core/holdings_entry.yambl` 分别声明 `Fund` 和
-`HoldingEntry`，两个文件均使用 `namespace core`。
+`core/fund.yambl`、`core/holdings_entry.yambl` 和 `core/security.yambl`
+分别声明 `Fund`、`HoldingEntry` 和 `Security`，三个文件均使用 `namespace core`。
 
 这里记录案例采用的形式。目录与命名空间的对应关系、同命名空间下的名称查找、
 跨文件引用、导入及可见性规则尚未确定；也尚未要求每个文件只能声明一个实体。
@@ -38,6 +38,14 @@ entity Fund {
 
 案例使用 `string['[a-zA-Z0-9]{6}']` 描述带模式的字符串。
 模式的解释规则，包括匹配范围和转义方式，尚未确定。
+
+证券案例使用同一形式描述证券标识：
+
+```text
+entity Security {
+    id security_id: string['[a-zA-Z0-9]{12}']
+}
+```
 
 持仓条目的标识声明为：
 
@@ -91,8 +99,8 @@ YAMBL 在此处仅描述模型，不校验业务数据的完整性或其他数�
 
 最新完整文件位于
 [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的
-`core/` 目录。案例中的 `Security` 定义尚缺，`snowflake_id` 的含义尚未确定，
-目前不能视为通过解析或名称解析验证的模型。
+`core/` 目录。三个实体均已有定义；`snowflake_id` 的含义和跨文件名称解析规则
+尚未确定，目前不能视为通过解析或名称解析验证的模型。
 
 后续还需确定词法字符集、字符串转义、注释、空白和换行是否影响语法、声明
 分隔规则，以及文件和仓库的解析入口。当前示例的排版不构成完整格式化规范。

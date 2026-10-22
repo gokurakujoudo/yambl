@@ -21,7 +21,7 @@
 
 最新业务案例保存在
 [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的
-`core/fund.yambl` 和 `core/holdings_entry.yambl` 中。
+`core/fund.yambl`、`core/holdings_entry.yambl` 和 `core/security.yambl` 中。
 
 类型系统的已确认约定见 [builtins/](../builtins/README.md)。词法细节、完整文件
 结构和仓库解析规则仍待讨论。
