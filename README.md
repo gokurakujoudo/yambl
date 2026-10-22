@@ -12,6 +12,8 @@ proposals for discussion. A parser and executable examples are not available yet
   structure, and model repository structure.
 - [builtins/](builtins/README.md): built-in keywords and the type system.
 - [models/](models/README.md): built-in data models.
+- [tools/vscode/](tools/vscode/README.md): VS Code syntax highlighting and local
+  installation scripts.
 
 Draft examples illustrate proposed notation. Their semantics remain open unless
 explicitly marked as confirmed.

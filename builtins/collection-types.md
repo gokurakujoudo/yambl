@@ -7,7 +7,7 @@ YAMBL 的 builtins 提供 `collection<T>`、`values<T>` 和 `map<TKey, TValue>`�
 | --- | --- | --- |
 | `collection<T>` | `T` 必须是实体引用类型 | 无序，同一实体引用不得重复出现 |
 | `values<T>` | `T` 必须是值类型 | 无序，相同的值不得重复出现 |
-| `map<TKey, TValue>` | `TKey` 为 `string` 或实体引用类型；`TValue` 为任意非集合的值类型或实体引用类型 | 键和值的类型限制已确认，顺序及重复键规则待定 |
+| `map<TKey, TValue>` | `TKey` 为 `string` 或实体引用类型；`TValue` 为任意非集合的值类型或实体引用类型 | 无序，键唯一，不同键可以对应相同的值或实体引用 |
 
 实体类型名直接表示引用类型，无需额外的 `ref` 关键字。值类型清单及参数写法
 见[内置值类型](value-types.md)。
@@ -46,7 +46,8 @@ attr holding_entries: map<Security, HoldingEntry>
 `TKey` 只能是 `string` 或实体引用类型。`TValue` 可以是值类型或实体引用
 类型，但不能是 `collection`、`values` 或 `map`。
 
-`map` 的顺序语义、键的唯一性及不同键能否映射到相同值仍待确认。
+`map` 无序，键唯一。不同键可以映射到相同的值或实体引用。排序由数据使用方
+决定；引用键按所指向的实体身份区分，字符串键按字符串值区分。
 
 ## 不合法的类型组合
 
