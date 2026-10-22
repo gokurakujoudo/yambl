@@ -26,9 +26,34 @@ attr inception_date: date
 attr recorded_at: datetime
 ```
 
-上述片段展示实体内部的属性声明形式，不是独立文件。类型的具体参数和精度
-等规则见 [builtins 中的待定事项](../builtins/README.md)。自定义值类型的声明
-仍暂缓定义。
+上述片段展示实体内部的属性声明形式，不是独立文件。内置类型的约定见
+[builtins](../builtins/README.md)。自定义值类型的声明仍暂缓定义。
+
+## 类型参数
+
+类型名后可用方括号携带参数。当前已确认 `decimal` 和 `string` 支持位置参数
+简写与命名参数两种形式：
+
+```text
+decimal
+decimal[18, 4]
+decimal[precision: 18, scale: 4]
+
+string
+string['[a-zA-Z0-9]{12}']
+string[regex: '[a-zA-Z0-9]{12}']
+string[regex: '']
+```
+
+`decimal[18, 4]` 与 `decimal[precision: 18, scale: 4]` 含义相同，分别指定
+总十进制位数和小数位数。不带参数的 `decimal` 不指定这两个参数。
+
+`string` 的位置参数对应 `regex`，因此上面的两种非空正则表达式写法等价。
+命名参数使用 `参数名: 参数值`，多个参数以逗号分隔。参数的混用、重复、顺序
+和部分省略规则尚未确定，格式化器是否统一改写参数形式也尚未确定。
+
+类型参数与集合后缀需区分：`decimal[18, 4]` 的方括号包含类型参数，
+`HoldingEntry[]` 的空方括号表示实体引用的集合。
 
 ## 命名空间与文件
 
