@@ -26,19 +26,15 @@
 类型清单、使用示例、参数写法和待定事项集中在
 [内置值类型](value-types.md)中。自定义值类型声明继续暂缓定义。
 
-## collection
+## 内置集合类型
 
-集合写作 `collection<T>`，其中 `T` 为元素类型。实体类型作为元素类型时，
-集合的元素是实体引用，例如 `collection<HoldingEntry>`。
-
-`collection` 不包含顺序。数据使用方如需有序结果，应自行指定按照 `attr`
-排序，或应用自己的排序规则。无序不意味着已经确定去重规则，重复元素的语义
-仍待讨论。
+`collection<T>`、`values<T>` 和 `map<TKey, TValue>` 的泛型约束、集合语义
+和使用示例见[内置集合类型](collection-types.md)。
 
 ## 待确定
 
 - 实体身份的作用域、组合标识和标识继承规则。
-- 字段的类型兼容规则，以及引用集合的重复值和可空性语义。
+- 字段的类型兼容规则。
 - 内置关键字与保留字清单。
 
 [语法说明](../language/syntax.md)记录了 `entity`、`id`、`snapshot`、`attr`、

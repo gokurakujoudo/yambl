@@ -42,8 +42,9 @@ attr recorded_at: datetime
 参数的重复、命名参数的顺序和部分省略规则尚未确定，格式化器是否统一改写
 参数形式也尚未确定。
 
-方括号用于值类型参数，例如 `decimal[18, 4]`。集合使用 `collection<T>`，
-例如 `collection<HoldingEntry>`；集合语义见 [collection](README.md#collection)。
+方括号用于值类型参数，例如 `decimal[18, 4]`。集合类型使用尖括号传入类型，
+例如 `collection<HoldingEntry>` 和 `values<decimal>`；具体规则见
+[内置集合类型](collection-types.md)。
 
 ## decimal
 

@@ -16,6 +16,9 @@
 内置值类型清单、使用示例及类型参数规则见
 [内置值类型](../builtins/value-types.md)。自定义值类型的声明仍暂缓定义。
 
+`collection<T>`、`values<T>` 和 `map<TKey, TValue>` 的泛型约束及语义见
+[内置集合类型](../builtins/collection-types.md)。
+
 ## 注释
 
 行尾注释的标准格式为：正文、两个空格、`#`、一个空格、注释文本。注释延续到
@@ -116,12 +119,9 @@ attr quantity: decimal
 值类型字段描述值，因此 `quantity` 的类型是 `decimal`。实体引用无需额外的
 `ref` 关键字。
 
-集合使用 `collection<T>` 表示，尖括号内指定元素类型。
-`collection<HoldingEntry>` 表示持仓条目实体引用的集合，不表示内嵌实体。
-
-YAMBL 的 `collection` 不包含顺序。需要排序时，由数据使用方指定按照哪个
-`attr` 排序，或自行应用排序规则；排序不属于集合类型本身的语义。
-重复值和可空性规则尚未确定。
+`collection<HoldingEntry>` 表示无序且不重复的持仓条目实体引用集合，不表示
+内嵌实体。值的集合使用 `values<T>`，键值映射使用 `map<TKey, TValue>`；
+类型参数限制统一在 [builtins](../builtins/collection-types.md) 中定义。
 
 ## 独立快照属性
 
