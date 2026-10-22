@@ -116,8 +116,12 @@ attr quantity: decimal
 值类型字段描述值，因此 `quantity` 的类型是 `decimal`。实体引用无需额外的
 `ref` 关键字。
 
-`HoldingEntry[]` 表示持仓条目实体引用的集合，不表示内嵌实体。
-集合的顺序、重复值和可空性规则尚未确定。
+集合使用 `collection<T>` 表示，尖括号内指定元素类型。
+`collection<HoldingEntry>` 表示持仓条目实体引用的集合，不表示内嵌实体。
+
+YAMBL 的 `collection` 不包含顺序。需要排序时，由数据使用方指定按照哪个
+`attr` 排序，或自行应用排序规则；排序不属于集合类型本身的语义。
+重复值和可空性规则尚未确定。
 
 ## 独立快照属性
 
@@ -126,7 +130,7 @@ attr quantity: decimal
 
 ```text
 @temporal(as_of_date: date)
-snapshot attr holdings: HoldingEntry[]
+snapshot attr holdings: collection<HoldingEntry>
 
 @temporal(as_of_date: date)
 snapshot attr net_asset: decimal

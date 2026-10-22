@@ -42,8 +42,8 @@ attr recorded_at: datetime
 参数的重复、命名参数的顺序和部分省略规则尚未确定，格式化器是否统一改写
 参数形式也尚未确定。
 
-类型参数与集合后缀需区分：`decimal[18, 4]` 的方括号包含类型参数，
-`HoldingEntry[]` 的空方括号表示实体引用的集合。
+方括号用于值类型参数，例如 `decimal[18, 4]`。集合使用 `collection<T>`，
+例如 `collection<HoldingEntry>`；集合语义见 [collection](README.md#collection)。
 
 ## decimal
 
