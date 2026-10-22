@@ -32,11 +32,11 @@ namespace core
 
 ```text
 entity Fund {
-    id fund_id: string['[a-zA-Z0-9]{6}']
+    id fund_id: string['[a-zA-Z0-9]{12}']
 }
 ```
 
-案例使用 `string['[a-zA-Z0-9]{6}']` 描述带模式的字符串。
+案例使用 `string['[a-zA-Z0-9]{12}']` 描述带模式的字符串。
 模式的解释规则，包括匹配范围和转义方式，尚未确定。
 
 证券案例使用同一形式描述证券标识：
