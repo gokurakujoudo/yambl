@@ -8,12 +8,12 @@ const snake = name => /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name);
 // Keep this editor implementation aligned with yambl-compiler using the parity fixtures.
 function validate(documents) {
   const symbols = new Map();
-  function issue(doc, token, message, severity = 1) {
-    doc.diagnostics.push({ range: token.range, message, severity, source: 'yambl' });
+  function issue(doc, token, message, severity = 1, code) {
+    doc.diagnostics.push({ range: token.range, message, severity, source: 'yambl', ...(code ? { code } : {}) });
   }
   function bind(doc, token, target) { if (target) doc.bindings.set(token.start, target); }
   for (const doc of documents) {
-    doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map();
+    doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map(); doc.valueTypeTokens = new Map();
     if (doc.errors.length) continue;
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
       const name = decl.name.value; decl.key = key(doc.namespace, name); decl.ownFields = new Map();
@@ -33,15 +33,19 @@ function validate(documents) {
   }
   function checkType(doc, node) {
     const { name, token, args, params } = node;
-    const error = (message, severity) => issue(doc, token, message, severity);
+    const error = (message, severity, code) => issue(doc, token, message, severity, code);
+    if (values.includes(name) || generics.includes(name)) doc.valueTypeTokens.set(token.start, token);
     if (node.quoted) { error('quoted dictionary identifiers are only valid inside code<...>'); return 'unknown'; }
     if (generics.includes(name)) {
       if (params || (args || []).length !== (name === 'map' ? 2 : 1)) { error(`invalid type arguments for ${name}`); return 'unknown'; }
       if (name === 'code') {
         const arg = args[0]; const target = doc.scope.get(arg.name);
         if (arg.args || arg.params || (target && target.kind !== 'decodes') || reserved.includes(arg.name)) error('code requires a Decodes instance identifier');
-        else if (!target) error(`undefined Decodes: ${arg.name}`, 2);
-        else bind(doc, arg.token, target);
+        else {
+          doc.valueTypeTokens.set(arg.token.start, arg.token);
+          if (!target) error(`undefined Decodes: ${arg.name}`, 2, 'undefined-decodes');
+          else bind(doc, arg.token, target);
+        }
         return 'value';
       }
       const kinds = args.map(arg => checkType(doc, arg));
@@ -147,10 +151,17 @@ function validate(documents) {
   return symbols;
 }
 
+function formatType(node) {
+  if (node.quoted) return node.token.value;
+  const args = node.args ? '<' + node.args.map(formatType).join(', ') + '>' : '';
+  const params = node.params ? '[' + node.params.map(p => (p.key ? p.key + ': ' : '') + p.value.value).join(', ') + ']' : '';
+  return node.name + args + params;
+}
 function describe(target) {
-  const details = (target.metadata || []).filter(a => a.value).map(a => stringValue(a.value.value));
-  const signature = target.kind ? `${target.kind} ${target.name.value}` : `${target.mode} ${target.name.value}: ${target.type.name}`;
+  const details = ['title', 'description'].flatMap(name => (target.metadata || []).filter(a => a.name === name && a.value).map(a => `${name}: ${stringValue(a.value.value)}`));
+  const mode = ['snapshot', 'scd', 'config'].includes(target.mode) ? target.mode + ' attr' : target.mode;
+  const signature = target.kind ? `${target.kind} ${target.name.value}` : `${mode} ${target.name.value}: ${formatType(target.type)}`;
   return [signature, ...details].join('\n\n');
 }
 
-module.exports = { validate, describe };
+module.exports = { validate, describe, formatType };

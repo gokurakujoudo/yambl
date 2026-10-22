@@ -21,8 +21,10 @@ function receive(message) {
       if (initialized) throw Object.assign(new Error('Already initialized'), { code: -32600 });
       initialized = true;
       send({ id, result: { capabilities: { positionEncoding: 'utf-16', textDocumentSync: { openClose: true, change: 1, save: { includeText: false } },
-        completionProvider: {}, hoverProvider: true, definitionProvider: true, documentSymbolProvider: true, documentFormattingProvider: true },
-        serverInfo: { name: 'yambl-lsp', version: '0.1.0' } } });
+        completionProvider: {}, hoverProvider: true, definitionProvider: true, referencesProvider: true,
+        semanticTokensProvider: { legend: { tokenTypes: ['yamblValueType'], tokenModifiers: [] }, full: true },
+        documentSymbolProvider: true, documentFormattingProvider: true },
+        serverInfo: { name: 'yambl-lsp', version: '0.1.1' } } });
       return;
     }
     if (!initialized || shutdown) {
@@ -43,7 +45,7 @@ function receive(message) {
     if (method === 'textDocument/didClose') { service.open.delete(params.textDocument.uri); schedule(); return; }
     if (['textDocument/didSave', 'workspace/didChangeWatchedFiles'].includes(method)) { schedule(); return; }
     if (!request) return;
-    if (!['textDocument/completion', 'textDocument/hover', 'textDocument/definition', 'textDocument/documentSymbol', 'textDocument/formatting'].includes(method)) {
+    if (!['textDocument/completion', 'textDocument/hover', 'textDocument/definition', 'textDocument/references', 'textDocument/semanticTokens/full', 'textDocument/documentSymbol', 'textDocument/formatting'].includes(method)) {
       throw Object.assign(new Error(`Method not found: ${method}`), { code: -32601 });
     }
     if (timer) refresh();

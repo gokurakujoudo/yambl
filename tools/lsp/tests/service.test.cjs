@@ -32,11 +32,71 @@ test('repository discovery, unsaved dependencies, definitions, hover, symbols an
   const edits = service.feature('textDocument/formatting', params); assert.equal(edits.length, 1);
   assert.ok(edits[0].newText.endsWith('\n'));
   service.open.set(dictionary, { text: 'namespace core decodes OtherKinds {}', version: 2 }); service.refresh();
-  assert.equal(service.document(child).diagnostics[0].message, 'undefined Decodes: Kinds');
+  assert.deepEqual(service.document(child).diagnostics, []);
   service.open.delete(dictionary); service.refresh(); assert.equal(service.document(child).diagnostics.length, 0);
-  fs.unlinkSync(new URL(dictionary)); service.refresh(); assert.equal(service.document(child).diagnostics[0].severity, 2);
+  fs.unlinkSync(new URL(dictionary)); service.refresh(); assert.deepEqual(service.document(child).diagnostics, []);
   service.open.clear(); service.refresh();
   assert.equal(published.at(-1).diagnostics.length, 0); assert.equal(service.documents.size, 0);
+});
+
+test('dynamic Decodes are silent, while unresolved types and explicit imports still fail', () => {
+  const published = []; const service = new Service((_, params) => published.push(params));
+  const uri = 'untitled:dynamic';
+  service.open.set(uri, { version: 1, text: "from absent import Currencies entity A { attr x: code<'Currencies'> attr y: Missing }" });
+  service.refresh();
+  assert.deepEqual(service.document(uri).diagnostics.map(d => d.message), ['unknown import: absent.Currencies', 'unknown type: Missing']);
+  assert.ok(published.at(-1).diagnostics.every(d => d.severity === 1));
+});
+
+test('attribute hover includes metadata, modifiers and complete generic/parameter types', () => {
+  const service = new Service(() => {}), uri = 'untitled:hover';
+  service.open.set(uri, { version: 1, text: `entity A {
+    @description('Security\\'s value')
+    @title('Weights')
+    snapshot attr weights: map<string[regex: '[A-Z]+'], decimal[precision: 18, scale: 4]>
+    attr codes: values<code<'Currencies'>>
+    attr plain: decimal[18, 4]
+}` }); service.refresh();
+  const doc = service.document(uri);
+  const hover = field => service.feature('textDocument/hover', { textDocument: { uri }, position: field.name.range.start }).contents.value;
+  assert.equal(hover(doc.declarations[0].fields[0]), "snapshot attr weights: map<string[regex: '[A-Z]+'], decimal[precision: 18, scale: 4]>\n\ntitle: Weights\n\ndescription: Security's value");
+  assert.equal(hover(doc.declarations[0].fields[1]), "attr codes: values<code<'Currencies'>>");
+  assert.equal(hover(doc.declarations[0].fields[2]), 'attr plain: decimal[18, 4]');
+});
+
+test('Decodes references follow symbol identity and all value names share semantic styling', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-references-')); t.after(() => fs.rmSync(root, { recursive: true }));
+  const write = (name, text) => { const file = path.join(root, name); fs.writeFileSync(file, text); return pathToFileURL(file).href; };
+  write('yambl-root.lclcfg', '');
+  const dictionary = write('decodes.yambl', 'namespace dict decodes Currencies {}');
+  const source = `namespace core from dict import Currencies entity A {
+    attr code: code<Currencies>
+    @dimensions(source: code<'Currencies'>)
+    snapshot attr value: decimal[18, 4]
+    attr many: values<code<'Currencies'>>
+    attr dynamic: code<'Outside'>
+}`;
+  const model = write('model.yambl', source);
+  write('other.yambl', 'namespace other decodes Currencies {} entity Other { attr x: code<Currencies> }');
+  write('unimported.yambl', 'namespace core entity Unimported { attr x: code<Currencies> }');
+  const service = new Service(() => {}); service.open.set(model, { version: 1, text: source }); service.refresh();
+  const declaration = service.document(dictionary).declarations[0];
+  const params = { textDocument: { uri: dictionary }, position: declaration.name.range.start, context: { includeDeclaration: false } };
+  const refs = service.feature('textDocument/references', params);
+  assert.equal(refs.length, 4); assert.ok(refs.every(r => uriKey(r.uri) === uriKey(model)));
+  assert.equal(service.feature('textDocument/references', { ...params, context: { includeDeclaration: true } }).length, 5);
+  assert.equal(uriKey(service.feature('textDocument/definition', params).uri), uriKey(dictionary));
+  const tokens = service.feature('textDocument/semanticTokens/full', { textDocument: { uri: model } }).data;
+  const lines = source.split('\n'); const styled = []; let line = 0, character = 0;
+  for (let i = 0; i < tokens.length; i += 5) {
+    character = tokens[i] === 0 ? character + tokens[i + 1] : tokens[i + 1]; line += tokens[i];
+    styled.push(lines[line].slice(character, character + tokens[i + 2])); assert.equal(tokens[i + 3], 0);
+  }
+  assert.equal(styled.filter(x => x === 'Currencies').length, 4);
+  assert.ok(styled.includes('decimal')); assert.ok(styled.includes('Outside'));
+  assert.equal(service.feature('textDocument/semanticTokens/full', params).data[2], 'Currencies'.length);
+  service.open.set(model, { version: 2, text: 'namespace core entity A {}' }); service.refresh();
+  assert.deepEqual(service.feature('textDocument/references', params), []);
 });
 test('untitled buffers and syntax failures do not produce unsafe formatting edits', () => {
   const service = new Service(() => {}); const uri = 'untitled:Untitled-1';

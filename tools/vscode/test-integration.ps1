@@ -12,7 +12,17 @@ $profile = Join-Path $testRoot 'profile'
 [IO.File]::WriteAllText((Join-Path $profile 'User/settings.json'), '{"telemetry.telemetryLevel":"off","update.mode":"none","extensions.autoUpdate":false,"extensions.autoCheckUpdates":false,"window.restoreWindows":"none"}')
 [IO.File]::WriteAllText((Join-Path $workspace 'yambl-root.lclcfg'), '')
 [IO.File]::WriteAllText((Join-Path $workspace 'base.yambl'), 'namespace core entity Base {}')
-[IO.File]::WriteAllText((Join-Path $workspace 'child.yambl'), "namespace core`nentity Child inherits Base{attr kind:code<Missing>}`n")
+[IO.File]::WriteAllText((Join-Path $workspace 'decodes.yambl'), 'namespace core decodes Currencies {}')
+[IO.File]::WriteAllText((Join-Path $workspace 'child.yambl'), @'
+namespace core
+entity Child inherits Base{
+@title('Currencies')
+@description('Child\'s currencies')
+attr kinds:values<code<'Currencies'>>
+attr price:decimal[precision:18,scale:4]
+attr dynamic:code<Missing>
+}
+'@)
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $build "$($manifest.name)-$($manifest.version).vsix"), (Join-Path $testRoot 'package'))
 $codeRoot = Split-Path (Split-Path (Get-Command code -ErrorAction Stop).Path -Parent) -Parent

@@ -2,7 +2,7 @@
   "name": "yambl",
   "displayName": "YAMBL",
   "description": "YAMBL highlighting and a self-contained language server.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "gokurakujoudo",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages"],
@@ -15,6 +15,18 @@
     "url": "https://github.com/gokurakujoudo/yambl.git"
   },
   "contributes": {
+    "configurationDefaults": {
+      "[yambl]": {
+        "editor.semanticHighlighting.enabled": true,
+        "editor.gotoLocation.alternativeDefinitionCommand": "editor.action.referenceSearch.trigger"
+      }
+    },
+    "semanticTokenTypes": [
+      { "id": "yamblValueType", "superType": "type", "description": "YAMBL value types and Decodes instances." }
+    ],
+    "semanticTokenScopes": [
+      { "language": "yambl", "scopes": { "yamblValueType": ["support.type.yambl"] } }
+    ],
     "languages": [
       {
         "id": "yambl",

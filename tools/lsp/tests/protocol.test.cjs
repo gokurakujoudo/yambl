@@ -26,12 +26,16 @@ test('real stdio lifecycle, unsaved changes, stale versions, requests and shutdo
   const notify = (method, params = {}) => child.stdin.write(encode({ jsonrpc: '2.0', method, params }));
   assert.equal((await request('textDocument/hover')).error.code, -32002);
   const init = await request('initialize'); assert.equal(init.result.capabilities.positionEncoding, 'utf-16');
+  assert.equal(init.result.capabilities.referencesProvider, true);
+  assert.deepEqual(init.result.capabilities.semanticTokensProvider.legend.tokenTypes, ['yamblValueType']);
   notify('initialized');
   const uri = 'untitled:test';
   notify('textDocument/didOpen', { textDocument: { uri, text: "entity A { attr x: code<'Markets'> }", version: 1 } });
   const params = { textDocument: { uri }, position: { line: 0, character: 0 } };
   assert.ok((await request('textDocument/completion', params)).result.items.some(i => i.label === 'inherits'));
-  assert.ok(notifications.some(n => n.params.diagnostics?.some(d => d.severity === 2)));
+  assert.ok(notifications.some(n => Array.isArray(n.params.diagnostics) && n.params.diagnostics.length === 0));
+  assert.ok((await request('textDocument/semanticTokens/full', params)).result.data.length > 0);
+  assert.deepEqual((await request('textDocument/references', params)).result, []);
   notify('textDocument/didChange', { textDocument: { uri, version: 2 }, contentChanges: [{ text: 'entity A {}' }] });
   notify('textDocument/didChange', { textDocument: { uri, version: 1 }, contentChanges: [{ text: 'invalid' }] });
   const format = await request('textDocument/formatting', params);

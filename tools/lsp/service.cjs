@@ -40,7 +40,7 @@ const help = {
   inherits: 'Single inheritance. Duplicate inherited fields and cycles are errors.',
   snapshot: 'Independent temporal attribute snapshot.', scd: 'Slowly changing dimension Type 2 attribute.',
   config: 'Time-independent parameter that configuration can override.',
-  code: 'A Decodes code value. Undefined dictionaries produce warnings.',
+  code: 'A Decodes code value. Dynamic dictionaries may be provided outside the model.',
   collection: 'Unordered unique entity references.', values: 'Unordered unique values.',
   map: 'Keys: string or entity reference. Values: non-collection values or references.',
   NOT_DEFINED: 'The requested subtype attribute does not apply to the instance’s actual type.',
@@ -71,6 +71,8 @@ class Service {
       const docs = [...texts.values()].map(item => parse(item.text, item.uri));
       validate(docs);
       for (const doc of docs) {
+        // The CLI still reports these dependencies; dynamic dictionaries are normal in the editor.
+        doc.diagnostics = doc.diagnostics.filter(d => d.code !== 'undefined-decodes');
         if (readError && this.open.has(doc.uri)) doc.diagnostics.push({ range: range(doc.text, 0, 0), severity: 1, source: 'yambl', message: `Cannot read compilation unit: ${readError}` });
         this.documents.set(doc.uri, doc);
       }
@@ -87,11 +89,36 @@ class Service {
   tokenAt(doc, pos) {
     return doc.tokens.find(t => t.range.start.line === pos.line && t.range.start.character <= pos.character && pos.character < t.range.end.character);
   }
+  references(target, includeDeclaration) {
+    const locations = [];
+    if (!target) return locations;
+    for (const doc of this.documents.values()) for (const token of doc.tokens) {
+      if (doc.bindings.get(token.start) !== target) continue;
+      if (!includeDeclaration && uriKey(doc.uri) === uriKey(target.doc.uri) && token.start === target.name.start) continue;
+      locations.push({ uri: doc.uri, range: token.range });
+    }
+    return locations;
+  }
   feature(method, params) {
     const doc = this.document(params.textDocument.uri); if (!doc) return null;
     const token = params.position && this.tokenAt(doc, params.position);
     const target = token && doc.bindings.get(token.start);
     if (method === 'textDocument/definition') return target ? { uri: target.doc.uri, range: target.name.range } : null;
+    if (method === 'textDocument/references') return this.references(target, params.context?.includeDeclaration === true);
+    if (method === 'textDocument/semanticTokens/full') {
+      const classified = new Map(doc.valueTypeTokens);
+      for (const token of doc.tokens) if (doc.bindings.get(token.start)?.kind === 'decodes') classified.set(token.start, token);
+      const data = []; let lastLine = 0, lastCharacter = 0;
+      for (const token of [...classified.values()].sort((a, b) => a.start - b.start)) {
+        const quoted = token.value.startsWith("'");
+        const line = token.range.start.line, character = token.range.start.character + Number(quoted);
+        const length = token.value.length - (quoted ? 2 : 0);
+        if (length === 0) continue;
+        data.push(line - lastLine, line === lastLine ? character - lastCharacter : character, length, 0, 0);
+        lastLine = line; lastCharacter = character;
+      }
+      return { data };
+    }
     if (method === 'textDocument/hover') {
       const value = target ? describe(target) : token && (help[token.value] || (values.includes(token.value) ? `Built-in value type: ${token.value}` : null));
       return value ? { contents: { kind: 'plaintext', value }, range: token.range } : null;

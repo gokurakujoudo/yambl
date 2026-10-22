@@ -17,7 +17,7 @@
     {
       "match": "\\b([A-Z][A-Za-z0-9_]*)(\\.)([A-Za-z0-9_]+)\\b",
       "captures": {
-        "1": { "name": "entity.name.constant.yambl" },
+        "1": { "name": "support.type.yambl" },
         "2": { "name": "punctuation.accessor.yambl" },
         "3": { "name": "constant.other.yambl" }
       }
@@ -26,7 +26,7 @@
       "match": "\\b(decodes)\\s+([A-Z][A-Za-z0-9_]*)\\b",
       "captures": {
         "1": { "name": "keyword.declaration.yambl" },
-        "2": { "name": "entity.name.constant.yambl" }
+        "2": { "name": "support.type.yambl" }
       }
     },
     {
@@ -39,11 +39,22 @@
       }
     },
     {
+      "match": "\\b(code)\\s*(<)\\s*(')([A-Za-z_][A-Za-z0-9_]*)(')\\s*(>)",
+      "captures": {
+        "1": { "name": "support.type.yambl" },
+        "2": { "name": "punctuation.section.yambl" },
+        "3": { "name": "string.quoted.single.yambl" },
+        "4": { "name": "support.type.yambl" },
+        "5": { "name": "string.quoted.single.yambl" },
+        "6": { "name": "punctuation.section.yambl" }
+      }
+    },
+    {
       "match": "\\b(code)\\s*(<)\\s*([A-Z][A-Za-z0-9_]*)\\s*(>)",
       "captures": {
         "1": { "name": "support.type.yambl" },
         "2": { "name": "punctuation.section.yambl" },
-        "3": { "name": "entity.name.constant.yambl" },
+        "3": { "name": "support.type.yambl" },
         "4": { "name": "punctuation.section.yambl" }
       }
     },

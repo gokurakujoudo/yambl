@@ -14,6 +14,7 @@ class Client {
     this.pending = new Map(); this.versions = new Map(); this.sequence = 0; this.stopping = false;
     this.output = vscode.window.createOutputChannel('YAMBL');
     this.diagnostics = vscode.languages.createDiagnosticCollection('yambl');
+    this.semanticChanges = new vscode.EventEmitter();
     this.process = spawn(process.execPath, [path.join(lspRoot, 'server.cjs')], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
     });
@@ -27,7 +28,7 @@ class Client {
     this.process.on('exit', code => {
       this.fail(new Error(`YAMBL language server exited (${code}). Reload the window to restart it.`));
     });
-    context.subscriptions.push(this.output, this.diagnostics, { dispose: () => this.process.kill() });
+    context.subscriptions.push(this.output, this.diagnostics, this.semanticChanges, { dispose: () => this.process.kill() });
   }
   fail(error) {
     this.dead = true;
@@ -63,6 +64,7 @@ class Client {
         const result = new vscode.Diagnostic(asRange(item.range), item.message, (item.severity || 1) - 1);
         result.source = 'yambl'; return result;
       }));
+      this.semanticChanges.fire();
     } else if (message.method === 'window/logMessage') this.output.appendLine(message.params.message);
   }
   sync(document) {
@@ -125,6 +127,19 @@ async function activate(context) {
         return result ? new vscode.Location(vscode.Uri.parse(result.uri), asRange(result.range)) : null;
       },
     }),
+    vscode.languages.registerReferenceProvider(selector, {
+      async provideReferences(doc, position, referenceContext, token) {
+        const result = await client.feature('textDocument/references', doc, { position, context: referenceContext }, token);
+        return (result || []).map(item => new vscode.Location(vscode.Uri.parse(item.uri), asRange(item.range)));
+      },
+    }),
+    vscode.languages.registerDocumentSemanticTokensProvider(selector, {
+      onDidChangeSemanticTokens: client.semanticChanges.event,
+      async provideDocumentSemanticTokens(doc, token) {
+        const result = await client.feature('textDocument/semanticTokens/full', doc, {}, token);
+        return new vscode.SemanticTokens(Uint32Array.from(result?.data || []));
+      },
+    }, new vscode.SemanticTokensLegend(['yamblValueType'], [])),
     vscode.languages.registerDocumentSymbolProvider(selector, {
       async provideDocumentSymbols(doc, token) {
         const convert = item => {

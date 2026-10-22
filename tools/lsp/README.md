@@ -1,7 +1,7 @@
 # YAMBL language server
 
 This server provides diagnostics, document formatting, completion, hover, definition
-lookup, and document symbols for the current YAMBL syntax. It communicates over
+lookup, references, semantic coloring, and document symbols for the current YAMBL syntax. It communicates over
 stdio using [LSP 3.17](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/)
 with UTF-8 message bodies and UTF-16 document positions.
 
@@ -25,7 +25,10 @@ open documents in the same compilation unit.
 
 Checks cover namespace imports, types, metadata, configuration literals, dimensions,
 entity extensions, inherited field conflicts, and inheritance cycles. Undefined
-Decodes produce warnings at each occurrence. Extension fields belong to their
+dynamic Decodes are allowed without editor diagnostics. Missing explicit imports
+and unknown entity types remain errors. The Python CLI still reports external
+dictionary dependencies as warnings; the editor suppresses only those warnings.
+Extension fields belong to their
 target entity and retain their original definition locations and scopes.
 
 Formatting preserves comments and string spelling and ends with exactly one LF.
@@ -34,6 +37,20 @@ built-ins and names visible in the current file. Definition lookup follows impor
 entity references, inheritance, extension targets, and defined Decodes names,
 including quoted identifiers. External Decodes have no definition to navigate to.
 The outline shows extension attributes as `Entity.field`, without adding an entity.
+
+Attribute hover includes its full type, including generic arguments and named or
+positional parameters, plus `title` and `description` when present. Escaped string
+quotes are displayed as quotes. Decodes names use the same semantic token and
+TextMate scope as built-in value types, including declarations, imports, and code
+arguments. Quoted code arguments color the identifier while retaining string quotes.
+
+Ctrl+Click or F12 on a Decodes declaration opens Peek References. Clicking a use
+still goes to its declaration. The reference list covers the compilation unit,
+including imports, nested code types, and dimensions; it uses resolved symbol
+identity so equal names in other namespaces or roots stay separate. Unsaved changes
+update the list. The extension sets YAMBL's default alternative-definition command
+to `editor.action.referenceSearch.trigger`; a user override of that setting takes
+precedence. Find All References is also available.
 
 ## Implementation and tests
 
@@ -58,7 +75,8 @@ node tools/lsp/tests/parity.cjs
 ```
 
 The parity check uses the compiler's existing venv, or a Python executable supplied
-as its first argument. It compares syntax acceptance, diagnostics, and formatted
+as its first argument. It compares syntax acceptance, core diagnostics before the
+editor's dynamic-Decodes filter, and formatted
 output for the regression corpus and current FMC files. Python is a development
 test dependency only. New keywords must be added to both implementations and the
 TextMate grammar; the vocabulary tests check this link.
@@ -68,7 +86,7 @@ run by itself. Changes to language rules require updating both and extending the
 parity corpus. This is not a stable intermediate representation or a data runtime.
 
 Current limits: local desktop/remote extension hosts with file URIs and untitled
-buffers; no browser or virtual filesystem support, rename, references search,
+buffers; no browser or virtual filesystem support, rename,
 code actions, incremental text edits, or runtime evaluation. The server requests
 full document synchronization. It rescans an affected compilation unit rather than
 maintaining a dependency cache; large repositories may need indexing later.

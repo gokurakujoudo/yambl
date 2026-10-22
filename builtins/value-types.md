@@ -119,6 +119,10 @@ warning，包含文件、行、列；仅有此类 warning 时 `check` 仍成功�
 `from ... import ...` 也仍然报错。内置模型和专用声明语法见
 [Decodes](../models/decodes.md)。
 
+上述 warning 是编译器 CLI 的行为。LSP 允许未定义的动态字典而不显示 warning；
+显式导入失败及其他类型错误仍正常显示。字典名称在编辑器中与值类型同色，
+Ctrl+Click 字典声明可查看当前编译单元内的引用列表。
+
 `code<Currencies>` 属于值类型，可以用作 `values` 的元素类型或 `map` 的
 值类型；不能作为 `collection` 的元素类型。按目前 map 键仅限 `string` 或
 实体引用的规则，`code` 也不能用作 map 键。它与 `string` 的兼容关系尚未确定。

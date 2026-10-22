@@ -12,7 +12,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.0.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.1.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -22,10 +22,12 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 安装后执行 `Developer: Reload Window`，打开 `.yambl` 文件即可启动语言服务。
 在 VS Code 中可以使用：
 
-- Problems 面板中的实时语法、类型及引用诊断；未定义 Decodes 为 warning。
+- Problems 面板中的实时语法、类型及引用诊断；未定义动态 Decodes 不产生 warning。
 - Format Document 格式化当前文档；存在语法错误时不提供修改。
 - 输入补全，包括关键字、注解、内置类型和当前文件可见的声明。
-- 悬停查看元信息和内置语义，Go to Definition 跳转实体或字典定义。
+- 属性悬停显示完整类型（含泛型与参数）、存在的 title 和 description。
+- 在引用处 Go to Definition 跳转实体或字典；Ctrl+Click 字典声明展开引用列表。
+- 字典实例名与值类型使用相同颜色，包括声明、导入和 `code<...>` 参数。
 - Outline 查看实体、字段和字典条目；扩展属性显示为 `Entity.field`。
 
 语言服务读取未保存的编辑内容，并按最近的 `yambl-root.lclcfg` 查找同仓库文件；
@@ -34,13 +36,24 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 
 运行日志位于 Output → YAMBL。若语言服务异常退出，可重载窗口重新启动。
 当前支持桌面扩展宿主的本地文件和未保存文档；不支持浏览器或虚拟文件系统。
-首版不提供重命名、引用搜索或代码修复，详细边界见 LSP 文档。
+首版不提供重命名或代码修复，详细边界见 LSP 文档。
+
+引用列表包含当前编译单元中的导入和类型使用，支持未保存的修改，并按实际声明
+区分不同 namespace 的同名字典。字典声明上的 Ctrl+Click / F12 使用 VS Code
+的 Peek References；即使只有一处引用，也在列表中展示。YAMBL 的默认
+`editor.gotoLocation.alternativeDefinitionCommand` 为 `editor.action.referenceSearch.trigger`，
+用户显式覆盖该设置时以用户设置为准。也可直接使用 Find All References。
+
+未定义的动态 Decodes 可由模型外部提供，因此编辑器不提示；CLI 仍逐处输出
+warning。显式导入失败和未知实体类型仍会在编辑器中报错。
 
 ## 高亮与语言规则同步
 
 支持命名空间、导入、实体、`extend`、`inherits`、`snapshot`、`scd`、`config`、
 内置值与集合类型、Decodes 声明和代码值、注解、默认值、数值、字符串、转义和注释。
 颜色由主题决定；高亮自身不承担类型校验。
+LSP 将字典实例名和内置值类型统一归类为 `yamblValueType`，映射到
+`support.type.yambl`；TextMate 也为字典声明与 code 参数提供对应规则。
 
 每次新增关键字、注解、内置类型或常量，必须同步修改编译器、LSP 词汇表及
 `syntaxes/yambl.tmLanguage.json`，并加入测试。补全词汇表中的关键字会自动参与

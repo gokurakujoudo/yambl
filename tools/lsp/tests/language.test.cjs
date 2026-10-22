@@ -5,7 +5,7 @@ const { parse, format, range } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = require('./cases.json');
 
-test('the current model produces only two external Decodes warnings', () => {
+test('core validation retains the two CLI Decodes warnings before editor filtering', () => {
   const docs = cases[0].map((text, i) => parse(text, `${i}.yambl`)); validate(docs);
   assert.deepEqual(docs.flatMap(d => d.diagnostics.map(x => [x.severity, x.message])), [
     [2, 'undefined Decodes: TradingMarkets'], [2, 'undefined Decodes: PriceSources'],
