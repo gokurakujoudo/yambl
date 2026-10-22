@@ -11,57 +11,14 @@
 | 值类型 | `snake_case` | `string`、`date`、`decimal` |
 | 字段 | `snake_case` | `fund_id`、`net_asset`、`holdings_entry_id` |
 
-## 内置值类型
+## 类型说明
 
-YAMBL 的 builtins 提供 `bool`、`string`、`integer`、`float`、`decimal`、
-`date` 和 `datetime`。这些名称直接用于类型位置，例如：
-
-```text
-attr is_active: bool
-attr name: string
-attr item_count: integer
-attr estimate: float
-attr quantity: decimal
-attr inception_date: date
-attr recorded_at: datetime
-```
-
-上述片段展示实体内部的属性声明形式，不是独立文件。内置类型的约定见
-[builtins](../builtins/README.md)。自定义值类型的声明仍暂缓定义。
-
-## 类型参数
-
-类型名后可用方括号携带参数。当前已确认 `decimal` 和 `string` 支持位置参数
-简写与命名参数两种形式：
-
-```text
-decimal
-decimal[18, 4]
-decimal[precision: 18, scale: 4]
-
-string
-string['[a-zA-Z0-9]{12}']
-string[regex: '[a-zA-Z0-9]{12}']
-string[regex: '']
-```
-
-`decimal[18, 4]` 与 `decimal[precision: 18, scale: 4]` 含义相同，分别指定
-总十进制位数和小数位数。不带参数的 `decimal` 不指定这两个参数。
-
-`string` 的位置参数对应 `regex`，因此上面的两种非空正则表达式写法等价。
-命名参数使用 `参数名: 参数值`，多个参数以逗号分隔。同一组类型参数必须全部
-使用位置参数或全部使用命名参数，不允许混用。例如，`decimal[18, scale: 4]`
-不符合该规则。
-
-参数的重复、命名参数的顺序和部分省略规则尚未确定，格式化器是否统一改写
-参数形式也尚未确定。
-
-类型参数与集合后缀需区分：`decimal[18, 4]` 的方括号包含类型参数，
-`HoldingEntry[]` 的空方括号表示实体引用的集合。
+内置值类型清单、使用示例及类型参数规则见
+[内置值类型](../builtins/value-types.md)。自定义值类型的声明仍暂缓定义。
 
 ## 注释
 
-行尾注释的写法为：正文、两个空格、`#`、一个空格、注释文本。注释延续到
+行尾注释的标准格式为：正文、两个空格、`#`、一个空格、注释文本。注释延续到
 当前行末尾，例如：
 
 ```text
@@ -84,7 +41,23 @@ entity Fund {
 attr code: string[regex: '[A-Z#]+']  # 正则表达式包含井号
 ```
 
-上述空格要求是否作为严格语法检查，或由格式化器统一修正，仍待确认。
+注释前后的空格数量不影响解析，不因数量不符而报语法错误。格式化器统一将
+行尾注释修正为正文后两个空格、`#` 后一个空格；行首注释也统一为 `#` 后一个
+空格。格式化器不改动字符串内部的空格或 `#`。
+
+例如，以下输入允许解析：
+
+```text
+#基金模型
+attr quantity: decimal #持仓数量
+```
+
+格式化后为：
+
+```text
+# 基金模型
+attr quantity: decimal  # 持仓数量
+```
 
 ## 命名空间与文件
 
@@ -111,8 +84,7 @@ entity Fund {
 }
 ```
 
-案例使用 `string['[a-zA-Z0-9]{12}']` 描述带模式的字符串。
-模式的解释规则，包括匹配范围和转义方式，尚未确定。
+案例中字符串参数的含义与待定规则见[内置值类型](../builtins/value-types.md)。
 
 证券案例使用同一形式描述证券标识：
 

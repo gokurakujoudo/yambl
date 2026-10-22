@@ -23,5 +23,6 @@
 [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的
 `core/fund.yambl`、`core/holdings_entry.yambl` 和 `core/security.yambl` 中。
 
-类型系统的已确认约定见 [builtins/](../builtins/README.md)。词法细节、完整文件
-结构和仓库解析规则仍待讨论。
+类型系统的已确认约定见 [builtins/](../builtins/README.md)，内置值类型及其
+参数说明见[内置值类型](../builtins/value-types.md)。词法细节、完整文件结构和
+仓库解析规则仍待讨论。
