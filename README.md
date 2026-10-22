@@ -4,13 +4,14 @@ YAMBL stands for **Yet Another Model-Based Language**. It is a domain-specific
 language for describing business models.
 
 The language is being designed. This repository records confirmed decisions and
-proposals for discussion. A parser and executable examples are not available yet.
+proposals for discussion. The companion compiler checks and formats the current
+examples, including attribute extensions, inheritance, and external Decodes.
 
 ## Repository structure
 
 - [language/](language/README.md): lexical rules, syntax, source formatting, file
   structure, and model repository structure.
-- [builtins/](builtins/README.md): built-in keywords and the type system.
+- [builtins/](builtins/README.md): built-in keywords, types, and constants.
 - [models/](models/README.md): built-in data models.
 - [tools/vscode/](tools/vscode/README.md): VS Code syntax highlighting and local
   installation scripts.
@@ -20,10 +21,11 @@ explicitly marked as confirmed.
 
 ## Related projects
 
-- [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) will use YAMBL
+- [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) uses YAMBL
   to describe the data model of a fund management company.
-- [yambl-compiler](https://github.com/gokurakujoudo/yambl-compiler) will implement
-  the Python parser, syntax checker, formatter, and compiler.
+- [yambl-compiler](https://github.com/gokurakujoudo/yambl-compiler) provides the
+  Python parser, static checker, and formatter. A stable intermediate representation
+  and target generation are planned.
 
 The language definition belongs here. Company-specific models belong in
 `fmc-data-model`, and compiler implementation belongs in `yambl-compiler`.

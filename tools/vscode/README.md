@@ -2,13 +2,15 @@
 
 本目录提供 YAMBL 的本地 VS Code 扩展，使用
 [TextMate 语法](https://code.visualstudio.com/api/language-extensions/syntax-highlight-guide)。
-支持 `.yambl` 文件识别，以及命名空间和 `from ... import ...`、实体、字段、内置类型、集合泛型、`decodes`
-声明和条目、`code<Currencies>`、`Currencies.CNY` 代码值、注解、数值、单引号字符串和 `#` 注释的
-高亮，并提供括号配对和切换行注释。
+支持 `.yambl` 文件识别，以及命名空间、导入、实体、`extend`、`inherits`、字段、
+内置类型、集合泛型、`decodes` 声明和条目、`code<Currencies>`、
+`code<'TradingMarkets'>`、`Currencies.CNY` 代码值、注解、数值、单引号字符串
+和 `#` 注释的高亮。支持 `snapshot`、`scd`、`config`、默认值赋值符号和
+`NOT_DEFINED` 常量，并提供括号配对和切换行注释。
 
 高亮不执行语法或类型校验，也不实现格式化。注释空格的标准格式仍以
 [语法说明](../../language/syntax.md)为准，切换注释不等于运行 YAMBL 格式化器。
-字符串转义等尚待定义的语义不会由高亮规则确定。
+`\'` 按转义高亮；其他尚待定义的字符串语义不会由高亮规则确定。
 
 ## 安装
 

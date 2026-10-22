@@ -62,6 +62,6 @@ attr holding_entries: map<Security, HoldingEntry>
 | `map<string, map<string, decimal>>` | 值不能是集合类型 |
 
 这些泛型约束属于模型的类型规则。无重复语义描述集合本身，不表示 YAMBL
-执行了业务数据质量校验；解析器与类型检查器尚未实现。
+执行了业务数据质量校验；当前编译器检查类型组合，不检查存储的集合内容。
 
 集合及其元素的可空性、空集合的表示方式仍待讨论。

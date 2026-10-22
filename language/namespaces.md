@@ -18,7 +18,7 @@ decodes Currencies {
 }
 ```
 
-`fmc-data-model/core/security.yambl`：
+`fmc-data-model/core/security.yambl`（节选）：
 
 ```text
 namespace core
@@ -69,3 +69,12 @@ prefix: ''
 检查器暂允许省略 namespace，归入当前解析单元的未命名空间，每个文件最多一个
 namespace。重复声明、导入名称冲突及不存在的导入会报错。这些是当前工具的边界，
 其余待定语言规则仍需后续讨论。
+
+`extend` 的目标和 `inherits` 的父类型也按当前文件的可见名称解析。同 namespace
+可以在另一个文件扩展实体；跨 namespace 必须导入目标。扩展不引入新实体或
+命名空间符号，只将字段加入目标类型；字段类型和注解中的引用保留定义文件的作用域。
+文件和声明顺序不影响合并后的字段集合。
+
+`code<Currencies>` 和 `code<'Currencies'>` 使用相同的字典名称查找规则。
+未定义或未导入的字典按外部 Decodes 处理，逐处 warning，不阻止检查通过。
+不存在的显式导入和未知实体类型仍报错；warning 不会掩盖这些错误。

@@ -95,6 +95,7 @@ ID 生成策略尚待确定。
 
 ```text
 attr currency: code<Currencies>
+attr market: code<'TradingMarkets'>
 ```
 
 `code<decodes_id>` 是内置值类型原语，表示指定 `Decodes` 实例中的一个条目的
@@ -108,12 +109,19 @@ attr currency: code<Currencies>
 `Currencies` 是实例名称，不能直接用作字段类型。`Decodes` 禁止继承，
 `attr currency: Currencies` 不合法。
 
-按照最新案例，尖括号内使用不带引号的实例名称，名称采用复数，例如
-`Currencies`。内置模型和 `decodes` 专用声明语法见 [Decodes](../models/decodes.md)。
+尖括号内支持裸实例名称和单引号字符串，例如 `code<Currencies>` 与
+`code<'Currencies'>` 查找同一字典。名称采用复数。已声明字典按当前文件的
+namespace 和显式导入解析；带引号不会跳过导入规则或搜索所有命名空间。
+
+允许模型引用未声明的 Decodes。编译器逐处输出 `undefined Decodes: 名称`
+warning，包含文件、行、列；仅有此类 warning 时 `check` 仍成功。字典定义可
+由模型外部提供。声明了实体却将它当作 code 字典仍是类型错误；不存在的显式
+`from ... import ...` 也仍然报错。内置模型和专用声明语法见
+[Decodes](../models/decodes.md)。
 
 `code<Currencies>` 属于值类型，可以用作 `values` 的元素类型或 `map` 的
-值类型；不能作为 `collection` 的元素类型。它与 `string` 的兼容关系，以及
-是否允许作为 `map` 的键类型，尚未确定。
+值类型；不能作为 `collection` 的元素类型。按目前 map 键仅限 `string` 或
+实体引用的规则，`code` 也不能用作 map 键。它与 `string` 的兼容关系尚未确定。
 
 ## 暂缓定义
 
@@ -123,7 +131,7 @@ attr currency: code<Currencies>
 ## 待确定
 
 - 值类型的相等规则。
-- `code` 的字典名称解析、跨字典兼容规则及其与 `string` 的关系。
+- `code` 的完整名称写法、跨字典兼容规则及其与 `string` 的关系。
 - 内置值类型的位宽、取值范围、时区、字面量和可空性，以及到数据库或 Python
   类型的映射。
 - `decimal` 参数的合法范围、是否允许部分参数，以及参数重复和命名参数的

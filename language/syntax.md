@@ -20,8 +20,28 @@
 `collection<T>`、`values<T>` 和 `map<TKey, TValue>` 的泛型约束及语义见
 [内置集合类型](../builtins/collection-types.md)。
 
-内置值类型原语 `code<decodes_id>` 通过不带引号的实例名称指定代码字典，
-例如 `code<Currencies>`。具体语义见 [code](../builtins/value-types.md#code)。
+内置值类型原语 `code<decodes_id>` 通过实例名称指定代码字典，支持
+`code<Currencies>` 和 `code<'Currencies'>`。未定义的字典逐处产生 warning，
+不阻止检查通过。具体语义见 [code](../builtins/value-types.md#code)。
+
+## 字符串与元信息
+
+字符串使用单引号，内部使用 `\'` 表示单引号，例如 `'Security\'s currency'`。
+当前解析器也保留反斜杠转义的原始拼写；读取字符串值时 `\\` 表示反斜杠，
+其他转义（例如正则中的 `\d`）保持原样，不据此选定正则方言。
+
+`@title('...')` 和 `@description('...')` 为其后的实体、Decodes 声明或字段
+添加标题和描述。每个目标上的同名元信息只能出现一次。它们不改变字段类型。
+
+```text
+entity Security {
+    @title('Currency')
+    @description('Security\'s currency')
+    attr currency: code<'Currencies'>
+}
+```
+
+格式化器保留字符串拼写，包括 `\'`、空格和 `#`；字符串不能跨物理行。
 
 ## 注释
 
@@ -192,7 +212,66 @@ YAMBL 在此处仅描述模型，不校验业务数据的完整性或其他数�
 例如，模型不要求同一日期的持仓和净资产同时存在，也不检查两者的数据一致性。
 语言的语法检查与业务数据质量校验是不同的职责。
 
-普通属性与快照属性的完整语义、时间参数的其他形式以及通用注解机制仍待确定。
+时间参数的其他形式以及通用注解机制仍待确定。
+
+## 扩展、继承与属性模式
+
+`extend EntityName { ... }` 将属性直接补充到对应实体的定义中，不创建独立实体、
+子类型或命名空间符号。属性元信息保留其原始定义位置（文件、行、列），用于诊断
+和源码追踪。格式化仍保留源文件中的 `extend` 块。跨文件解析后，合并的字段参与
+继承和重名检查；字段中的名称按照它实际声明所在文件的导入解析。
+
+```text
+entity Security {
+    id security_id: string
+}
+
+extend Security {
+    @temporal(as_of_date: date)
+    @dimensions(source: code<'PriceSources'>)
+    snapshot attr price: decimal
+
+    config attr price_fallback_days: integer = 20
+}
+
+entity Bond inherits Security {
+    attr coupon: decimal
+
+    @temporal(as_of_date: date)
+    scd attr notional_value: decimal
+}
+```
+
+`inherits` 指定父实体；子类型获得父类型的字段，并可增加字段。`Bond` 因而拥有
+`security_id`、`price`、`price_fallback_days`、`coupon` 和 `notional_value`。
+当前支持单继承；循环继承、继承或扩展产生的同名字段均报错，尚不支持覆盖。
+扩展只能添加属性，不能补充 `id`。父类型和扩展目标按当前文件可见名称查找。
+`Decodes` 禁止继承，字典实例也不能作为父类型。当前编译器尚不支持扩展内置实体
+或继承其他内置实体；这不替代后续内置模型的语言设计。
+
+父类型或其他子类型的实例允许获取子类型特有字段；字段不适用于该实例的实际
+类型时，结果为内置常量 [NOT_DEFINED](../builtins/constants.md)。例如普通
+`Security` 或另一个 `Security` 子类型实例获取 `Bond.coupon` 对应的字段，
+结果为 `NOT_DEFINED`；`Bond` 及其子类型可拥有该字段的实际值。
+这是实例读取的语义约定，当前检查器不执行实例读取或生成运行时代码。
+
+| 属性形式 | 含义 |
+| --- | --- |
+| `attr` | 普通属性 |
+| `snapshot attr` | 按时间参数描述独立快照 |
+| `scd attr` | SCD Type 2 时间相关属性，保留变化历史 |
+| `config attr` | 与时间无关、可作为参数被配置覆盖的属性 |
+
+`@temporal(as_of_date: date)` 可用于 `snapshot` 和 `scd`，不能用于 `config`。
+`@dimensions(source: Type, ...)` 描述属性的附加维度；维度名为 `snake_case`，
+同一属性中不能重复，类型遵循现有类型规则。示例用外部字典描述价格来源，
+不要求模型内声明该字典，也不检查实际数据维度是否完整。
+
+`config attr name: Type = literal` 可声明默认值，也可省略 `= literal`。
+当前编译器支持 `integer`、`snowflake_id` 的整数字面量，`float`、`decimal`
+的数字字面量，`string` 的单引号字面量，以及 `bool` 的 `true` / `false`。
+其他类型的默认值语法与配置覆盖的来源、优先级仍待设计。当前只进行静态描述和
+字面量类型检查，不实现配置求值、SCD 历史存储或有效期边界计算。
 
 ## 案例状态与待定规则
 
@@ -201,5 +280,5 @@ YAMBL 在此处仅描述模型，不校验业务数据的完整性或其他数�
 `core/` 和 `decodes/` 目录。实体、字典和跨文件名称解析已可由首版编译器检查，
 案例使用的 `snowflake_id` 已纳入内置值类型。
 
-后续还需确定词法字符集、字符串转义、其他空白和换行规则、声明分隔规则，
-以及文件和仓库的解析入口。当前示例的排版不构成完整格式化规范。
+后续还需确定完整词法字符集、其他字符串转义、声明分隔规则及运行时映射。
+当前编译器的实现边界见其 README；文件与仓库解析规则见命名空间文档。

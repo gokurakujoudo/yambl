@@ -15,7 +15,8 @@
 - 实体类型的集合表示实体引用的集合。例如，`collection<HoldingEntry>` 表示
   持仓条目实体引用的集合，不表示内嵌实体。
 - 示例使用 `id 字段名: 类型` 声明实体标识字段，使用 `attr 字段名: 类型`
-  声明普通属性，使用 `snapshot attr 字段名: 类型` 声明快照属性。
+  声明普通属性，使用 `snapshot attr 字段名: 类型` 声明快照属性，使用 `scd attr`
+  声明 SCD Type 2 属性，使用 `config attr` 声明可被配置覆盖的时间无关参数。
 - `@temporal(as_of_date: date)` 描述对应快照属性的时间参数。不同属性的快照
   相互独立，即使它们使用相同的参数名称和类型。
 - 当前模型描述不承担数据完整性等数据质量校验。示例中的类型和模式描述不意味着
@@ -38,6 +39,7 @@
 - 字段的类型兼容规则。
 - 内置关键字与保留字清单。
 
-[语法说明](../language/syntax.md)记录了 `entity`、`id`、`snapshot`、`attr`、
-`@temporal`，以及案例使用的 `namespace` 写法。完整的关键字清单、注解机制
-仍需确认。
+[内置常量](constants.md)定义不适用于实例实际类型的字段读取结果 `NOT_DEFINED`。
+[语法说明](../language/syntax.md)记录了 `entity`、`extend`、`inherits`、`id`、
+`snapshot`、`scd`、`config`、`attr`、元信息和维度注解，以及 `namespace` 写法。
+完整的保留字清单、通用注解机制仍需确认。

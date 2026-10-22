@@ -54,7 +54,7 @@ decodes Currencies {
 }
 ```
 
-`fmc-data-model/core/security.yambl` 导入并使用字典：
+`fmc-data-model/core/security.yambl` 导入并使用字典（节选）：
 
 ```text
 namespace core
@@ -78,14 +78,20 @@ entity Security {
 `code` 与 `decode` 可以表达不同内容；例子中它们恰好相同。
 值类型原语 `code<Currencies>` 的含义见 [code](../builtins/value-types.md#code)。
 
-当前实例采用 `Currencies` 这样的 PascalCase 复数名称；命名空间中的查找
-方式、完整名称的写法及名称字符集仍待确定。拆分文件后的讨论见
+当前实例采用 `Currencies` 这样的 PascalCase 复数名称。同 namespace 可直接
+引用，跨 namespace 使用文件内有效的显式导入；完整名称的写法及完整字符集仍
+待确定。拆分文件后的规则见
 [命名空间与跨文件引用](../language/namespaces.md)。
+
+`code<'TradingMarkets'>` 可以引用模型中尚未定义的字典。裸名称和带引号名称
+使用相同的解析规则；未解析到字典时逐处产生 warning，允许检查通过。它仍是
+代码值类型，不会隐式创建字典声明或实体类型。
 
 ## 待确定
 
 - 条目裸 `code` 的完整字符集，以及包含空白或标点的代码如何书写。
 - `ordering` 相同时的次级排序规则。
-- `code` 的跨命名空间解析，以及不同字典之间的代码值兼容规则。
+- 不同字典之间的代码值兼容规则。
 
-模型描述和类型规则不意味着执行业务数据质量校验。解析器与类型检查器尚未实现。
+模型描述和类型规则不意味着执行业务数据质量校验。当前编译器已支持这里描述的
+声明、引用及外部字典 warning。
