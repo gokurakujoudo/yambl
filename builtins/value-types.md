@@ -1,7 +1,7 @@
 # 内置值类型
 
 值类型属于 YAMBL 的 builtins，名称使用 `snake_case`。当前已确认需要以下
-七种基础值类型，以及依赖 Decodes 实例的 `code` 值类型原语：
+八种基础值类型，以及依赖 Decodes 实例的 `code` 值类型原语：
 
 | 类型 | 基本含义 |
 | --- | --- |
@@ -12,6 +12,7 @@
 | `decimal` | 十进制数 |
 | `date` | 日期 |
 | `datetime` | 日期和时间 |
+| `snowflake_id` | Snowflake 标识值；位结构与生成策略待定 |
 | `code<decodes_id>` | 指定 Decodes 实例中的一个条目的 code 值 |
 
 这些类型可直接用于字段或时间参数的类型位置，无需在业务模型中声明。例如：
@@ -24,6 +25,7 @@ attr estimate: float
 attr quantity: decimal
 attr inception_date: date
 attr recorded_at: datetime
+id holdings_entry_id: snowflake_id
 ```
 
 上述片段展示实体内部的属性声明形式，不是独立文件。
@@ -79,6 +81,16 @@ string[regex: '']
 这些参数用于描述类型，不引入业务数据质量校验。正则表达式的匹配范围、转义
 和具体语法方言，以及数值参数的合法范围，仍待确定。
 
+## snowflake_id
+
+`snowflake_id` 是内置值类型，可直接用于标识字段、普通值字段、
+`values<snowflake_id>` 或 `map` 的值类型位置，无需声明或导入。
+它不是实体引用，因此不能作为 `collection` 的元素类型；`map` 的键仍限于
+`string` 或实体引用。
+
+该类型描述标识值，不规定自动生成行为。位宽、位结构、纪元、节点编号以及
+ID 生成策略尚待确定。
+
 ## code
 
 ```text
@@ -117,5 +129,4 @@ attr currency: code<Currencies>
 - `decimal` 参数的合法范围、是否允许部分参数，以及参数重复和命名参数的
   顺序规则；其他内置类型是否支持参数。
 - 正则表达式的匹配范围、转义和具体语法方言。
-- 案例中的 `snowflake_id` 尚未纳入已确认的内置值类型清单。它是否属于内置
-  值类型、具体值结构及定位仍待讨论；案例中的声明本身不规定 ID 生成行为。
+- `snowflake_id` 的具体值结构及生成策略。

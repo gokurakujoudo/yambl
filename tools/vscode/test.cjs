@@ -72,7 +72,7 @@ async function main() {
   expectScope('@temporal(as_of_date: date)', 'as_of_date', 'variable.other.property.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'snapshot', 'keyword.declaration.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'HoldingEntry', 'entity.name.type.yambl');
-  for (const type of ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'collection', 'values', 'map']) {
+  for (const type of ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'collection', 'values', 'map']) {
     expectScope(`attr field: ${type}`, type, 'support.type.yambl');
   }
   expectScope('attr weights: map<Security, decimal[precision: 18, scale: 4]>', 'precision', 'variable.parameter.yambl');

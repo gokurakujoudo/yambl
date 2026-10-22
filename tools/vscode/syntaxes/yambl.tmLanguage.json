@@ -65,7 +65,7 @@
     { "name": "keyword.declaration.yambl", "match": "\\b(?:entity|namespace|decodes|id|snapshot|attr)\\b" },
     { "name": "keyword.control.yambl", "match": "\\b(?:from|import)\\b" },
     { "name": "support.type.yambl", "match": "\\bcode(?=\\s*<)" },
-    { "name": "support.type.yambl", "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|collection|values|map)\\b" },
+    { "name": "support.type.yambl", "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|collection|values|map)\\b" },
     { "name": "variable.parameter.yambl", "match": "\\b(?:precision|scale|regex)(?=\\s*:)" },
     { "name": "variable.other.property.yambl", "match": "\\b[a-z][a-z0-9_]*(?=\\s*:)" },
     { "name": "entity.name.type.yambl", "match": "\\b[A-Z][A-Za-z0-9_]*\\b" },
