@@ -56,6 +56,12 @@ async function main() {
   expectScope('attr currency: code<Currencies>', 'Currencies', 'entity.name.constant.yambl');
   expectScope('attr currencies: values<code<Currencies>>', 'code<', 'support.type.yambl');
   expectScope('attr code: string', 'code:', 'variable.other.property.yambl');
+  expectScope('Currencies.CNY', 'Currencies', 'entity.name.constant.yambl');
+  expectScope('Currencies.CNY', '.', 'punctuation.accessor.yambl');
+  expectScope('Currencies.CNY', 'CNY', 'constant.other.yambl');
+  expectScope('attr dictionary: Decodes', 'Decodes', 'entity.name.type.yambl');
+  expectScope("'Currencies.CNY'", 'Currencies', 'string.quoted.single.yambl');
+  expectScope('# Currencies.CNY', 'Currencies', 'comment.line.number-sign.yambl');
   expectScope('@temporal(as_of_date: date)', '@temporal', 'entity.name.function.yambl');
   expectScope('@temporal(as_of_date: date)', 'as_of_date', 'variable.other.property.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'snapshot', 'keyword.declaration.yambl');

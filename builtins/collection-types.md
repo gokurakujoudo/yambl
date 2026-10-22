@@ -55,6 +55,7 @@ attr holding_entries: map<Security, HoldingEntry>
 | --- | --- |
 | `collection<string>` | `collection` 的元素必须是实体引用 |
 | `values<Security>` | `values` 的元素必须是值类型 |
+| `collection<Currencies>` | Currencies 是 Decodes 实例名称，不是实体类型；字典引用集合应使用 `collection<Decodes>` |
 | `map<integer, decimal>` | 键必须是 `string` 或实体引用 |
 | `map<string, collection<Security>>` | 值不能是集合类型 |
 | `map<string, values<decimal>>` | 值不能是集合类型 |

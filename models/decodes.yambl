@@ -1,8 +1,10 @@
+# 每个 decodes_id 对应唯一实例；Decodes 禁止继承
 entity Decodes {
     id decodes_id: string
     attr entries: collection<DecodesEntry>
 }
 
+# 身份为所属字典的 (decodes_id, code)，每组身份对应唯一实例，无需额外 id
 entity DecodesEntry {
     attr code: string
     attr decode: string

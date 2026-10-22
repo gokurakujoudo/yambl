@@ -18,6 +18,29 @@
 `collection<DecodesEntry>`；源文件中的条目顺序不赋予集合顺序。数据使用方
 需要按字典顺序展示条目时，按照 `ordering` 升序排序。
 
+## 身份、单例与继承
+
+`Decodes` 以 `decodes_id` 标识，每个标识对应唯一的字典实例。
+`DecodesEntry` 以 `(decodes_id, code)` 共同标识，每组标识对应唯一的条目实例，
+无需额外的 `id` 字段。其中 `decodes_id` 来自条目所属的字典。
+
+两种模型的单例语义均按上述身份确定，可以同时存在 `Currencies`、`Countries`
+等多个字典。不同字典中相同的 `code` 标识不同的条目。
+
+`Decodes` 禁止继承。`decodes Currencies` 定义的是 `Decodes` 的单例实例，
+不创建名为 `Currencies` 的实体类型或 `Decodes` 子类。因此，`attr x: Currencies`
+不是合法的字段类型声明。
+
+## 代码值与字典引用
+
+| 字段声明 | 含义 | 合理的取值 |
+| --- | --- | --- |
+| `attr x: code<Currencies>` | Currencies 字典中的代码值 | `Currencies.CNY` |
+| `attr y: Decodes` | 一个 Decodes 字典实例的引用 | `Currencies` |
+
+`Currencies.CNY` 表示该字典中 `code` 为 `CNY` 的代码值，`Currencies` 表示
+字典实例本身。上述示例沿用复数命名约定。
+
 ## 直接声明实例
 
 最新业务案例采用以下写法：
@@ -52,8 +75,6 @@ entity Security {
 
 ## 待确定
 
-- `DecodesEntry` 的模型没有显式 `id`。其实体身份是否由所属 `Decodes` 和
-  `code` 共同确定，仍待确认；目前不补充隐式或独立标识字段。
 - 条目裸 `code` 的完整字符集，以及包含空白或标点的代码如何书写。
 - `ordering` 相同时的次级排序规则。
 - `code` 的跨命名空间解析，以及不同字典之间的代码值兼容规则。

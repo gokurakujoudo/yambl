@@ -94,6 +94,18 @@ decodes Currencies {
 使用裸词元，`decode` 使用单引号字符串。`ordering` 是使用方的升序排序基准，
 不会使 `entries` 集合具有顺序。模型定义及字段映射见 [Decodes](../models/decodes.md)。
 
+`Decodes` 按 `decodes_id`、`DecodesEntry` 按 `(decodes_id, code)` 分别具有
+单例身份，条目不需要额外的 `id` 字段。`Decodes` 禁止继承，声明中的字典
+名称表示实例，不能作为实体类型使用。
+
+```text
+attr x: code<Currencies>  # 合理取值为 Currencies.CNY
+attr y: Decodes  # 合理取值为 Currencies
+```
+
+`Currencies.CNY` 是字典限定的代码值写法。`attr x: Currencies` 不合法，
+因为 `Currencies` 是字典实例名称。
+
 ## 实体与标识字段
 
 使用 `entity` 和花括号声明实体类型，在实体内使用 `id 字段名: 类型` 声明

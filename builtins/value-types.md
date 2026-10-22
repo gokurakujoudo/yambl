@@ -89,6 +89,13 @@ attr currency: code<Currencies>
 `code`。在上述例子中，`Currencies` 指定字典实例，字段承载该字典的代码值。
 对应的内容由该条目的 `decode` 描述。
 
+代码值使用 `字典实例名.code` 表示，例如 `Currencies.CNY` 是
+`code<Currencies>` 的合理取值。字典实例本身可作为 `Decodes` 引用类型的值：
+`attr dictionary: Decodes` 可以取值 `Currencies`。
+
+`Currencies` 是实例名称，不能直接用作字段类型。`Decodes` 禁止继承，
+`attr currency: Currencies` 不合法。
+
 按照最新案例，尖括号内使用不带引号的实例名称，名称采用复数，例如
 `Currencies`。内置模型和 `decodes` 专用声明语法见 [Decodes](../models/decodes.md)。
 
