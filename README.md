@@ -5,7 +5,8 @@ language for describing business models.
 
 The language is being designed. This repository records confirmed decisions and
 proposals for discussion. The companion compiler checks and formats the current
-examples, including attribute extensions, inheritance, and external Decodes.
+examples, including attribute extensions, final entities, overload/override field
+contracts, dependent field mappings, ConfigGroup, and external Decodes.
 
 ## Repository structure
 

@@ -244,10 +244,12 @@ entity Bond inherits Security {
 
 `inherits` 指定父实体；子类型获得父类型的字段，并可增加字段。`Bond` 因而拥有
 `security_id`、`price`、`price_fallback_days`、`coupon` 和 `notional_value`。
-当前支持单继承；循环继承、继承或扩展产生的同名字段均报错，尚不支持覆盖。
-扩展只能添加属性，不能补充 `id`。父类型和扩展目标按当前文件可见名称查找。
+当前支持单继承；循环继承、同一实体内部或扩展产生的重复字段均报错。
+父子属性重声明须使用 `@override`，不同分支的同名属性须使用 `@overload`。
+签名一致性、逻辑字段身份及 `final entity` 规则见[字段关系](field-relationships.md)。
+扩展只能添加属性，不能补充 `id`；final 实体禁止扩展。父类型和扩展目标按当前文件可见名称查找。
 `Decodes` 禁止继承，字典实例也不能作为父类型。当前编译器尚不支持扩展内置实体
-或继承其他内置实体；这不替代后续内置模型的语言设计。
+或继承其他内置实体；ConfigGroup 明确声明为 final。
 
 父类型或其他子类型的实例允许获取子类型特有字段；字段不适用于该实例的实际
 类型时，结果为内置常量 [NOT_DEFINED](../builtins/constants.md)。例如普通
@@ -257,12 +259,13 @@ entity Bond inherits Security {
 
 | 属性形式 | 含义 |
 | --- | --- |
-| `attr` | 普通属性 |
+| `attr` | 普通属性，不自动用于条件筛选 |
+| `static attr` | 时间无关、可用于索引筛选的属性 |
 | `snapshot attr` | 按时间参数描述独立快照 |
 | `scd attr` | SCD Type 2 时间相关属性，保留变化历史 |
 | `config attr` | 与时间无关、可作为参数被配置覆盖的属性 |
 
-`@temporal(as_of_date: date)` 可用于 `snapshot` 和 `scd`，不能用于 `config`。
+`@temporal(as_of_date: date)` 可用于 `snapshot` 和 `scd`，不能用于 `config` 或 `static`。
 `@dimensions(source: Type, ...)` 描述属性的附加维度；维度名为 `snake_case`，
 同一属性中不能重复，类型遵循现有类型规则。示例用外部字典描述价格来源，
 不要求模型内声明该字典，也不检查实际数据维度是否完整。
@@ -282,3 +285,10 @@ entity Bond inherits Security {
 
 后续还需确定完整词法字符集、其他字符串转义、声明分隔规则及运行时映射。
 当前编译器的实现边界见其 README；文件与仓库解析规则见命名空间文档。
+
+## 条件配置组与依赖字段类型
+
+[ConfigGroup](../models/config_group.md) 是内置 final 实体。
+`type<Entity>`、`type<Security>` 和 `field_mapping<static, self.selected_kind>`
+的约束与任意类型字段引用见[实体类型与字段映射](../builtins/field-mapping.md)。
+这些声明已由编译器及 LSP 支持；配置组实例语法和配置执行尚未实现。

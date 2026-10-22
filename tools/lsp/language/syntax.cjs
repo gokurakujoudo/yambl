@@ -2,11 +2,11 @@
 
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
-  'id', 'attr', 'snapshot', 'scd', 'config'];
-const annotations = ['title', 'description', 'temporal', 'dimensions'];
+  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self'];
+const annotations = ['title', 'description', 'temporal', 'dimensions', 'overload', 'override'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id'];
-const generics = ['collection', 'values', 'map', 'code'];
-const entities = ['Decodes', 'DecodesEntry'];
+const generics = ['collection', 'values', 'map', 'code', 'type', 'field_mapping'];
+const entities = ['Decodes', 'DecodesEntry', 'ConfigGroup'];
 const constants = ['NOT_DEFINED', 'true', 'false'];
 
 function position(text, offset) {
@@ -52,6 +52,9 @@ function parse(text, uri = '') {
         if (node.args.length) take(',');
         if (peek().value.startsWith("'")) {
           const quoted = take(); node.args.push({ token: quoted, name: stringValue(quoted.value), quoted: true });
+        } else if (is('self')) {
+          const token = take(); take('.'); const field = name();
+          node.args.push({ token, name: 'self', selfField: field });
         } else node.args.push(type());
       } while (is(','));
       take('>');
@@ -73,6 +76,7 @@ function parse(text, uri = '') {
     const start = index;
     const token = take('@'); const kind = name();
     if (!annotations.includes(kind.value)) throw kind;
+    if (['overload', 'override'].includes(kind.value)) { piece(start, indent); return { token, markerToken: kind, name: kind.value, dimensions: [] }; }
     take('(');
     const node = { token, name: kind.value, dimensions: [] };
     if (['title', 'description'].includes(kind.value)) {
@@ -102,9 +106,10 @@ function parse(text, uri = '') {
         if (!item.value) throw item.token;
         metadata.push(item);
       }
-      const start = index; const token = take();
+      const start = index; const final = is('final') ? take() : null; const token = take();
+      if (final && token.value !== 'entity') throw token;
       if (!['entity', 'extend', 'decodes'].includes(token.value) || (token.value === 'extend' && metadata.length)) throw token;
-      const declaration = { kind: token.value, token, name: name(), metadata, fields: [], entries: [], doc };
+      const declaration = { kind: token.value, token: final || token, final: Boolean(final), name: name(), metadata, fields: [], entries: [], doc };
       if (declaration.kind === 'entity' && is('inherits')) { take(); declaration.parent = name(); }
       declaration.bodyStart = take('{').end; piece(start, 0);
       while (!is('}')) {
@@ -118,13 +123,14 @@ function parse(text, uri = '') {
           const metadata = [];
           while (is('@')) metadata.push(annotation(1));
           const start = index; const token = take(); const mode = token.value;
-          if (!['id', 'attr', 'snapshot', 'scd', 'config'].includes(mode)) throw token;
-          if (['snapshot', 'scd', 'config'].includes(mode)) take('attr');
+          if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static'].includes(mode)) throw token;
+          if (['snapshot', 'scd', 'config', 'static'].includes(mode)) take('attr');
           const field = { token, mode, name: name(), metadata, doc }; take(':'); field.type = type();
           if (is('=')) {
             field.defaultToken = take();
             field.default = ['true', 'false'].includes(peek().value) ? take() : literal();
           }
+          field.end = peek().start;
           declaration.fields.push(field); piece(start, 1);
         }
       }

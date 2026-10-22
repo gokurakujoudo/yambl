@@ -114,7 +114,7 @@ async function activate(context) {
           const completion = new vscode.CompletionItem(item.label, item.kind - 1); completion.detail = item.detail; return completion;
         });
       },
-    }),
+    }, '.'),
     vscode.languages.registerHoverProvider(selector, {
       async provideHover(doc, position, token) {
         const result = await client.feature('textDocument/hover', doc, { position }, token);
@@ -124,7 +124,8 @@ async function activate(context) {
     vscode.languages.registerDefinitionProvider(selector, {
       async provideDefinition(doc, position, token) {
         const result = await client.feature('textDocument/definition', doc, { position }, token);
-        return result ? new vscode.Location(vscode.Uri.parse(result.uri), asRange(result.range)) : null;
+        return Array.isArray(result) ? result.map(item => new vscode.Location(vscode.Uri.parse(item.uri), asRange(item.range)))
+          : result ? new vscode.Location(vscode.Uri.parse(result.uri), asRange(result.range)) : null;
       },
     }),
     vscode.languages.registerReferenceProvider(selector, {

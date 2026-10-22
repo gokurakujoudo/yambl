@@ -57,6 +57,15 @@ async function main() {
   }
 
   expectScope('namespace core', 'core', 'entity.name.namespace.yambl');
+  expectScope('final entity ConfigGroup {', 'final', 'keyword.declaration.yambl');
+  expectScope('final entity ConfigGroup {', 'ConfigGroup', 'entity.name.type.yambl');
+  expectScope('static attr selected: type<Entity>', 'static', 'keyword.declaration.yambl');
+  expectScope('static attr selected: type<Entity>', 'type', 'support.type.yambl');
+  expectScope('static attr selected: type<Entity>', 'Entity', 'entity.name.type.yambl');
+  expectScope('attr when: field_mapping<static, self.selected>', 'field_mapping', 'support.type.yambl');
+  expectScope('attr when: field_mapping<static, self.selected>', 'self', 'keyword.declaration.yambl');
+  expectScope('@overload', '@overload', 'entity.name.function.yambl');
+  expectScope('@override', '@override', 'entity.name.function.yambl');
   expectScope('namespace decodes', 'decodes', 'entity.name.namespace.yambl');
   expectScope('from decodes import Currencies', 'from', 'keyword.control.yambl');
   expectScope('from decodes import Currencies', 'decodes', 'entity.name.namespace.yambl');

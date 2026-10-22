@@ -43,3 +43,6 @@
 [语法说明](../language/syntax.md)记录了 `entity`、`extend`、`inherits`、`id`、
 `snapshot`、`scd`、`config`、`attr`、元信息和维度注解，以及 `namespace` 写法。
 完整的保留字清单、通用注解机制仍需确认。
+
+实体类型值 `type<T>` 和 `field_mapping<类别, 目标>` 见
+[实体类型与字段映射](field-mapping.md)。

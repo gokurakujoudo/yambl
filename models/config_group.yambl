@@ -1,0 +1,6 @@
+final entity ConfigGroup {
+    id config_group_id: string
+    static attr entity_type: type<Entity>
+    attr when: field_mapping<static, self.entity_type>
+    attr then_set: field_mapping<config, self.entity_type>
+}

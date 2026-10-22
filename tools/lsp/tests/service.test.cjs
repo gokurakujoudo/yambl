@@ -7,6 +7,59 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { Service, rootFor, sources, inside, uriKey } = require('../service.cjs');
 
+test('relationship markers navigate across files and react to unsaved edits', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-markers-')); t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), '');
+  const sources = {
+    'base.yambl': 'namespace core entity Base { config attr days: integer = 20 }',
+    'left.yambl': 'namespace core entity Left inherits Base { @overload config attr category: integer = 1 @override config attr days: integer = 10 }',
+    'right.yambl': 'namespace core entity Right inherits Base { @overload config attr category: integer = 2 }',
+    'deep.yambl': 'namespace core entity Deep inherits Left { @override config attr days: integer = 5 }',
+  };
+  const service = new Service(() => {});
+  const uris = Object.fromEntries(Object.keys(sources).map(name => [name, pathToFileURL(path.join(root, name)).href]));
+  for (const [name, text] of Object.entries(sources)) fs.writeFileSync(new URL(uris[name]), text);
+  service.open.set(uris['left.yambl'], { text: sources['left.yambl'], version: 1 }); service.refresh();
+  const definition = (file, marker) => {
+    const doc = service.document(uris[file]);
+    return service.feature('textDocument/definition', { textDocument: { uri: doc.uri }, position: { line: 0, character: doc.text.indexOf('@' + marker) + 1 } });
+  };
+  assert.equal(definition('left.yambl', 'overload')[0].uri, uris['right.yambl']);
+  assert.equal(definition('left.yambl', 'override')[0].uri, uris['base.yambl']);
+  assert.equal(definition('deep.yambl', 'override')[0].uri, uris['left.yambl']);
+  service.open.set(uris['right.yambl'], { text: sources['right.yambl'].replace('integer', 'string').replace('= 2', "= 'x'"), version: 2 }); service.refresh();
+  assert.equal(definition('left.yambl', 'overload'), null);
+  assert.ok(service.document(uris['left.yambl']).diagnostics.some(d => d.message.includes('identical signatures')));
+  service.open.set(uris['right.yambl'], { text: sources['right.yambl'], version: 3 }); service.refresh();
+  assert.equal(definition('left.yambl', 'overload')[0].uri, uris['right.yambl']);
+});
+
+test('self navigation and completion accept arbitrary type fields and incomplete references', () => {
+  const service = new Service(() => {}), uri = 'untitled:selection';
+  const text = 'entity Base { config attr arbitrary: type<Entity> attr ignored: string } entity Child inherits Base {} extend Child { attr data: field_mapping<config, self.arbitrary> }';
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  const definition = service.feature('textDocument/definition', { textDocument: { uri }, position: { line: 0, character: text.lastIndexOf('arbitrary') } });
+  assert.equal(definition.range.start.character, text.indexOf('arbitrary'));
+  for (const suffix of ['arbitrary', '', 'arb']) {
+    const current = text.replace('self.arbitrary', 'self.' + suffix);
+    service.open.set(uri, { text: current, version: 2 }); service.refresh();
+    const completions = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: current.indexOf('self.') + 5 + suffix.length } });
+    assert.deepEqual(completions.items.map(i => i.label), ['arbitrary']);
+  }
+  const completions = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: 0 } });
+  for (const label of ['final', 'static', 'self', 'type', 'field_mapping', 'Entity', 'ConfigGroup', 'overload', 'override']) assert.ok(completions.items.some(i => i.label === label), label);
+});
+
+test('invalid field declarations do not offer marker navigation', () => {
+  const service = new Service(() => {}), uri = 'untitled:invalid';
+  for (const field of ['@overload @overload attr x: string', "@overload @title('a') @title('a') attr x: string", '@overload attr x: Missing']) {
+    const text = `entity Base {} entity A inherits Base { ${field} } entity B inherits Base { @overload attr x: string }`;
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const result = service.feature('textDocument/definition', { textDocument: { uri }, position: { line: 0, character: text.lastIndexOf('@overload') + 1 } });
+    assert.equal(result, null);
+  }
+});
+
 test('repository discovery, unsaved dependencies, definitions, hover, symbols and close', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lsp-')); t.after(() => fs.rmSync(root, { recursive: true }));
   const write = (name, text) => { const file = path.join(root, name); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); return pathToFileURL(file).href; };

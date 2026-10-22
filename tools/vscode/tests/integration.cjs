@@ -76,7 +76,36 @@ async function run() {
     for (let i = 0; i < 30 && vscode.languages.getDiagnostics(uri).length; i++) await new Promise(resolve => setTimeout(resolve, 100));
     assert.deepEqual(vscode.languages.getDiagnostics(uri).map(d => d.message), []);
     assert.ok(doc.isDirty, 'Analysis must use unsaved text');
-    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes'] }));
+    const relationshipText = `namespace relationships
+entity Base { config attr days: integer = 20 }
+entity A inherits Base { @overload config attr category: integer = 1 @override config attr days: integer = 10 }
+entity B inherits Base { @overload config attr category: integer = 2 }
+entity C inherits Base { @overload config attr category: integer = 3 }
+entity Deep inherits A { @override config attr days: integer = 5 }
+final entity Selection { attr chosen: type<Base> attr rules: field_mapping<config, self.chosen> }
+`;
+    const relationshipsUri = vscode.Uri.file(path.join(root, 'relationships.yambl'));
+    fs.writeFileSync(relationshipsUri.fsPath, relationshipText);
+    const relationshipsDoc = await vscode.workspace.openTextDocument(relationshipsUri);
+    await vscode.window.showTextDocument(relationshipsDoc);
+    const lookup = offset => vscode.commands.executeCommand('vscode.executeDefinitionProvider', relationshipsUri, relationshipsDoc.positionAt(offset));
+    const overloadTargets = await lookup(relationshipText.indexOf('@overload') + 1);
+    assert.deepEqual(overloadTargets.map(x => x.range.start.line).sort(), [3, 4]);
+    const overrideTargets = await lookup(relationshipText.lastIndexOf('@override') + 1);
+    assert.deepEqual(overrideTargets.map(x => x.range.start.line), [2]);
+    const selfTarget = await lookup(relationshipText.lastIndexOf('chosen'));
+    assert.equal(selfTarget[0].range.start.character, relationshipText.split('\n')[6].indexOf('chosen'));
+    const fieldCompletions = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', relationshipsUri, relationshipsDoc.positionAt(relationshipText.lastIndexOf('chosen')));
+    assert.ok(fieldCompletions.items.some(item => item.label === 'chosen'));
+    assert.deepEqual(vscode.languages.getDiagnostics(relationshipsUri).map(d => d.message), []);
+    const broken = new vscode.WorkspaceEdit();
+    const mismatch = relationshipText.indexOf('integer = 2');
+    broken.replace(relationshipsUri, new vscode.Range(relationshipsDoc.positionAt(mismatch), relationshipsDoc.positionAt(mismatch + 'integer = 2'.length)), "string = 'two'");
+    await vscode.workspace.applyEdit(broken);
+    const invalidTargets = await lookup(relationshipText.indexOf('@overload') + 1);
+    assert.deepEqual(invalidTargets, []);
+    assert.ok(relationshipsDoc.isDirty);
+    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression'] }));
   } catch (error) {
     fs.writeFileSync(output, JSON.stringify({ ok: false, error: error.stack })); throw error;
   }

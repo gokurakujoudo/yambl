@@ -1,6 +1,7 @@
 # 内置集合类型
 
-YAMBL 的 builtins 提供 `collection<T>`、`values<T>` 和 `map<TKey, TValue>`。
+YAMBL 的 builtins 提供 `collection<T>`、`values<T>`、`map<TKey, TValue>`，
+以及按字段约束的 [field_mapping](field-mapping.md)。
 尖括号内填写类型参数；`map` 的两个类型参数以逗号分隔。
 
 | 类型 | 泛型约束 | 已确认的集合语义 |
@@ -44,7 +45,7 @@ attr holding_entries: map<Security, HoldingEntry>
 ```
 
 `TKey` 只能是 `string` 或实体引用类型。`TValue` 可以是值类型或实体引用
-类型，但不能是 `collection`、`values` 或 `map`。
+类型，但不能是 `collection`、`values`、`map` 或 `field_mapping`。
 
 `map` 无序，键唯一。不同键可以映射到相同的值或实体引用。排序由数据使用方
 决定；引用键按所指向的实体身份区分，字符串键按字符串值区分。

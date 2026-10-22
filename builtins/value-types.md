@@ -1,7 +1,7 @@
 # 内置值类型
 
 值类型属于 YAMBL 的 builtins，名称使用 `snake_case`。当前已确认需要以下
-八种基础值类型，以及依赖 Decodes 实例的 `code` 值类型原语：
+八种基础值类型，以及 `code` 和 `type` 值类型原语：
 
 | 类型 | 基本含义 |
 | --- | --- |
@@ -13,6 +13,7 @@
 | `date` | 日期 |
 | `datetime` | 日期和时间 |
 | `snowflake_id` | Snowflake 标识值；位结构与生成策略待定 |
+| `type<T>` | 实体类型值；T 是 Entity 或具体实体类型，见[实体类型与字段映射](field-mapping.md) |
 | `code<decodes_id>` | 指定 Decodes 实例中的一个条目的 code 值 |
 
 这些类型可直接用于字段或时间参数的类型位置，无需在业务模型中声明。例如：

@@ -24,7 +24,8 @@ are coalesced over 120 ms. Closing a buffer restores its disk contents for other
 open documents in the same compilation unit.
 
 Checks cover namespace imports, types, metadata, configuration literals, dimensions,
-entity extensions, inherited field conflicts, and inheritance cycles. Undefined
+entity extensions, final restrictions, overload/override contracts, dependent field
+mappings, inherited field conflicts, and inheritance cycles. Undefined
 dynamic Decodes are allowed without editor diagnostics. Missing explicit imports
 and unknown entity types remain errors. The Python CLI still reports external
 dictionary dependencies as warnings; the editor suppresses only those warnings.
@@ -36,6 +37,11 @@ A document with a syntax error produces no formatting edits. Completion offers
 built-ins and names visible in the current file. Definition lookup follows imports,
 entity references, inheritance, extension targets, and defined Decodes names,
 including quoted identifiers. External Decodes have no definition to navigate to.
+On an `@overload` marker, definition lookup returns the other branch implementations.
+On `@override`, it returns the nearest inherited declaration. Invalid field contracts
+produce no marker navigation. `self.field` navigates to any declared type-valued field,
+and completion after `self.` lists effective type-valued fields, including inherited
+and extended ones.
 The outline shows extension attributes as `Entity.field`, without adding an entity.
 
 Attribute hover includes its full type, including generic arguments and named or

@@ -1,19 +1,20 @@
 'use strict';
 
 const { values, generics, entities, stringValue } = require('./syntax.cjs');
-const reserved = [...values, ...generics, ...entities];
+const { relationships, entityArgument } = require('./relationships.cjs');
+const reserved = [...values, ...generics, ...entities, 'Entity'];
 const key = (ns, name) => ns + '\0' + name;
 const snake = name => /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name);
 
 // Keep this editor implementation aligned with yambl-compiler using the parity fixtures.
 function validate(documents) {
-  const symbols = new Map();
+  const symbols = new Map(); const pendingTypes = [];
   function issue(doc, token, message, severity = 1, code) {
     doc.diagnostics.push({ range: token.range, message, severity, source: 'yambl', ...(code ? { code } : {}) });
   }
   function bind(doc, token, target) { if (target) doc.bindings.set(token.start, target); }
   for (const doc of documents) {
-    doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map(); doc.valueTypeTokens = new Map();
+    doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map(); doc.valueTypeTokens = new Map(); doc.markerTargets = new Map();
     if (doc.errors.length) continue;
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
       const name = decl.name.value; decl.key = key(doc.namespace, name); decl.ownFields = new Map();
@@ -31,16 +32,36 @@ function validate(documents) {
       else { doc.scope.set(name, target); bind(doc, imported.name, target); }
     }
   }
-  function checkType(doc, node) {
+  function checkType(doc, node, owner) {
     const { name, token, args, params } = node;
     const error = (message, severity, code) => issue(doc, token, message, severity, code);
     if (values.includes(name) || generics.includes(name)) doc.valueTypeTokens.set(token.start, token);
     if (node.quoted) { error('quoted dictionary identifiers are only valid inside code<...>'); return 'unknown'; }
+    if (node.selfField) { error('self fields are only valid as field_mapping targets'); return 'unknown'; }
     if (generics.includes(name)) {
-      if (params || (args || []).length !== (name === 'map' ? 2 : 1)) { error(`invalid type arguments for ${name}`); return 'unknown'; }
+      if (params || (args || []).length !== (['map', 'field_mapping'].includes(name) ? 2 : 1)) { error(`invalid type arguments for ${name}`); return 'unknown'; }
+      if (name === 'type') {
+        if (!entityArgument(args[0], doc, true)) error('type requires Entity or a visible entity type');
+        else bind(doc, args[0].token, doc.scope.get(args[0].name));
+        return 'value';
+      }
+      if (name === 'field_mapping') {
+        const filter = args[0], target = args[1];
+        if (filter.quoted || filter.selfField || filter.args || filter.params || !['attr', 'static', 'config', 'snapshot', 'scd'].includes(filter.name)) error('field_mapping requires an attr, static, config, snapshot or scd filter');
+        if (target.selfField) {
+          const field = owner?.effective?.get(target.selfField.value);
+          if (!field) error(`unknown self field: ${target.selfField.value}`);
+          else {
+            bind(doc, target.selfField, field);
+            if (field.type.name !== 'type' || field.type.params || field.type.args?.length !== 1 || !entityArgument(field.type.args[0], field.doc, true)) error(`self field must have a valid type<...> type: ${target.selfField.value}`);
+          }
+        } else if (!entityArgument(target, doc)) error('field_mapping requires a visible entity type or self field target');
+        else bind(doc, target.token, doc.scope.get(target.name));
+        return 'collection';
+      }
       if (name === 'code') {
         const arg = args[0]; const target = doc.scope.get(arg.name);
-        if (arg.args || arg.params || (target && target.kind !== 'decodes') || reserved.includes(arg.name)) error('code requires a Decodes instance identifier');
+        if (arg.selfField || arg.args || arg.params || (target && target.kind !== 'decodes') || reserved.includes(arg.name)) error('code requires a Decodes instance identifier');
         else {
           doc.valueTypeTokens.set(arg.token.start, arg.token);
           if (!target) error(`undefined Decodes: ${arg.name}`, 2, 'undefined-decodes');
@@ -48,7 +69,7 @@ function validate(documents) {
         }
         return 'value';
       }
-      const kinds = args.map(arg => checkType(doc, arg));
+      const kinds = args.map(arg => checkType(doc, arg, owner));
       if (name === 'collection' && !['reference', 'unknown'].includes(kinds[0])) error('collection requires an entity reference');
       if (name === 'values' && !['value', 'string', 'unknown'].includes(kinds[0])) error('values requires a value type');
       if (name === 'map') {
@@ -93,22 +114,29 @@ function validate(documents) {
       }
       const target = doc.scope.get(decl.name.value);
       if (decl.kind === 'extend') bind(doc, decl.name, target);
-      if (!target || target.kind !== 'entity') issue(doc, decl.token, `extend requires a visible user-defined entity: ${decl.name.value}`);
+      const blocked = decl.kind === 'extend' && (decl.name.value === 'ConfigGroup' || target?.final);
+      if (blocked) issue(doc, decl.token, `cannot extend final entity: ${decl.name.value}`);
+      else if (!target || target.kind !== 'entity') issue(doc, decl.token, `extend requires a visible user-defined entity: ${decl.name.value}`);
       if (decl.parent) {
         const parent = doc.scope.get(decl.parent.value); bind(doc, decl.parent, parent);
-        if (entities.includes(decl.parent.value)) issue(doc, decl.parent, 'built-in inheritance is unsupported; Decodes is sealed');
+        if (decl.parent.value === 'ConfigGroup' || parent?.final) issue(doc, decl.parent, `cannot inherit final entity: ${decl.parent.value}`);
+        else if (entities.includes(decl.parent.value)) issue(doc, decl.parent, 'built-in inheritance is unsupported; Decodes is sealed');
         else if (!parent || parent.kind !== 'entity') issue(doc, decl.parent, `inherits requires a visible entity type: ${decl.parent.value}`);
         else decl.base = parent;
       }
       for (const field of decl.fields) {
         const name = field.name.value; bind(doc, field.name, field);
-        if (target?.kind === 'entity') {
+        field.owner = target;
+        if (!blocked && target?.kind === 'entity') {
           if (target.ownFields.has(name)) issue(doc, field.token, `duplicate field: ${name}`);
           target.ownFields.set(name, field);
         }
         if (!snake(name)) issue(doc, field.token, 'field names must use snake_case');
         if (decl.kind === 'extend' && field.mode === 'id') issue(doc, field.token, 'extend may add attributes, not id fields');
-        checkType(doc, field.type); metadata(doc, field.metadata);
+        pendingTypes.push([doc, field.type, target]); metadata(doc, field.metadata);
+        const markers = field.metadata.filter(a => ['overload', 'override'].includes(a.name));
+        if (markers.length > 1) issue(doc, markers.at(-1).token, 'only one overload or override marker is allowed');
+        if (markers.length && field.mode === 'id') issue(doc, markers[0].token, 'field markers require an attr');
         const temporal = field.metadata.filter(a => a.name === 'temporal');
         for (const item of temporal) {
           const d = item.dimensions[0];
@@ -122,7 +150,7 @@ function validate(documents) {
             const name = dimension.token.value;
             if (!snake(name)) issue(doc, dimension.token, 'dimension names must use snake_case');
             if (dimensions.has(name)) issue(doc, dimension.token, `duplicate dimension: ${name}`);
-            dimensions.add(name); checkType(doc, dimension.type);
+            dimensions.add(name); pendingTypes.push([doc, dimension.type, target]);
           }
         }
         if (field.default) {
@@ -138,14 +166,18 @@ function validate(documents) {
       }
     }
   }
-  for (const decl of symbols.values()) {
-    if (decl.kind !== 'entity') continue;
-    const seen = new Set([decl]); const inherited = new Set(); let base = decl.base;
-    while (base) {
-      if (seen.has(base)) { issue(decl.doc, decl.token, 'inheritance cycle'); break; }
-      seen.add(base); for (const name of base.ownFields.keys()) inherited.add(name); base = base.base;
+  relationships(symbols, issue);
+  for (const args of pendingTypes) checkType(...args);
+  const invalidField = field => field.doc.diagnostics.some(d => d.severity === 1 &&
+    field.doc.tokens.some(t => t.start >= (field.metadata[0]?.token || field.token).start && t.start < field.end &&
+      t.range.start.line === d.range.start.line && t.range.start.character === d.range.start.character));
+  for (const doc of documents) for (const decl of doc.declarations) for (const field of decl.fields) {
+    for (const item of field.metadata.filter(a => ['overload', 'override'].includes(a.name))) {
+      const targets = doc.markerTargets.get(item.token.start);
+      if (targets && (invalidField(field) || targets.some(invalidField))) {
+        doc.markerTargets.delete(item.token.start); doc.markerTargets.delete(item.markerToken.start);
+      }
     }
-    for (const [name, field] of decl.ownFields) if (inherited.has(name)) issue(field.doc, field.token, `duplicate inherited field: ${name}`);
   }
   for (const doc of documents) doc.diagnostics.sort((a, b) => a.range.start.line - b.range.start.line || a.range.start.character - b.range.start.character || a.message.localeCompare(b.message));
   return symbols;
@@ -153,13 +185,14 @@ function validate(documents) {
 
 function formatType(node) {
   if (node.quoted) return node.token.value;
+  if (node.selfField) return `self.${node.selfField.value}`;
   const args = node.args ? '<' + node.args.map(formatType).join(', ') + '>' : '';
   const params = node.params ? '[' + node.params.map(p => (p.key ? p.key + ': ' : '') + p.value.value).join(', ') + ']' : '';
   return node.name + args + params;
 }
 function describe(target) {
   const details = ['title', 'description'].flatMap(name => (target.metadata || []).filter(a => a.name === name && a.value).map(a => `${name}: ${stringValue(a.value.value)}`));
-  const mode = ['snapshot', 'scd', 'config'].includes(target.mode) ? target.mode + ' attr' : target.mode;
+  const mode = ['snapshot', 'scd', 'config', 'static'].includes(target.mode) ? target.mode + ' attr' : target.mode;
   const signature = target.kind ? `${target.kind} ${target.name.value}` : `${mode} ${target.name.value}: ${formatType(target.type)}`;
   return [signature, ...details].join('\n\n');
 }

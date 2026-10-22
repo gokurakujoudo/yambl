@@ -36,6 +36,15 @@ function inside(root, uri) {
   return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 }
 const help = {
+  final: 'This entity cannot be inherited or extended.',
+  static: 'Time-independent attribute available for condition filtering.',
+  type: 'Entity type value constrained by Entity or a specific entity and its descendants.',
+  Entity: 'Constraint accepting any entity type; not an entity root.',
+  field_mapping: 'Unordered partial mapping from filtered entity fields to their declared value types.',
+  self: 'The current entity instance; self.field selects its type-valued field.',
+  overload: 'Same-signature field shared by independent branches of one inheritance tree.',
+  override: 'Same-signature redeclaration of an inherited field; config defaults may differ.',
+  ConfigGroup: 'Final built-in conditional configuration model with entity_type, when and then_set.',
   extend: 'Merge attributes into the named entity. Each attribute retains its original definition location.',
   inherits: 'Single inheritance. Duplicate inherited fields and cycles are errors.',
   snapshot: 'Independent temporal attribute snapshot.', scd: 'Slowly changing dimension Type 2 attribute.',
@@ -103,7 +112,11 @@ class Service {
     const doc = this.document(params.textDocument.uri); if (!doc) return null;
     const token = params.position && this.tokenAt(doc, params.position);
     const target = token && doc.bindings.get(token.start);
-    if (method === 'textDocument/definition') return target ? { uri: target.doc.uri, range: target.name.range } : null;
+    if (method === 'textDocument/definition') {
+      const targets = token && doc.markerTargets.get(token.start);
+      if (targets) return targets.map(field => ({ uri: field.doc.uri, range: field.name.range }));
+      return target ? { uri: target.doc.uri, range: target.name.range } : null;
+    }
     if (method === 'textDocument/references') return this.references(target, params.context?.includeDeclaration === true);
     if (method === 'textDocument/semanticTokens/full') {
       const classified = new Map(doc.valueTypeTokens);
@@ -123,7 +136,23 @@ class Service {
       return value ? { contents: { kind: 'plaintext', value }, range: token.range } : null;
     }
     if (method === 'textDocument/completion') {
-      const items = [...keywords, ...annotations, ...values, ...generics, ...entities, ...constants].map(label => ({ label, kind: 14, detail: help[label] || 'YAMBL built-in' }));
+      const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
+      if (/\bself\.[a-zA-Z_0-9]*$/.test(doc.text.slice(0, offset))) {
+        let completionDoc = doc;
+        if (doc.errors.length) {
+          const prefix = doc.text.slice(0, offset).replace(/\bself\.[a-zA-Z_0-9]*$/, 'self.__completion');
+          const recovered = parse(prefix + doc.text.slice(offset), doc.uri);
+          if (!recovered.errors.length) {
+            const root = rootFor(doc.uri);
+            const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => parse(d.text, d.uri));
+            validate([...siblings, recovered]); completionDoc = recovered;
+          }
+        }
+        const declaration = completionDoc.declarations.find(d => d.bodyStart <= offset && offset <= d.end);
+        const owner = declaration && completionDoc.scope.get(declaration.name.value);
+        return { isIncomplete: false, items: [...(owner?.effective || [])].filter(([, f]) => f.type.name === 'type').map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
+      }
+      const items = [...keywords, ...annotations, ...values, ...generics, ...entities, 'Entity', ...constants].map(label => ({ label, kind: 14, detail: help[label] || 'YAMBL built-in' }));
       for (const [label, decl] of doc.scope) items.push({ label, kind: decl.kind === 'entity' ? 7 : 20, detail: describe(decl) });
       return { isIncomplete: false, items };
     }

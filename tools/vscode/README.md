@@ -29,6 +29,8 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 - 在引用处 Go to Definition 跳转实体或字典；Ctrl+Click 字典声明展开引用列表。
 - 字典实例名与值类型使用相同颜色，包括声明、导入和 `code<Currencies>` 的裸名称；
   `code<'PriceSources'>` 的带引号参数保持字符串颜色。
+- Ctrl+Click `@overload` 查看其他分支实现，`@override` 跳转最近的父类声明。
+- `self.<字段>` 可引用任意已定义的 `type<...>` 字段，支持跳转及 `self.` 后补全。
 - Outline 查看实体、字段和字典条目；扩展属性显示为 `Entity.field`。
 
 语言服务读取未保存的编辑内容，并按最近的 `yambl-root.lclcfg` 查找同仓库文件；
@@ -50,7 +52,8 @@ warning。显式导入失败和未知实体类型仍会在编辑器中报错。
 
 ## 高亮与语言规则同步
 
-支持命名空间、导入、实体、`extend`、`inherits`、`snapshot`、`scd`、`config`、
+支持命名空间、导入、实体、`extend`、`inherits`、`final`、`static`、`snapshot`、`scd`、`config`、
+`type`、`field_mapping`、`self`、`@overload`、`@override`、
 内置值与集合类型、Decodes 声明和代码值、注解、默认值、数值、字符串、转义和注释。
 颜色由主题决定；高亮自身不承担类型校验。
 LSP 将字典实例名和内置值类型统一归类为 `yamblValueType`，映射到
