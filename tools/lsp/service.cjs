@@ -110,10 +110,9 @@ class Service {
       for (const token of doc.tokens) if (doc.bindings.get(token.start)?.kind === 'decodes') classified.set(token.start, token);
       const data = []; let lastLine = 0, lastCharacter = 0;
       for (const token of [...classified.values()].sort((a, b) => a.start - b.start)) {
-        const quoted = token.value.startsWith("'");
-        const line = token.range.start.line, character = token.range.start.character + Number(quoted);
-        const length = token.value.length - (quoted ? 2 : 0);
-        if (length === 0) continue;
+        if (token.value.startsWith("'")) continue;
+        const line = token.range.start.line, character = token.range.start.character;
+        const length = token.value.length;
         data.push(line - lastLine, line === lastLine ? character - lastCharacter : character, length, 0, 0);
         lastLine = line; lastCharacter = character;
       }

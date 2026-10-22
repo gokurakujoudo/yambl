@@ -12,7 +12,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.1.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.2.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -27,7 +27,8 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 - 输入补全，包括关键字、注解、内置类型和当前文件可见的声明。
 - 属性悬停显示完整类型（含泛型与参数）、存在的 title 和 description。
 - 在引用处 Go to Definition 跳转实体或字典；Ctrl+Click 字典声明展开引用列表。
-- 字典实例名与值类型使用相同颜色，包括声明、导入和 `code<...>` 参数。
+- 字典实例名与值类型使用相同颜色，包括声明、导入和 `code<Currencies>` 的裸名称；
+  `code<'PriceSources'>` 的带引号参数保持字符串颜色。
 - Outline 查看实体、字段和字典条目；扩展属性显示为 `Entity.field`。
 
 语言服务读取未保存的编辑内容，并按最近的 `yambl-root.lclcfg` 查找同仓库文件；
@@ -53,7 +54,8 @@ warning。显式导入失败和未知实体类型仍会在编辑器中报错。
 内置值与集合类型、Decodes 声明和代码值、注解、默认值、数值、字符串、转义和注释。
 颜色由主题决定；高亮自身不承担类型校验。
 LSP 将字典实例名和内置值类型统一归类为 `yamblValueType`，映射到
-`support.type.yambl`；TextMate 也为字典声明与 code 参数提供对应规则。
+`support.type.yambl`；TextMate 也为字典声明与不带引号的 code 参数提供对应规则。
+带引号的 code 参数使用普通字符串规则，LSP 不覆盖其颜色，无论字典是否已定义。
 
 每次新增关键字、注解、内置类型或常量，必须同步修改编译器、LSP 词汇表及
 `syntaxes/yambl.tmLanguage.json`，并加入测试。补全词汇表中的关键字会自动参与

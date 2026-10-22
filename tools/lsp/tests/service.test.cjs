@@ -64,7 +64,7 @@ test('attribute hover includes metadata, modifiers and complete generic/paramete
   assert.equal(hover(doc.declarations[0].fields[2]), 'attr plain: decimal[18, 4]');
 });
 
-test('Decodes references follow symbol identity and all value names share semantic styling', t => {
+test('Decodes references follow symbol identity and quoted names retain string styling', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-references-')); t.after(() => fs.rmSync(root, { recursive: true }));
   const write = (name, text) => { const file = path.join(root, name); fs.writeFileSync(file, text); return pathToFileURL(file).href; };
   write('yambl-root.lclcfg', '');
@@ -75,6 +75,7 @@ test('Decodes references follow symbol identity and all value names share semant
     snapshot attr value: decimal[18, 4]
     attr many: values<code<'Currencies'>>
     attr dynamic: code<'Outside'>
+    attr dynamic_name: code<Outside>
 }`;
   const model = write('model.yambl', source);
   write('other.yambl', 'namespace other decodes Currencies {} entity Other { attr x: code<Currencies> }');
@@ -92,8 +93,9 @@ test('Decodes references follow symbol identity and all value names share semant
     character = tokens[i] === 0 ? character + tokens[i + 1] : tokens[i + 1]; line += tokens[i];
     styled.push(lines[line].slice(character, character + tokens[i + 2])); assert.equal(tokens[i + 3], 0);
   }
-  assert.equal(styled.filter(x => x === 'Currencies').length, 4);
-  assert.ok(styled.includes('decimal')); assert.ok(styled.includes('Outside'));
+  assert.equal(styled.filter(x => x === 'Currencies').length, 2);
+  assert.ok(styled.includes('decimal'));
+  assert.equal(styled.filter(x => x === 'Outside').length, 1);
   assert.equal(service.feature('textDocument/semanticTokens/full', params).data[2], 'Currencies'.length);
   service.open.set(model, { version: 2, text: 'namespace core entity A {}' }); service.refresh();
   assert.deepEqual(service.feature('textDocument/references', params), []);

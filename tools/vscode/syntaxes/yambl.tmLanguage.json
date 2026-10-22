@@ -39,17 +39,6 @@
       }
     },
     {
-      "match": "\\b(code)\\s*(<)\\s*(')([A-Za-z_][A-Za-z0-9_]*)(')\\s*(>)",
-      "captures": {
-        "1": { "name": "support.type.yambl" },
-        "2": { "name": "punctuation.section.yambl" },
-        "3": { "name": "string.quoted.single.yambl" },
-        "4": { "name": "support.type.yambl" },
-        "5": { "name": "string.quoted.single.yambl" },
-        "6": { "name": "punctuation.section.yambl" }
-      }
-    },
-    {
       "match": "\\b(code)\\s*(<)\\s*([A-Z][A-Za-z0-9_]*)\\s*(>)",
       "captures": {
         "1": { "name": "support.type.yambl" },

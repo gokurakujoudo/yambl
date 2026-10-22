@@ -80,7 +80,11 @@ async function main() {
   expectScope("@description('Security\\'s currency')", "\\'", 'constant.character.escape.yambl');
   expectScope("@dimensions(source: code<'PriceSources'>)", '@dimensions', 'entity.name.function.yambl');
   expectScope("@dimensions(source: code<'PriceSources'>)", 'code', 'support.type.yambl');
-  expectScope("@dimensions(source: code<'PriceSources'>)", 'PriceSources', 'support.type.yambl');
+  expectScope("@dimensions(source: code<'PriceSources'>)", 'PriceSources', 'string.quoted.single.yambl');
+  expectScope("attr currency: code<'Currencies'>", "'Currencies'", 'string.quoted.single.yambl');
+  expectScope("attr currency: code<'Currencies'>", 'Currencies', 'string.quoted.single.yambl');
+  expectScope("attr codes: values<code<'Currencies'>>", 'Currencies', 'string.quoted.single.yambl');
+  expectScope('attr source: code<PriceSources>', 'PriceSources', 'support.type.yambl');
   expectScope('decodes Currencies {', 'decodes', 'keyword.declaration.yambl');
   expectScope('decodes Currencies {', 'Currencies', 'support.type.yambl');
   expectScope("    - 100 CNY: 'CNY'", '100', 'constant.numeric.yambl');

@@ -19,6 +19,8 @@ entity Child inherits Base{
 @title('Currencies')
 @description('Child\'s currencies')
 attr kinds:values<code<'Currencies'>>
+attr currency:code<Currencies>
+attr source:code<'PriceSources'>
 attr price:decimal[precision:18,scale:4]
 attr dynamic:code<Missing>
 }

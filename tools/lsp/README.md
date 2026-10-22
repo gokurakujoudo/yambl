@@ -41,8 +41,9 @@ The outline shows extension attributes as `Entity.field`, without adding an enti
 Attribute hover includes its full type, including generic arguments and named or
 positional parameters, plus `title` and `description` when present. Escaped string
 quotes are displayed as quotes. Decodes names use the same semantic token and
-TextMate scope as built-in value types, including declarations, imports, and code
-arguments. Quoted code arguments color the identifier while retaining string quotes.
+TextMate scope as built-in value types, including declarations, imports, and unquoted
+code arguments such as `code<Currencies>`. Quoted arguments such as
+`code<'PriceSources'>` retain string coloring, whether the dictionary is defined or external.
 
 Ctrl+Click or F12 on a Decodes declaration opens Peek References. Clicking a use
 still goes to its declaration. The reference list covers the compilation unit,

@@ -48,7 +48,9 @@ async function run() {
       styled.push(doc.lineAt(semanticLine).text.slice(semanticCharacter, semanticCharacter + semantic.data[i + 2]));
       assert.equal(semantic.data[i + 3], 0);
     }
-    assert.ok(styled.includes('Currencies')); assert.ok(styled.includes('decimal')); assert.ok(styled.includes('Missing'));
+    assert.equal(styled.filter(name => name === 'Currencies').length, 1);
+    assert.ok(!styled.includes('PriceSources'));
+    assert.ok(styled.includes('decimal')); assert.ok(styled.includes('Missing'));
     const dictionaryUri = vscode.Uri.file(path.join(root, 'decodes.yambl'));
     const dictionary = await vscode.workspace.openTextDocument(dictionaryUri);
     const declarationPosition = dictionary.positionAt(dictionary.getText().indexOf('Currencies'));
