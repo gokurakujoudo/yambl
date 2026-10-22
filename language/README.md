@@ -1,34 +1,51 @@
 # 语言结构
 
 本目录用于定义词法、语法、格式化规则，以及 YAMBL 文件和模型仓库的结构。
-各项规则尚在讨论中。
+以下区分已确认的约定和仍待讨论的规则。
+
+## 已确认
+
+- 值类型名称使用 `snake_case`，实体类型名称使用 `PascalCase`，字段名称使用
+  `snake_case`。
+- 快照按字段独立描述。多个字段使用相同的时间参数，不表示它们组成一份
+  必须同时存在的整体快照。
+- YAMBL 在此处仅描述模型，不校验数据完整性等数据质量。语言本身的语法检查
+  与业务数据质量校验是不同的职责。
 
 ## 讨论草案：基金快照
 
-以下是用户提出的 `fund_sample.yambl` 写法，按原样保存。
-它用于讨论语法和语义，尚不能作为可解析的语言示例。
+以下是当前讨论的 `fund_sample.yambl` 写法。解析器尚未实现，示例尚不可执行；
+其中未确认的语义列在下方。
 
-```scss
+```text
 entity Fund {
-    id fund_id
+    id fund_id: string['[a-zA-Z0-9]{6}']
 
-    @temporal(as_of_date: Date)
+    @temporal(as_of_date: date)
     snapshot attr holdings: HoldingEntry[]
 
-    @temporal(as_of_date: Date)
-    snapshot attr net_asset: Decimal
+    @temporal(as_of_date: date)
+    snapshot attr net_asset: decimal
 }
 
-entity Fund
+entity HoldingEntry{
+    id holdings_entry_id: snowflake_id
+
+    attr security: Security
+    attr quantity: decimal
+}
 ```
+
+`holdings` 和 `net_asset` 各自具有 `as_of_date` 时间参数，两者是独立快照。
+这里不要求同一日期的持仓和净资产同时存在，也不检查两者的数据一致性。
+
+`HoldingEntry` 在示例中明确声明为实体类型。`Security` 的定义尚未提供。
 
 待确定：
 
-- `id fund_id` 是声明标识字段，还是指定已声明的字段为标识；标识的类型如何确定。
-- `snapshot attr` 的含义，以及它与其他字段类别的区别。
-- `@temporal(as_of_date: Date)` 的作用范围；多个字段使用相同时间参数时是否共享快照。
-- `HoldingEntry` 是实体类还是值类型；实体引用如何表达。
+- `snapshot attr` 与普通 `attr` 的完整语义，以及时间参数是否可推广为其他维度。
+- 实体类型字段是否默认表达引用，以及引用与内嵌实体如何区分。
 - `[]` 的集合语义，包括顺序和重复值。
-- 末尾独立的 `entity Fund` 是否是尚未写完的内容，或一种独立语法。
+- 字符串模式的解释规则，以及 `snowflake_id` 的具体定义。
 
 类型系统的已确认约定见 [builtins/](../builtins/README.md)。
