@@ -73,11 +73,15 @@ attr quantity: decimal  # 持仓数量
 namespace core
 ```
 
-`core/fund.yambl`、`core/holdings_entry.yambl` 和 `core/security.yambl`
-分别声明 `Fund`、`HoldingEntry` 和 `Security`，三个文件均使用 `namespace core`。
+`core/` 中的三个实体文件使用 `namespace core`；字典已拆分到
+`decodes/currencies.yambl`，使用 `namespace decodes`。
+`core/security.yambl` 显式导入字典：
 
-这里记录案例采用的形式。目录与命名空间的对应关系、同命名空间下的名称查找、
-跨文件引用、导入及可见性规则尚未确定；也尚未要求每个文件只能声明一个实体。
+```text
+from decodes import Currencies
+```
+
+完整案例和待定解析规则见[命名空间与跨文件引用](namespaces.md)。
 
 ## Decodes 实例声明
 
@@ -182,7 +186,7 @@ YAMBL 在此处仅描述模型，不校验业务数据的完整性或其他数�
 
 最新完整文件位于
 [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的
-`core/` 目录。三个实体均已有定义；`snowflake_id` 的含义和跨文件名称解析规则
+`core/` 和 `decodes/` 目录。实体和字典均已有定义；`snowflake_id` 的含义和跨文件名称解析规则
 尚未确定，目前不能视为通过解析或名称解析验证的模型。
 
 后续还需确定词法字符集、字符串转义、其他空白和换行规则、声明分隔规则，

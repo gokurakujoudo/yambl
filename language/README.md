@@ -20,11 +20,13 @@
 ## 语法说明与案例
 
 [语法说明](syntax.md)整理当前使用的声明形式、已确认的含义和待定规则。
+跨文件案例和名称解析的待定规则见[命名空间与跨文件引用](namespaces.md)。
 自定义值类型的声明方式暂不定义。
 
 最新业务案例保存在
 [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的
-`core/fund.yambl`、`core/holdings_entry.yambl` 和 `core/security.yambl` 中。
+`core/fund.yambl`、`core/holdings_entry.yambl`、`core/security.yambl` 和
+`decodes/currencies.yambl` 中。
 
 类型系统的已确认约定见 [builtins/](../builtins/README.md)，内置值类型及其
 参数说明见[内置值类型](../builtins/value-types.md)。词法细节、完整文件结构和

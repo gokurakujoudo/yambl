@@ -43,6 +43,12 @@ async function main() {
   }
 
   expectScope('namespace core', 'core', 'entity.name.namespace.yambl');
+  expectScope('namespace decodes', 'decodes', 'entity.name.namespace.yambl');
+  expectScope('from decodes import Currencies', 'from', 'keyword.control.yambl');
+  expectScope('from decodes import Currencies', 'decodes', 'entity.name.namespace.yambl');
+  expectScope('from decodes import Currencies', 'import', 'keyword.control.yambl');
+  expectScope('from decodes import Currencies', 'Currencies', 'variable.other.yambl');
+  expectScope('# from decodes import Currencies', 'from', 'comment.line.number-sign.yambl');
   expectScope('entity Fund {', 'entity', 'storage.type.yambl');
   expectScope('entity Fund {', 'Fund', 'entity.name.type.yambl');
   expectScope('decodes Currencies {', 'decodes', 'keyword.declaration.yambl');

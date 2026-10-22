@@ -2,7 +2,7 @@
 
 本目录提供 YAMBL 的本地 VS Code 扩展，使用
 [TextMate 语法](https://code.visualstudio.com/api/language-extensions/syntax-highlight-guide)。
-支持 `.yambl` 文件识别，以及实体、字段、内置类型、集合泛型、`decodes`
+支持 `.yambl` 文件识别，以及命名空间和 `from ... import ...`、实体、字段、内置类型、集合泛型、`decodes`
 声明和条目、`code<Currencies>`、`Currencies.CNY` 代码值、注解、数值、单引号字符串和 `#` 注释的
 高亮，并提供括号配对和切换行注释。
 

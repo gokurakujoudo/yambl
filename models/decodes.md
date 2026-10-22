@@ -43,15 +43,23 @@
 
 ## 直接声明实例
 
-最新业务案例采用以下写法：
+最新业务案例在 `fmc-data-model/decodes/currencies.yambl` 中声明字典：
 
 ```text
-namespace core
+namespace decodes
 
 decodes Currencies {
     - 100 CNY: 'CNY'
     - 200 USD: 'USD'
 }
+```
+
+`fmc-data-model/core/security.yambl` 导入并使用字典：
+
+```text
+namespace core
+
+from decodes import Currencies
 
 entity Security {
     id security_id: string['[a-zA-Z0-9]{12}']
@@ -71,7 +79,8 @@ entity Security {
 值类型原语 `code<Currencies>` 的含义见 [code](../builtins/value-types.md#code)。
 
 当前实例采用 `Currencies` 这样的 PascalCase 复数名称；命名空间中的查找
-方式、完整名称的写法及名称字符集仍待确定。
+方式、完整名称的写法及名称字符集仍待确定。拆分文件后的讨论见
+[命名空间与跨文件引用](../language/namespaces.md)。
 
 ## 待确定
 
