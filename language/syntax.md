@@ -8,8 +8,27 @@
 | 名称类别 | 命名约定 | 示例 |
 | --- | --- | --- |
 | 实体类型 | `PascalCase` | `Fund`、`HoldingEntry`、`Security` |
-| 值类型 | `snake_case` | `string`、`date`、`decimal`、`snowflake_id` |
+| 值类型 | `snake_case` | `string`、`date`、`decimal` |
 | 字段 | `snake_case` | `fund_id`、`net_asset`、`holdings_entry_id` |
+
+## 内置值类型
+
+YAMBL 的 builtins 提供 `bool`、`string`、`integer`、`float`、`decimal`、
+`date` 和 `datetime`。这些名称直接用于类型位置，例如：
+
+```text
+attr is_active: bool
+attr name: string
+attr item_count: integer
+attr estimate: float
+attr quantity: decimal
+attr inception_date: date
+attr recorded_at: datetime
+```
+
+上述片段展示实体内部的属性声明形式，不是独立文件。类型的具体参数和精度
+等规则见 [builtins 中的待定事项](../builtins/README.md)。自定义值类型的声明
+仍暂缓定义。
 
 ## 命名空间与文件
 
