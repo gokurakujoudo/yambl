@@ -25,6 +25,7 @@
 
 类型清单、使用示例、参数写法和待定事项集中在
 [内置值类型](value-types.md)中。自定义值类型声明继续暂缓定义。
+其中 `code<decodes_id>` 表示 [Decodes](../models/decodes.md) 实例的代码值。
 
 ## 内置集合类型
 

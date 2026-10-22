@@ -6,6 +6,31 @@
     { "include": "#strings" },
     { "name": "comment.line.number-sign.yambl", "match": "#.*$" },
     {
+      "match": "\\b(decodes)\\s+([A-Z][A-Za-z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "keyword.declaration.yambl" },
+        "2": { "name": "entity.name.constant.yambl" }
+      }
+    },
+    {
+      "match": "^\\s*(-)\\s+(-?\\d+)\\s+([A-Za-z0-9_]+)\\s*(:)",
+      "captures": {
+        "1": { "name": "punctuation.definition.list.yambl" },
+        "2": { "name": "constant.numeric.yambl" },
+        "3": { "name": "constant.other.yambl" },
+        "4": { "name": "punctuation.separator.yambl" }
+      }
+    },
+    {
+      "match": "\\b(code)\\s*(<)\\s*([A-Z][A-Za-z0-9_]*)\\s*(>)",
+      "captures": {
+        "1": { "name": "support.type.yambl" },
+        "2": { "name": "punctuation.section.yambl" },
+        "3": { "name": "entity.name.constant.yambl" },
+        "4": { "name": "punctuation.section.yambl" }
+      }
+    },
+    {
       "match": "\\b(entity)\\s+([A-Z][A-Za-z0-9_]*)\\b",
       "captures": {
         "1": { "name": "storage.type.yambl" },
@@ -20,7 +45,8 @@
       }
     },
     { "name": "entity.name.function.yambl", "match": "@[a-z][a-z0-9_]*\\b" },
-    { "name": "keyword.declaration.yambl", "match": "\\b(?:entity|namespace|id|snapshot|attr)\\b" },
+    { "name": "keyword.declaration.yambl", "match": "\\b(?:entity|namespace|decodes|id|snapshot|attr)\\b" },
+    { "name": "support.type.yambl", "match": "\\bcode(?=\\s*<)" },
     { "name": "support.type.yambl", "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|collection|values|map)\\b" },
     { "name": "variable.parameter.yambl", "match": "\\b(?:precision|scale|regex)(?=\\s*:)" },
     { "name": "variable.other.property.yambl", "match": "\\b[a-z][a-z0-9_]*(?=\\s*:)" },

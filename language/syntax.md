@@ -19,6 +19,9 @@
 `collection<T>`、`values<T>` 和 `map<TKey, TValue>` 的泛型约束及语义见
 [内置集合类型](../builtins/collection-types.md)。
 
+内置值类型原语 `code<decodes_id>` 通过不带引号的实例名称指定代码字典，
+例如 `code<Currencies>`。具体语义见 [code](../builtins/value-types.md#code)。
+
 ## 注释
 
 行尾注释的标准格式为：正文、两个空格、`#`、一个空格、注释文本。注释延续到
@@ -76,6 +79,21 @@ namespace core
 这里记录案例采用的形式。目录与命名空间的对应关系、同命名空间下的名称查找、
 跨文件引用、导入及可见性规则尚未确定；也尚未要求每个文件只能声明一个实体。
 
+## Decodes 实例声明
+
+`decodes` 是声明内置 `Decodes` 模型实例的专用关键字，实例使用复数名称：
+
+```text
+decodes Currencies {
+    - 100 CNY: 'CNY'
+    - 200 USD: 'USD'
+}
+```
+
+条目形式为 `- ordering code: decode`。本例的 `ordering` 是整数，`code`
+使用裸词元，`decode` 使用单引号字符串。`ordering` 是使用方的升序排序基准，
+不会使 `entries` 集合具有顺序。模型定义及字段映射见 [Decodes](../models/decodes.md)。
+
 ## 实体与标识字段
 
 使用 `entity` 和花括号声明实体类型，在实体内使用 `id 字段名: 类型` 声明
@@ -94,6 +112,8 @@ entity Fund {
 ```text
 entity Security {
     id security_id: string['[a-zA-Z0-9]{12}']
+
+    attr currency: code<Currencies>
 }
 ```
 

@@ -1,0 +1,10 @@
+entity Decodes {
+    id decodes_id: string
+    attr entries: collection<DecodesEntry>
+}
+
+entity DecodesEntry {
+    attr code: string
+    attr decode: string
+    attr ordering: integer
+}

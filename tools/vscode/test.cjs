@@ -45,6 +45,17 @@ async function main() {
   expectScope('namespace core', 'core', 'entity.name.namespace.yambl');
   expectScope('entity Fund {', 'entity', 'storage.type.yambl');
   expectScope('entity Fund {', 'Fund', 'entity.name.type.yambl');
+  expectScope('decodes Currencies {', 'decodes', 'keyword.declaration.yambl');
+  expectScope('decodes Currencies {', 'Currencies', 'entity.name.constant.yambl');
+  expectScope("    - 100 CNY: 'CNY'", '100', 'constant.numeric.yambl');
+  expectScope("    - 100 CNY: 'CNY'", 'CNY:', 'constant.other.yambl');
+  expectScope("    - 100 CNY: 'CNY'", "'CNY'", 'string.quoted.single.yambl');
+  expectScope("    - 100 CNY: 'C#NY'  # label", '#NY', 'string.quoted.single.yambl');
+  expectScope("    - 100 CNY: 'C#NY'  # label", '# label', 'comment.line.number-sign.yambl');
+  expectScope('attr currency: code<Currencies>', 'code<', 'support.type.yambl');
+  expectScope('attr currency: code<Currencies>', 'Currencies', 'entity.name.constant.yambl');
+  expectScope('attr currencies: values<code<Currencies>>', 'code<', 'support.type.yambl');
+  expectScope('attr code: string', 'code:', 'variable.other.property.yambl');
   expectScope('@temporal(as_of_date: date)', '@temporal', 'entity.name.function.yambl');
   expectScope('@temporal(as_of_date: date)', 'as_of_date', 'variable.other.property.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'snapshot', 'keyword.declaration.yambl');
