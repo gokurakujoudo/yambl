@@ -42,6 +42,18 @@ async function main() {
     checks++;
   }
 
+  expectScope('value quote {', 'value', 'storage.type.yambl');
+  expectScope('value quote {', 'quote', 'support.type.yambl');
+  expectScope('@dimension(source: string, preference: Hierarchy)', 'Hierarchy', 'entity.name.type.yambl');
+  let markdownState = grammar.tokenizeLine('---', textmate.INITIAL).ruleStack;
+  for (const line of ['# Heading', "value fake { attr a: 'literal' }", '']) {
+    const result = grammar.tokenizeLine(line, markdownState);
+    assert.ok(result.tokens.every(t => t.scopes.includes('comment.block.documentation.yambl')));
+    markdownState = result.ruleStack; checks++;
+  }
+  markdownState = grammar.tokenizeLine('---', markdownState).ruleStack;
+  assert.ok(grammar.tokenizeLine('value real {', markdownState).tokens.some(t => t.scopes.includes('storage.type.yambl'))); checks++;
+
   // A new language-server keyword must also have a TextMate scope in this release.
   const vocabulary = require('../lsp/language/syntax.cjs');
   for (const keyword of vocabulary.keywords) {
@@ -87,9 +99,9 @@ async function main() {
   expectScope("@title('Currency')", '@title', 'entity.name.function.yambl');
   expectScope("@description('Security\\'s # currency')", '# currency', 'string.quoted.single.yambl');
   expectScope("@description('Security\\'s currency')", "\\'", 'constant.character.escape.yambl');
-  expectScope("@dimensions(source: code<'PriceSources'>)", '@dimensions', 'entity.name.function.yambl');
-  expectScope("@dimensions(source: code<'PriceSources'>)", 'code', 'support.type.yambl');
-  expectScope("@dimensions(source: code<'PriceSources'>)", 'PriceSources', 'string.quoted.single.yambl');
+  expectScope("@dimension(source: code<'PriceSources'>)", '@dimension', 'entity.name.function.yambl');
+  expectScope("@dimension(source: code<'PriceSources'>)", 'code', 'support.type.yambl');
+  expectScope("@dimension(source: code<'PriceSources'>)", 'PriceSources', 'string.quoted.single.yambl');
   expectScope("attr currency: code<'Currencies'>", "'Currencies'", 'string.quoted.single.yambl');
   expectScope("attr currency: code<'Currencies'>", 'Currencies', 'string.quoted.single.yambl');
   expectScope("attr codes: values<code<'Currencies'>>", 'Currencies', 'string.quoted.single.yambl');

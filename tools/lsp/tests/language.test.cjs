@@ -67,12 +67,12 @@ test('overload identities, branch defaults and effective mapping candidates', ()
   assert.equal(bond.identity, stock.identity); assert.equal(deep.identity, bond.identity);
   assert.deepEqual(mappingCandidates(scope.get('Base'), 'config', symbols).get('category').map(f => f.default.value), ['1', '2', '3']);
   assert.equal(mappingCandidates(scope.get('Base'), 'static', symbols).get('currency').length, 1);
-  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'static', symbols).keys()], ['entity_type']);
+  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'static', symbols).keys()], ['entity_type', 'when', 'then_set']);
 });
 
 test('signature equivalence resolves imports, dimensions and quoted dictionaries', () => {
   const docs = [parse('namespace base entity Base {} decodes Codes {}'),
-    parse("namespace left from base import Base from base import Codes entity Left inherits Base { @overload @title('T') @dimensions(b: integer, a: string) attr x: code<Codes> }"),
-    parse("namespace right from base import Base from base import Codes entity Right inherits Base { @dimensions(a: string) @title('T') @dimensions(b: integer) @overload attr x: code<'Codes'> }")];
+    parse("namespace left from base import Base from base import Codes entity Left inherits Base { @overload @title('T') @dimension(b: string) @dimension(a: string) attr x: code<Codes> }"),
+    parse("namespace right from base import Base from base import Codes entity Right inherits Base { @dimension(a: string) @title('T') @dimension(b: string) @overload attr x: code<'Codes'> }")];
   validate(docs); assert.deepEqual(docs.flatMap(d => d.diagnostics), []);
 });

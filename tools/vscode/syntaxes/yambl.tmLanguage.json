@@ -3,84 +3,190 @@
   "name": "YAMBL",
   "scopeName": "source.yambl",
   "patterns": [
-    { "include": "#strings" },
-    { "name": "comment.line.number-sign.yambl", "match": "#.*$" },
+    {
+      "name": "comment.block.documentation.yambl",
+      "begin": "^[ \\t]*---[ \\t]*$",
+      "end": "^[ \\t]*---[ \\t]*$"
+    },
+    {
+      "match": "\\b(value)\\s+([a-z][a-z0-9_]*)\\b",
+      "captures": {
+        "1": {
+          "name": "storage.type.yambl"
+        },
+        "2": {
+          "name": "support.type.yambl"
+        }
+      }
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "name": "comment.line.number-sign.yambl",
+      "match": "#.*$"
+    },
     {
       "match": "\\b(from)\\s+([A-Za-z_][A-Za-z0-9_.]*)\\s+(import)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
       "captures": {
-        "1": { "name": "keyword.control.yambl" },
-        "2": { "name": "entity.name.namespace.yambl" },
-        "3": { "name": "keyword.control.yambl" },
-        "4": { "name": "variable.other.yambl" }
+        "1": {
+          "name": "keyword.control.yambl"
+        },
+        "2": {
+          "name": "entity.name.namespace.yambl"
+        },
+        "3": {
+          "name": "keyword.control.yambl"
+        },
+        "4": {
+          "name": "variable.other.yambl"
+        }
       }
     },
     {
       "match": "\\b([A-Z][A-Za-z0-9_]*)(\\.)([A-Za-z0-9_]+)\\b",
       "captures": {
-        "1": { "name": "support.type.yambl" },
-        "2": { "name": "punctuation.accessor.yambl" },
-        "3": { "name": "constant.other.yambl" }
+        "1": {
+          "name": "support.type.yambl"
+        },
+        "2": {
+          "name": "punctuation.accessor.yambl"
+        },
+        "3": {
+          "name": "constant.other.yambl"
+        }
       }
     },
     {
       "match": "\\b(decodes)\\s+([A-Z][A-Za-z0-9_]*)\\b",
       "captures": {
-        "1": { "name": "keyword.declaration.yambl" },
-        "2": { "name": "support.type.yambl" }
+        "1": {
+          "name": "keyword.declaration.yambl"
+        },
+        "2": {
+          "name": "support.type.yambl"
+        }
       }
     },
     {
       "match": "^\\s*(-)\\s+(-?\\d+)\\s+([A-Za-z0-9_]+)\\s*(:)",
       "captures": {
-        "1": { "name": "punctuation.definition.list.yambl" },
-        "2": { "name": "constant.numeric.yambl" },
-        "3": { "name": "constant.other.yambl" },
-        "4": { "name": "punctuation.separator.yambl" }
+        "1": {
+          "name": "punctuation.definition.list.yambl"
+        },
+        "2": {
+          "name": "constant.numeric.yambl"
+        },
+        "3": {
+          "name": "constant.other.yambl"
+        },
+        "4": {
+          "name": "punctuation.separator.yambl"
+        }
       }
     },
     {
       "match": "\\b(code)\\s*(<)\\s*([A-Z][A-Za-z0-9_]*)\\s*(>)",
       "captures": {
-        "1": { "name": "support.type.yambl" },
-        "2": { "name": "punctuation.section.yambl" },
-        "3": { "name": "support.type.yambl" },
-        "4": { "name": "punctuation.section.yambl" }
+        "1": {
+          "name": "support.type.yambl"
+        },
+        "2": {
+          "name": "punctuation.section.yambl"
+        },
+        "3": {
+          "name": "support.type.yambl"
+        },
+        "4": {
+          "name": "punctuation.section.yambl"
+        }
       }
     },
     {
       "match": "\\b(entity)\\s+([A-Z][A-Za-z0-9_]*)\\b",
       "captures": {
-        "1": { "name": "storage.type.yambl" },
-        "2": { "name": "entity.name.type.yambl" }
+        "1": {
+          "name": "storage.type.yambl"
+        },
+        "2": {
+          "name": "entity.name.type.yambl"
+        }
       }
     },
     {
       "match": "\\b(extend|inherits)\\s+([A-Z][A-Za-z0-9_]*)\\b",
       "captures": {
-        "1": { "name": "keyword.declaration.yambl" },
-        "2": { "name": "entity.name.type.yambl" }
+        "1": {
+          "name": "keyword.declaration.yambl"
+        },
+        "2": {
+          "name": "entity.name.type.yambl"
+        }
       }
     },
     {
       "match": "\\b(namespace)\\s+([a-zA-Z_][a-zA-Z0-9_.]*)",
       "captures": {
-        "1": { "name": "keyword.control.yambl" },
-        "2": { "name": "entity.name.namespace.yambl" }
+        "1": {
+          "name": "keyword.control.yambl"
+        },
+        "2": {
+          "name": "entity.name.namespace.yambl"
+        }
       }
     },
-    { "name": "entity.name.function.yambl", "match": "@[a-z][a-z0-9_]*\\b" },
-    { "name": "keyword.declaration.yambl", "match": "\\b(?:entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|final|self|attr)\\b" },
-    { "name": "keyword.control.yambl", "match": "\\b(?:from|import)\\b" },
-    { "name": "support.type.yambl", "match": "\\bcode(?=\\s*<)" },
-    { "name": "support.type.yambl", "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|collection|values|map|type|field_mapping)\\b" },
-    { "name": "variable.parameter.yambl", "match": "\\b(?:precision|scale|regex)(?=\\s*:)" },
-    { "name": "variable.other.property.yambl", "match": "\\b[a-z][a-z0-9_]*(?=\\s*:)" },
-    { "name": "constant.language.yambl", "match": "\\b(?:NOT_DEFINED|true|false)\\b" },
-    { "name": "entity.name.type.yambl", "match": "\\b[A-Z][A-Za-z0-9_]*\\b" },
-    { "name": "constant.numeric.yambl", "match": "(?<![\\w.])-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b" },
-    { "name": "keyword.operator.assignment.yambl", "match": "=" },
-    { "name": "punctuation.section.yambl", "match": "[{}\\[\\]()<>]" },
-    { "name": "punctuation.separator.yambl", "match": "[:,]" }
+    {
+      "name": "entity.name.function.yambl",
+      "match": "@[a-z][a-z0-9_]*\\b"
+    },
+    {
+      "name": "keyword.declaration.yambl",
+      "match": "\\b(?:value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|final|self|attr)\\b"
+    },
+    {
+      "name": "keyword.control.yambl",
+      "match": "\\b(?:from|import)\\b"
+    },
+    {
+      "name": "support.type.yambl",
+      "match": "\\bcode(?=\\s*<)"
+    },
+    {
+      "name": "support.type.yambl",
+      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|collection|values|map|type|field_mapping)\\b"
+    },
+    {
+      "name": "variable.parameter.yambl",
+      "match": "\\b(?:precision|scale|regex)(?=\\s*:)"
+    },
+    {
+      "name": "variable.other.property.yambl",
+      "match": "\\b[a-z][a-z0-9_]*(?=\\s*:)"
+    },
+    {
+      "name": "constant.language.yambl",
+      "match": "\\b(?:NOT_DEFINED|true|false)\\b"
+    },
+    {
+      "name": "entity.name.type.yambl",
+      "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+    },
+    {
+      "name": "constant.numeric.yambl",
+      "match": "(?<![\\w.])-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b"
+    },
+    {
+      "name": "keyword.operator.assignment.yambl",
+      "match": "="
+    },
+    {
+      "name": "punctuation.section.yambl",
+      "match": "[{}\\[\\]()<>]"
+    },
+    {
+      "name": "punctuation.separator.yambl",
+      "match": "[:,]"
+    }
   ],
   "repository": {
     "strings": {
@@ -88,7 +194,10 @@
       "begin": "'",
       "end": "'|$",
       "patterns": [
-        { "name": "constant.character.escape.yambl", "match": "\\\\." }
+        {
+          "name": "constant.character.escape.yambl",
+          "match": "\\\\."
+        }
       ]
     }
   }

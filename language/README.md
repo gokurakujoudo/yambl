@@ -23,7 +23,7 @@
 
 [语法说明](syntax.md)整理当前使用的声明形式、已确认的含义和待定规则。
 跨文件案例和名称解析的待定规则见[命名空间与跨文件引用](namespaces.md)。
-自定义值类型的声明方式暂不定义。
+结构化值类型使用 `value` 声明。
 
 最新业务案例保存在
 [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的

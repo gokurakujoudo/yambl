@@ -2,11 +2,12 @@
 
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
-  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self'];
-const annotations = ['title', 'description', 'temporal', 'dimensions', 'overload', 'override'];
+  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value'];
+const annotations = ['title', 'description', 'temporal', 'dimension', 'overload', 'override'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id'];
 const generics = ['collection', 'values', 'map', 'code', 'type', 'field_mapping'];
-const entities = ['Decodes', 'DecodesEntry', 'ConfigGroup'];
+const entities = [];
+const structures = [];
 const constants = ['NOT_DEFINED', 'true', 'false'];
 
 function position(text, offset) {
@@ -17,12 +18,24 @@ function range(text, start, end) { return { start: position(text, start), end: p
 function stringValue(text) { return text.slice(1, -1).replace(/\\(['\\])/g, '$1'); }
 
 function parse(text, uri = '') {
-  const doc = { text, uri, namespace: '', imports: [], declarations: [], tokens: [], comments: [], pieces: [], errors: [] };
+  const doc = { text, uri, namespace: '', imports: [], declarations: [], tokens: [], comments: [], blocks: [], pieces: [], errors: [] };
+  const delimiters = [...text.matchAll(/^[ \t]*---[ \t]*(?=\r?$)/gm)];
+  if (delimiters.length % 2) {
+    const start = delimiters.at(-1).index;
+    doc.errors.push({ range: range(text, start, start + 3), severity: 1, message: 'unclosed Markdown block', source: 'yambl' });
+    return doc;
+  }
+  let masked = text;
+  for (let i = 0; i < delimiters.length; i += 2) {
+    const start = delimiters[i].index, end = delimiters[i + 1].index + delimiters[i + 1][0].length;
+    doc.blocks.push({ start, end, text: text.slice(start, end).replace(/\r\n/g, '\n') });
+    masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, ' ') + masked.slice(end);
+  }
   let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
   const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\]()<>,:.=@-]/y;
   while (offset < text.length) {
     pattern.lastIndex = offset;
-    const match = pattern.exec(text);
+    const match = pattern.exec(masked);
     if (!match) {
       doc.errors.push({ range: range(text, offset, offset + 1), severity: 1, message: 'invalid YAMBL syntax', source: 'yambl' });
       return doc;
@@ -108,7 +121,7 @@ function parse(text, uri = '') {
       }
       const start = index; const final = is('final') ? take() : null; const token = take();
       if (final && token.value !== 'entity') throw token;
-      if (!['entity', 'extend', 'decodes'].includes(token.value) || (token.value === 'extend' && metadata.length)) throw token;
+      if (!['entity', 'extend', 'decodes', 'value'].includes(token.value) || (token.value === 'extend' && metadata.length)) throw token;
       const declaration = { kind: token.value, token: final || token, final: Boolean(final), name: name(), metadata, fields: [], entries: [], doc };
       if (declaration.kind === 'entity' && is('inherits')) { take(); declaration.parent = name(); }
       declaration.bodyStart = take('{').end; piece(start, 0);
@@ -159,6 +172,7 @@ function format(doc) {
     const indent = Number(doc.declarations.some(d => token.start >= d.bodyStart && token.end < d.end));
     pieces.push({ ...token, text: '# ' + token.value.slice(1).trim(), indent, comment: true });
   }
+  pieces.push(...doc.blocks.map(block => ({ ...block, indent: 0 })));
   pieces.sort((a, b) => a.start - b.start);
   const lines = []; let end = 0;
   for (const piece of pieces) {
@@ -173,4 +187,4 @@ function format(doc) {
   return lines.join('\n').trimEnd() + '\n';
 }
 
-module.exports = { parse, format, position, range, stringValue, keywords, annotations, values, generics, entities, constants };
+module.exports = { parse, format, position, range, stringValue, keywords, annotations, values, generics, entities, structures, constants };

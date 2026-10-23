@@ -1,13 +1,12 @@
-# 内置数据模型
+# 内置数据模型仓库
 
-本目录定义随 YAMBL 提供的内置数据模型。
+本目录由 `yambl-root.lclcfg` 定义为内置仓库，prefix 为空，文件不声明 namespace。
+模型声明对所有用户仓库可见，无需导入。说明与定义保存在同一个文件中：
 
-- [Decodes](decodes.md)：代码字典及其条目，包括可直接在 YAMBL 中使用的
-  `decodes` 实例声明。模型源文件为 [decodes.yambl](decodes.yambl)。
+- [Decodes](decodes.yambl)：字典实体及 decodes_entry 值条目。
+- [ConfigGroup](config_group.yambl)：实体类型、static 条件与 config 字段映射。
+- [Hierarchy](hierarchy.yambl)：维度候选及升序取数优先级。
 
-- [ConfigGroup](config_group.md)：按实体类型、static 条件和 config 字段映射描述配置组；
-  模型源文件为 [config_group.yambl](config_group.yambl)。
-
-基金管理公司的业务模型由独立的
-[fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库维护。
-讨论示例中出现的 `Fund` 和 `HoldingEntry` 尚未被确认为内置模型。
+本目录是模型定义来源。Python 编译器同步这些文件为包资源；VSIX 打包直接包含本目录。
+修改后运行编译器仓库的 `tools/sync-models.ps1`，并执行内置模型一致性测试与跨实现校验。
+仓库识别和前缀规则见[命名空间](../language/namespaces.md)。

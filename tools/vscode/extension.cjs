@@ -68,7 +68,7 @@ class Client {
     } else if (message.method === 'window/logMessage') this.output.appendLine(message.params.message);
   }
   sync(document) {
-    if (document.languageId !== 'yambl') return;
+    if (document.languageId !== 'yambl' && path.basename(document.fileName || '') !== 'yambl-root.lclcfg') return;
     const uri = document.uri.toString(); const prior = this.versions.get(uri);
     if (prior === undefined) this.notify('textDocument/didOpen', { textDocument: { uri, languageId: 'yambl', version: document.version, text: document.getText() } });
     else if (prior !== document.version) this.notify('textDocument/didChange', { textDocument: { uri, version: document.version }, contentChanges: [{ text: document.getText() }] });

@@ -3,10 +3,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
-const { parse, format, range, position, keywords, annotations, values, generics, entities, constants } = require('./language/syntax.cjs');
+const { parse, format, range, position, keywords, annotations, values, generics, entities, structures, constants } = require('./language/syntax.cjs');
 const { validate, describe } = require('./language/validation.cjs');
 
-const excluded = new Set(['venv', '.venv', 'env', 'build', 'dist', '__pycache__', 'node_modules']);
+const { sources, readPrefix, rootName, configError } = require('./repository.cjs');
+const { modelRoot } = require('./language/relationships.cjs');
 function uriKey(uri) {
   if (!uri.startsWith('file:')) return uri;
   const file = path.resolve(fileURLToPath(uri));
@@ -20,22 +21,14 @@ function rootFor(uri) {
     const parent = path.dirname(directory); if (parent === directory) return null; directory = parent;
   }
 }
-function sources(root) {
-  const result = [];
-  for (const item of fs.readdirSync(root, { withFileTypes: true })) {
-    if (item.isSymbolicLink() || item.name.startsWith('.') || excluded.has(item.name)) continue;
-    const full = path.join(root, item.name);
-    if (item.isDirectory()) result.push(...sources(full));
-    else if (item.isFile() && item.name.endsWith('.yambl')) result.push(full);
-  }
-  return result.sort();
-}
 function inside(root, uri) {
   if (!uri.startsWith('file:')) return false;
   const relative = path.relative(root, fileURLToPath(uri));
   return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 }
 const help = {
+  value: 'Final structured value; fields are static, non-collection values or entity IDs.',
+  Hierarchy: 'Prioritized dimension candidates; lower ordering is tried first.',
   final: 'This entity cannot be inherited or extended.',
   static: 'Time-independent attribute available for condition filtering.',
   type: 'Entity type value constrained by Entity or a specific entity and its descendants.',
@@ -54,7 +47,7 @@ const help = {
   map: 'Keys: string or entity reference. Values: non-collection values or references.',
   NOT_DEFINED: 'The requested subtype attribute does not apply to the instance’s actual type.',
   title: 'Short display title.', description: 'Descriptive metadata.',
-  temporal: 'Temporal parameter: as_of_date: date.', dimensions: 'Additional named attribute dimensions.',
+  temporal: 'Temporal parameter: as_of_date: date.', dimension: 'Independent data dimension with an optional Hierarchy selector.',
 };
 
 class Service {
@@ -68,21 +61,38 @@ class Service {
     }
     this.documents.clear();
     for (const { root, uri } of groups.values()) {
-      const texts = new Map(); let readError = null;
+      const texts = new Map(); let readError = null, prefix = '';
+      const builtin = root && uriKey(pathToFileURL(root).href) === uriKey(pathToFileURL(modelRoot).href);
       try {
+        if (root) {
+          const config = path.join(root, rootName);
+          prefix = readPrefix(config, buffers.get(uriKey(pathToFileURL(config).href))?.text);
+          if (builtin && prefix) throw configError(config, 0, 'built-in prefix must be empty');
+        }
         if (root) for (const file of sources(root)) {
           const fileUri = pathToFileURL(file).href;
           const buffer = buffers.get(uriKey(fileUri));
           texts.set(uriKey(fileUri), buffer || { uri: fileUri, text: new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(file)) });
         }
-      } catch (error) { readError = error.message; }
-      for (const [openUri, item] of this.open) if (root ? inside(root, openUri) : openUri === uri) texts.set(uriKey(openUri), { uri: openUri, text: item.text });
-      const docs = [...texts.values()].map(item => parse(item.text, item.uri));
+      } catch (error) { readError = error; }
+      for (const [openUri, item] of this.open) {
+        if (openUri.endsWith('/' + rootName)) continue;
+        const openRoot = rootFor(openUri);
+        const belongs = root ? openRoot && uriKey(pathToFileURL(openRoot).href) === uriKey(pathToFileURL(root).href) : openUri === uri;
+        if (belongs) texts.set(uriKey(openUri), { uri: openUri, text: item.text });
+      }
+      const docs = [...texts.values()].map(item => Object.assign(parse(item.text, item.uri), { prefix, repository: !builtin && root ? uriKey(pathToFileURL(root).href) : '', builtin }));
+      for (const doc of docs) if (builtin && doc.namespace) doc.errors.push({ range: range(doc.text, 0, 0), severity: 1, message: 'built-in models cannot declare a namespace', source: 'yambl' });
       validate(docs);
+      if (readError?.uri) {
+        const errorDoc = parse('', readError.uri);
+        errorDoc.diagnostics = [{ range: { start: { line: readError.line, character: 0 }, end: { line: readError.line, character: 1 } }, severity: 1, message: readError.message, source: 'yambl' }];
+        this.documents.set(errorDoc.uri, errorDoc);
+      }
       for (const doc of docs) {
         // The CLI still reports these dependencies; dynamic dictionaries are normal in the editor.
         doc.diagnostics = doc.diagnostics.filter(d => d.code !== 'undefined-decodes');
-        if (readError && this.open.has(doc.uri)) doc.diagnostics.push({ range: range(doc.text, 0, 0), severity: 1, source: 'yambl', message: `Cannot read compilation unit: ${readError}` });
+        if (readError && !readError.uri && this.open.has(doc.uri)) doc.diagnostics.push({ range: range(doc.text, 0, 0), severity: 1, source: 'yambl', message: `Cannot read compilation unit: ${readError.message}` });
         this.documents.set(doc.uri, doc);
       }
     }
@@ -110,6 +120,7 @@ class Service {
   }
   feature(method, params) {
     const doc = this.document(params.textDocument.uri); if (!doc) return null;
+    if (params.position && doc.blocks.some(b => { const r = range(doc.text, b.start, b.end); return params.position.line >= r.start.line && params.position.line <= r.end.line; })) return null;
     const token = params.position && this.tokenAt(doc, params.position);
     const target = token && doc.bindings.get(token.start);
     if (method === 'textDocument/definition') {
@@ -120,7 +131,7 @@ class Service {
     if (method === 'textDocument/references') return this.references(target, params.context?.includeDeclaration === true);
     if (method === 'textDocument/semanticTokens/full') {
       const classified = new Map(doc.valueTypeTokens);
-      for (const token of doc.tokens) if (doc.bindings.get(token.start)?.kind === 'decodes') classified.set(token.start, token);
+      for (const token of doc.tokens) if (['decodes', 'value'].includes(doc.bindings.get(token.start)?.kind)) classified.set(token.start, token);
       const data = []; let lastLine = 0, lastCharacter = 0;
       for (const token of [...classified.values()].sort((a, b) => a.start - b.start)) {
         if (token.value.startsWith("'")) continue;
@@ -141,10 +152,10 @@ class Service {
         let completionDoc = doc;
         if (doc.errors.length) {
           const prefix = doc.text.slice(0, offset).replace(/\bself\.[a-zA-Z_0-9]*$/, 'self.__completion');
-          const recovered = parse(prefix + doc.text.slice(offset), doc.uri);
+          const recovered = Object.assign(parse(prefix + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
           if (!recovered.errors.length) {
             const root = rootFor(doc.uri);
-            const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => parse(d.text, d.uri));
+            const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
             validate([...siblings, recovered]); completionDoc = recovered;
           }
         }
@@ -152,7 +163,7 @@ class Service {
         const owner = declaration && completionDoc.scope.get(declaration.name.value);
         return { isIncomplete: false, items: [...(owner?.effective || [])].filter(([, f]) => f.type.name === 'type').map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
       }
-      const items = [...keywords, ...annotations, ...values, ...generics, ...entities, 'Entity', ...constants].map(label => ({ label, kind: 14, detail: help[label] || 'YAMBL built-in' }));
+      const items = [...keywords, ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: 14, detail: help[label] || 'YAMBL built-in' }));
       for (const [label, decl] of doc.scope) items.push({ label, kind: decl.kind === 'entity' ? 7 : 20, detail: describe(decl) });
       return { isIncomplete: false, items };
     }
@@ -166,7 +177,7 @@ class Service {
       return doc.declarations.flatMap(decl => decl.kind === 'extend' ? decl.fields.map(f => fieldSymbol(f, decl.name.value + '.')) : [{
         name: decl.name.value, kind: decl.kind === 'entity' ? 5 : 10,
         range: range(doc.text, decl.metadata[0]?.token.start ?? decl.token.start, decl.end), selectionRange: decl.name.range,
-        children: decl.kind === 'entity' ? decl.fields.map(f => fieldSymbol(f)) : decl.entries.map(e => ({ name: e.code.value, kind: 22, range: range(doc.text, e.token.start, e.value.end), selectionRange: e.code.range })),
+        children: ['entity', 'value'].includes(decl.kind) ? decl.fields.map(f => fieldSymbol(f)) : decl.entries.map(e => ({ name: e.code.value, kind: 22, range: range(doc.text, e.token.start, e.value.end), selectionRange: e.code.range })),
       }]);
     }
     return null;

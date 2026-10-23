@@ -1,6 +1,6 @@
 'use strict';
 
-const { entities, stringValue, parse } = require('./syntax.cjs');
+const { entities, structures, stringValue, parse } = require('./syntax.cjs');
 
 function entityArgument(node, doc, universal = false) {
   return !node.quoted && !node.selfField && !node.args && !node.params &&
@@ -20,7 +20,7 @@ function signature(field) {
   const annotations = [];
   for (const item of field.metadata) {
     if (['title', 'description'].includes(item.name)) annotations.push([item.name, stringValue(item.value.value)]);
-    if (['temporal', 'dimensions'].includes(item.name)) for (const d of item.dimensions) annotations.push([item.name + ':' + d.token.value, typeSignature(d.type, field.doc, field.owner?.effective)]);
+    if (['temporal', 'dimension'].includes(item.name)) annotations.push([item.name, item.dimensions.map(d => [d.token.value, typeSignature(d.type, field.doc, field.owner?.effective)])]);
   }
   annotations.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   return JSON.stringify([field.mode, typeSignature(field.type, field.doc, field.owner?.effective), annotations]);
@@ -80,13 +80,24 @@ function relationships(symbols, issue) {
 }
 
 // These schemas also make built-in mapping candidates available without user declarations.
-const builtinDocument = parse(`entity Decodes { id decodes_id: string attr entries: collection<DecodesEntry> }
-entity DecodesEntry { attr code: string attr decode: string attr ordering: integer }
-final entity ConfigGroup { id config_group_id: string static attr entity_type: type<Entity> attr when: field_mapping<static, self.entity_type> attr then_set: field_mapping<config, self.entity_type> }`, 'yambl:builtins');
-const builtinEntities = new Map(builtinDocument.declarations.map(d => {
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const packagedRoot = path.join(__dirname, '../models');
+const modelRoot = fs.existsSync(packagedRoot) ? packagedRoot : path.join(__dirname, '../../../models');
+const builtinDocuments = fs.readdirSync(modelRoot).filter(name => name.endsWith('.yambl')).sort().map(name => {
+  const filename = path.join(modelRoot, name);
+  const doc = parse(fs.readFileSync(filename, 'utf8'), pathToFileURL(filename).href);
+  if (doc.errors.length || doc.namespace) throw new Error(`Invalid built-in model: ${filename}`);
+  doc.builtin = true;
+  return doc;
+});
+const builtinModels = new Map(builtinDocuments.flatMap(doc => doc.declarations.map(d => {
   d.effective = new Map(d.fields.map(f => [f.name.value, f])); d.ancestors = [];
+  (d.kind === 'value' ? structures : entities).push(d.name.value);
   return [d.name.value, d];
-}));
+})));
+const builtinEntities = new Map([...builtinModels].filter(([, d]) => d.kind === 'entity'));
 function mappingCandidates(target, mode, symbols) {
   const result = new Map();
   for (const decl of new Set([target, ...symbols.values()])) {
@@ -98,4 +109,4 @@ function mappingCandidates(target, mode, symbols) {
   }
   return result;
 }
-module.exports = { relationships, entityArgument, signature, mappingCandidates, builtinEntities };
+module.exports = { relationships, entityArgument, signature, mappingCandidates, builtinEntities, builtinModels, modelRoot };

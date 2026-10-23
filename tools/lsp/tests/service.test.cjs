@@ -9,7 +9,7 @@ const { Service, rootFor, sources, inside, uriKey } = require('../service.cjs');
 
 test('relationship markers navigate across files and react to unsaved edits', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-markers-')); t.after(() => fs.rmSync(root, { recursive: true }));
-  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), '');
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''");
   const sources = {
     'base.yambl': 'namespace core entity Base { config attr days: integer = 20 }',
     'left.yambl': 'namespace core entity Left inherits Base { @overload config attr category: integer = 1 @override config attr days: integer = 10 }',
@@ -63,7 +63,7 @@ test('invalid field declarations do not offer marker navigation', () => {
 test('repository discovery, unsaved dependencies, definitions, hover, symbols and close', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lsp-')); t.after(() => fs.rmSync(root, { recursive: true }));
   const write = (name, text) => { const file = path.join(root, name); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); return pathToFileURL(file).href; };
-  write('yambl-root.lclcfg', 'prefix: "do not execute"');
+  write('yambl-root.lclcfg', 'prefix: "fmc"');
   const base = write('core/base.yambl', "namespace core @title('Base title') entity Base { id item_id: string }");
   const child = write('core/child.yambl', 'namespace core entity Child inherits Base { attr kind: code<Kinds> }');
   const dictionary = write('odd/kinds.yambl', 'namespace core decodes Kinds {}');
@@ -120,11 +120,11 @@ test('attribute hover includes metadata, modifiers and complete generic/paramete
 test('Decodes references follow symbol identity and quoted names retain string styling', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-references-')); t.after(() => fs.rmSync(root, { recursive: true }));
   const write = (name, text) => { const file = path.join(root, name); fs.writeFileSync(file, text); return pathToFileURL(file).href; };
-  write('yambl-root.lclcfg', '');
+  write('yambl-root.lclcfg', "prefix: ''");
   const dictionary = write('decodes.yambl', 'namespace dict decodes Currencies {}');
   const source = `namespace core from dict import Currencies entity A {
     attr code: code<Currencies>
-    @dimensions(source: code<'Currencies'>)
+    @dimension(source: code<'Currencies'>)
     snapshot attr value: decimal[18, 4]
     attr many: values<code<'Currencies'>>
     attr dynamic: code<'Outside'>
@@ -166,10 +166,71 @@ test('separate repository roots do not merge equally named entities', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-roots-')); t.after(() => fs.rmSync(root, { recursive: true }));
   const service = new Service(() => {});
   for (const folder of ['one', 'two']) {
-    const dir = path.join(root, folder); fs.mkdirSync(dir); fs.writeFileSync(path.join(dir, 'yambl-root.lclcfg'), '');
+    const dir = path.join(root, folder); fs.mkdirSync(dir); fs.writeFileSync(path.join(dir, 'yambl-root.lclcfg'), "prefix: ''");
     const uri = pathToFileURL(path.join(dir, 'a.yambl')).href;
     service.open.set(uri, { text: 'entity A {}', version: 1 });
   }
   service.refresh(); assert.equal(service.documents.size, 2);
   assert.ok([...service.documents.values()].every(d => !d.diagnostics.length));
+});
+
+
+test('prefixes, unsaved root configuration and nested repository errors', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-prefix-')); t.after(() => fs.rmSync(root, { recursive: true }));
+  const write = (name, text) => { const filename = path.join(root, name); fs.mkdirSync(path.dirname(filename), { recursive: true }); fs.writeFileSync(filename, text); return pathToFileURL(filename).href; };
+  const config = write('yambl-root.lclcfg', "prefix: 'fmc'");
+  const value = write('values/a.yambl', 'namespace types value record { attr x: string }');
+  const text = 'namespace core from types import record entity A { attr x: record attr h: Hierarchy }';
+  const uri = write('core/a.yambl', text);
+  const published = [], service = new Service((method, params) => published.push(params));
+  service.open.set(uri, { version: 1, text }); service.refresh();
+  assert.equal(service.document(uri).prefix, 'fmc');
+  assert.deepEqual(service.document(uri).diagnostics, []);
+  const params = { textDocument: { uri }, position: { line: 0, character: text.lastIndexOf('record') } };
+  assert.equal(service.feature('textDocument/definition', params).uri, value);
+  assert.ok(service.feature('textDocument/hover', params).contents.value.includes('value record'));
+  const semantic = service.feature('textDocument/semanticTokens/full', params).data;
+  assert.ok(semantic.length > 0);
+  service.open.set(config, { version: 2, text: "prefix: 'changed'" }); service.refresh();
+  assert.equal(service.document(uri).prefix, 'changed');
+  assert.deepEqual(service.document(uri).diagnostics, []);
+  service.open.set(config, { version: 3, text: "prefix: 'fmc'\nprefix: 'other'" }); service.refresh();
+  assert.equal(service.document(config).diagnostics[0].range.start.line, 1);
+  assert.match(service.document(config).diagnostics[0].message, /one literal prefix/);
+  service.open.delete(config); service.refresh();
+  assert.ok(published.some(p => p.uri === config && p.diagnostics.length === 0));
+  const nested = write('child/yambl-root.lclcfg', "prefix: ''"); service.refresh();
+  assert.match(service.document(nested).diagnostics[0].message, /nested or multiple/);
+  assert.throws(() => sources(root), /nested or multiple/);
+});
+
+test('Markdown blocks suppress language features and values navigate by identity', () => {
+  const uri = 'untitled:value', service = new Service(() => {});
+  const text = '---\nvalue fake {}\n---\nvalue amount { attr x: decimal }\nentity A { attr a: amount }';
+  service.open.set(uri, { version: 1, text }); service.refresh();
+  for (const method of ['hover', 'definition', 'completion']) {
+    assert.equal(service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 1, character: 1 } }), null);
+  }
+  const params = { textDocument: { uri }, position: { line: 4, character: 20 } };
+  assert.equal(service.feature('textDocument/definition', params).range.start.line, 3);
+  assert.equal(service.feature('textDocument/documentSymbol', params)[0].children[0].name, 'x');
+  assert.ok(service.feature('textDocument/completion', params).items.some(i => i.label === 'hierarchy_entry'));
+});
+
+test('built-in model repository checks its own declarations exactly once', () => {
+  const { modelRoot } = require('../language/relationships.cjs');
+  const uri = pathToFileURL(path.join(modelRoot, 'hierarchy.yambl')).href;
+  const service = new Service(() => {});
+  service.open.set(uri, { version: 1, text: fs.readFileSync(new URL(uri), 'utf8') }); service.refresh();
+  assert.equal(service.documents.size, 3);
+  assert.ok([...service.documents.values()].every(doc => doc.diagnostics.length === 0));
+});
+
+test('literal configuration grammar rejects expressions and missing prefixes', () => {
+  const { readPrefix } = require('../repository.cjs');
+  assert.throws(() => readPrefix(path.join(os.tmpdir(), 'absent-yambl-config-' + process.pid)), /Cannot read root configuration/);
+  assert.equal(readPrefix('root.lclcfg', '# Comment\n\nprefix: "fmc.data" # inline'), 'fmc.data');
+  for (const text of ['', '# Comment', 'other: ""', 'prefix: 1', "prefix: 'x' + 'y'", "prefix: 'bad..name'", "prefix: ''\nprefix: ''"]) {
+    assert.throws(() => readPrefix('root.lclcfg', text), /prefix/);
+  }
 });

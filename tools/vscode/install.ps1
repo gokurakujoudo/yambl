@@ -19,10 +19,14 @@ try {
         ) | Out-Null
     }
     $lspRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../lsp'))
-    foreach ($relative in @('server.cjs', 'service.cjs', 'protocol.cjs', 'language/syntax.cjs', 'language/validation.cjs', 'language/relationships.cjs', 'README.md')) {
+    foreach ($relative in @('server.cjs', 'service.cjs', 'repository.cjs', 'protocol.cjs', 'language/syntax.cjs', 'language/validation.cjs', 'language/relationships.cjs', 'README.md')) {
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
             $archive, (Join-Path $lspRoot $relative), "extension/lsp/$relative"
         ) | Out-Null
+    }
+    $modelsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../models'))
+    foreach ($model in Get-ChildItem -LiteralPath $modelsRoot -File | Where-Object { $_.Extension -in '.yambl', '.lclcfg' }) {
+        [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $model.FullName, "extension/lsp/models/$($model.Name)") | Out-Null
     }
     $documents = @{
         '[Content_Types].xml' = @'
@@ -30,6 +34,8 @@ try {
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="json" ContentType="application/json" />
   <Default Extension="md" ContentType="text/markdown" />
+  <Default Extension="yambl" ContentType="text/plain" />
+  <Default Extension="lclcfg" ContentType="text/plain" />
   <Default Extension="cjs" ContentType="application/javascript" />
   <Default Extension="vsixmanifest" ContentType="text/xml" />
 </Types>

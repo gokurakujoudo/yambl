@@ -9,7 +9,7 @@ Decodes 原有禁止继承的规则保持不变。
 ## 字段签名
 
 字段签名由属性类别、完整类型以及元信息组成。元信息包括 title、description、
-temporal 和 dimensions。按语义比较：类型名称先在声明文件中解析，字符串比较
+temporal 和 dimension（包含维度与可选 Hierarchy 参数的对应关系）。按语义比较：类型名称先在声明文件中解析，字符串比较
 解码后的值，忽略注解及命名参数顺序；`decimal[18, 4]` 与
 `decimal[scale: 4, precision: 18]`、`code<Currencies>` 与
 `code<'Currencies'>` 分别等价。注释、源码位置及 config 默认值不计入签名。

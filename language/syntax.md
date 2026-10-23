@@ -2,7 +2,7 @@
 
 本文记录当前案例使用的语法及已确认的语义。对应的首版解析、静态检查与格式化
 工具位于 `yambl-compiler`。
-自定义值类型的定义方式暂不纳入本轮设计，尚未引入 `type` 声明或别名语法。
+结构化值类型使用 `value` 声明；尚未引入类型别名语法。
 
 ## 命名
 
@@ -15,7 +15,7 @@
 ## 类型说明
 
 内置值类型清单、使用示例及类型参数规则见
-[内置值类型](../builtins/value-types.md)。自定义值类型的声明仍暂缓定义。
+[内置值类型](../builtins/value-types.md)。结构化值类型的声明见下文。
 
 `collection<T>`、`values<T>` 和 `map<TKey, TValue>` 的泛型约束及语义见
 [内置集合类型](../builtins/collection-types.md)。
@@ -111,8 +111,8 @@ from decodes import Currencies
 
 格式化器使用四空格缩进，统一为 LF 换行。最后一条内容后有且仅有一个换行符
 （`\n`），使编辑器显示一个空白末行；删除额外的末尾空白行。解析器允许缺少
-末尾换行，由格式化器补齐。文件内部连续空白行缩减为一个，字符串内容和声明顺序
-保持不变。
+末尾换行，由格式化器补齐。文本块外连续空白行缩减为一个，字符串内容和声明顺序
+保持不变。输入同时接受 LF 和 CRLF，格式化输出 UTF-8 无 BOM。
 
 ## Decodes 实例声明
 
@@ -127,11 +127,11 @@ decodes Currencies {
 
 条目形式为 `- ordering code: decode`。本例的 `ordering` 是整数，`code`
 使用裸词元，`decode` 使用单引号字符串。`ordering` 是使用方的升序排序基准，
-不会使 `entries` 集合具有顺序。模型定义及字段映射见 [Decodes](../models/decodes.md)。
+不会使 `entries` 集合具有顺序。模型定义及字段映射见 [Decodes](../models/decodes.yambl)。
 
-`Decodes` 按 `decodes_id`、`DecodesEntry` 按 `(decodes_id, code)` 分别具有
-单例身份，条目不需要额外的 `id` 字段。`Decodes` 禁止继承，声明中的字典
-名称表示实例，不能作为实体类型使用。
+`Decodes` 按 `decodes_id` 唯一标识，是禁止继承与 extend 的 final 实体。
+entries 是 `values<decodes_entry>`；条目无独立实体身份，code 在所属字典内唯一。
+声明中的字典名称表示实例，不能作为实体类型使用。
 
 ```text
 attr x: code<Currencies>  # 合理取值为 Currencies.CNY
@@ -228,7 +228,7 @@ entity Security {
 
 extend Security {
     @temporal(as_of_date: date)
-    @dimensions(source: code<'PriceSources'>)
+    @dimension(source: code<'PriceSources'>)
     snapshot attr price: decimal
 
     config attr price_fallback_days: integer = 20
@@ -266,9 +266,17 @@ entity Bond inherits Security {
 | `config attr` | 与时间无关、可作为参数被配置覆盖的属性 |
 
 `@temporal(as_of_date: date)` 可用于 `snapshot` 和 `scd`，不能用于 `config` 或 `static`。
-`@dimensions(source: Type, ...)` 描述属性的附加维度；维度名为 `snake_case`，
-同一属性中不能重复，类型遵循现有类型规则。示例用外部字典描述价格来源，
-不要求模型内声明该字典，也不检查实际数据维度是否完整。
+`@dimension(source: code<'PriceSources'>, price_dimension: Hierarchy)` 描述一个维度，
+用于同一实体、同一时间（如适用）的多份独立数据。多个注解定义正交维度。
+每个注解第一参数必须为 string（含参数形式）或 code；可选第二参数必须为 Hierarchy。
+仅普通、snapshot、scd 属性可使用 dimension，id、static、config 和 value 字段禁止。
+同一字段的维度、Hierarchy 参数及时间参数名称均为 snake_case，且互不重复。
+
+显式 source 优先；没有 source 时可给 price_dimension 引用，按 Hierarchy 的
+ordering 升序查找存在的数据。该参数不生成实体属性或字段映射候选。
+其他维度须先固定；多个 Hierarchy 同时参与的组合取数规则暂未定义。
+取数执行器、跨日回退、空值及全部缺失的结果表示均未实现。
+旧拼写 `@dimensions` 不再接受。
 
 `config attr name: Type = literal` 可声明默认值，也可省略 `= literal`。
 当前编译器支持 `integer`、`snowflake_id` 的整数字面量，`float`、`decimal`
@@ -288,7 +296,37 @@ entity Bond inherits Security {
 
 ## 条件配置组与依赖字段类型
 
-[ConfigGroup](../models/config_group.md) 是内置 final 实体。
+[ConfigGroup](../models/config_group.yambl) 是内置 final 实体。
 `type<Entity>`、`type<Security>` 和 `field_mapping<static, self.selected_kind>`
 的约束与任意类型字段引用见[实体类型与字段映射](../builtins/field-mapping.md)。
 这些声明已由编译器及 LSP 支持；配置组实例语法和配置执行尚未实现。
+
+## 结构化值类型
+
+```text
+value quote {
+    attr amount: decimal
+    static attr currency: string
+}
+
+entity Observation {
+    attr quotation: quote
+    attr alternatives: values<quote>
+}
+```
+
+value 名称为 snake_case，天然 final，不能继承、被继承或 extend，不接受显式
+final value。字段只允许 attr 或等价的 static attr，天然 static，无 ID。
+字段可以是非集合值（含嵌套 value）或实体引用；引用保存目标实体 ID。
+禁止 collection、values、map、field_mapping 字段及直接或间接值嵌套循环。
+实体引用不形成值嵌套循环。只允许 title、description 注解；禁止默认值和字段关系标记。
+同一值类型按所有字段判等，引用字段比较引用 ID；除明确定义外不支持大小比较。
+这些是值语义约定，当前工具只检查声明，不执行值比较。
+
+## Markdown 说明文本块
+
+独占行的 `---` 开始和结束一个文本块，可放在顶层或声明体内独立位置。
+下一个分隔行结束文本块，无嵌套；未闭合时报语法错误。
+正文为不透明 Markdown，不参与名称解析、不绑定后续声明、不产生语言补全和导航。
+格式化保留正文的缩进、尾随空格及连续空行，仅将 CRLF 统一为 LF。
+文本块不会改变其后语言诊断的位置。

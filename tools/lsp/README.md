@@ -13,7 +13,9 @@ There are no runtime downloads or external service calls.
 ## Model checking
 
 The server reads the nearest `yambl-root.lclcfg` as a root marker and checks YAMBL
-files under that root. It does not execute the marker's contents. Without a marker,
+files under that root. It reads one static literal `prefix` and resolves file namespaces
+and imports relative to it. Nested repositories, duplicate keys and expressions
+produce errors at the configuration file. Without a marker,
 it checks only the open document, matching the Python CLI's single-file behavior.
 Hidden directories, virtual environments, build output, `node_modules`, and symbolic
 links encountered during scans are skipped. Separate roots have separate symbol tables.
@@ -24,7 +26,7 @@ are coalesced over 120 ms. Closing a buffer restores its disk contents for other
 open documents in the same compilation unit.
 
 Checks cover namespace imports, types, metadata, configuration literals, dimensions,
-entity extensions, final restrictions, overload/override contracts, dependent field
+structured values, containment cycles, entity extensions, final restrictions, overload/override contracts, dependent field
 mappings, inherited field conflicts, and inheritance cycles. Undefined
 dynamic Decodes are allowed without editor diagnostics. Missing explicit imports
 and unknown entity types remain errors. The Python CLI still reports external
@@ -97,3 +99,9 @@ buffers; no browser or virtual filesystem support, rename,
 code actions, incremental text edits, or runtime evaluation. The server requests
 full document synchronization. It rescans an affected compilation unit rather than
 maintaining a dependency cache; large repositories may need indexing later.
+
+Built-in models are read from `yambl/models` during development and from resources
+included in the VSIX after installation. The installed extension needs no source
+checkout. Value types receive value-type semantic coloring and support navigation.
+Markdown blocks are opaque to language features and retain body whitespace during
+formatting. Root-configuration edits, including unsaved changes, refresh diagnostics.
