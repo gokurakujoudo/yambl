@@ -42,6 +42,15 @@ async function main() {
     checks++;
   }
 
+  expectScope('@flags', '@flags', 'entity.name.function.yambl');
+  expectScope("    - 0b00001 Attr: 'Attribute'", '0b00001', 'constant.numeric.yambl');
+  expectScope("    - 0b00001 Attr: 'Attribute'", 'Attr', 'constant.other.yambl');
+  expectScope('attrs<AttrCats.Attr+AttrCats.Config, Entity>', '+', 'keyword.operator.bitwise.yambl');
+  expectScope('attrs<AttrCats.None, Entity>', 'None', 'constant.other.yambl');
+  expectScope('attrs<AttrCats.All-AttrCats.Snapshot, Entity>', 'All', 'constant.other.yambl');
+  expectScope('attrs<AttrCats.All-AttrCats.Snapshot, Entity>', '-', 'keyword.operator.bitwise.yambl');
+  expectScope('attrs<AttrCats.Attr+AttrCats.Config, Entity>', 'Config', 'constant.other.yambl');
+
   expectScope('attr x: Attr::type', '::', 'punctuation.accessor.yambl');
   expectScope('attr x: Attr::type', 'type', 'variable.language.yambl');
   expectScope('attr x: self.kind::value', 'value', 'variable.language.yambl');
@@ -78,8 +87,8 @@ async function main() {
   expectScope('static attr selected: type<Entity>', 'static', 'keyword.declaration.yambl');
   expectScope('static attr selected: type<Entity>', 'type', 'support.type.yambl');
   expectScope('static attr selected: type<Entity>', 'Entity', 'entity.name.type.yambl');
-  expectScope('attr when: field_mapping<AttrCats.static, self.selected::value>', 'field_mapping', 'support.type.yambl');
-  expectScope('attr when: field_mapping<AttrCats.static, self.selected::value>', 'self', 'keyword.declaration.yambl');
+  expectScope('attr when: field_mapping<AttrCats.Static, self.selected::value>', 'field_mapping', 'support.type.yambl');
+  expectScope('attr when: field_mapping<AttrCats.Static, self.selected::value>', 'self', 'keyword.declaration.yambl');
   expectScope('@overload', '@overload', 'entity.name.function.yambl');
   expectScope('@override', '@override', 'entity.name.function.yambl');
   expectScope('namespace decodes', 'decodes', 'entity.name.namespace.yambl');

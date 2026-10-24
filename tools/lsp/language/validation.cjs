@@ -1,4 +1,5 @@
 'use strict';
+const { isFlags, codeEntries, checkDecodes } = require('./decodes.cjs');
 
 const { values, generics, entities, structures, stringValue } = require('./syntax.cjs');
 const { relationships, builtinModels } = require('./relationships.cjs');
@@ -54,12 +55,10 @@ function validate(documents) {
   for (const doc of documents.filter(d => !d.errors.length)) {
     for (const decl of doc.declarations) {
       metadata(doc, decl.metadata);
+      if (decl.kind !== 'decodes') for (const marker of decl.metadata.filter(a => a.name === 'flags')) issue(doc, marker.token, 'flags requires a Decodes declaration');
       if (decl.kind === 'decodes') {
-        const codes = new Set();
-        for (const entry of decl.entries) {
-          if (codes.has(entry.code.value)) issue(doc, entry.token, `duplicate code in Decodes: ${entry.code.value}`);
-          codes.add(entry.code.value);
-        }
+        checkDecodes(decl, issue);
+        for (const entry of codeEntries(decl).filter(e => !e.generated)) bind(doc, entry.name, entry);
         continue;
       }
       const target = doc.scope.get(decl.name.value);
@@ -167,14 +166,15 @@ function formatType(node) {
   const args = node.args ? '<' + node.args.map(formatType).join(', ') + '>' : '';
   const params = node.params ? '[' + node.params.map(p => (p.key ? p.key + ': ' : '') + p.value.value).join(', ') + ']' : '';
   const accesses = (node.accesses || []).map(a => a.operator.value + a.token.value).join('');
-  return root + args + params + accesses + (node.binding ? ' as ' + node.binding.value : '');
+  return root + args + params + accesses + (node.operations || []).map(a => ' ' + a.operator.value + ' ' + formatType(a.term)).join('') + (node.binding ? ' as ' + node.binding.value : '');
 }
 
 function describe(target) {
+  if (target.kind === 'code') return `code ${target.name.value}${target.generated ? ' = ' + (target.name.value === 'None' ? '0' : 'all declared flags') + ' (generated)' : ': ' + stringValue(target.value.value) + ' (' + target.order.value + ')'}`;
   const details = ['title', 'description'].flatMap(name => (target.metadata || []).filter(a => a.name === name && a.value).map(a => `${name}: ${stringValue(a.value.value)}`));
   const mode = ['snapshot', 'scd', 'config', 'static'].includes(target.mode) ? target.mode + ' attr' : target.mode;
   const signature = target.kind === 'type_alias' ? `type ${target.name.value}${target.parameters.length ? '<' + target.parameters.map(p => p.token.value + ': ' + formatType(p.type)).join(', ') + '>' : ''} = ${formatType(target.type)}` : target.kind ? `${target.kind} ${target.name.value}` : `${mode} ${target.name.value}: ${formatType(target.type)}`;
-  return [signature, ...details].join('\n\n');
+  return [(target.kind === 'decodes' && isFlags(target) ? '@flags\n' : '') + signature, ...details].join('\n\n');
 }
 
 module.exports = { validate, describe, formatType };

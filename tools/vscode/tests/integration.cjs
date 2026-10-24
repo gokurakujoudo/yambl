@@ -82,7 +82,7 @@ entity A inherits Base { @overload config attr category: integer = 1 @override c
 entity B inherits Base { @overload config attr category: integer = 2 }
 entity C inherits Base { @overload config attr category: integer = 3 }
 entity Deep inherits A { @override config attr days: integer = 5 }
-final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrCats.config, self.chosen::value> }
+final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrCats.Config, self.chosen::value> }
 `;
     const relationshipsUri = vscode.Uri.file(path.join(root, 'relationships.yambl'));
     fs.writeFileSync(relationshipsUri.fsPath, relationshipText);
@@ -105,7 +105,20 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     const invalidTargets = await lookup(relationshipText.indexOf('@overload') + 1);
     assert.deepEqual(invalidTargets, []);
     assert.ok(relationshipsDoc.isDirty);
-    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression'] }));
+    const flagsText = "namespace flags @flags decodes Rights { - 0b01 Read: 'Read' - 2 Write: 'Write' } type selected<a: code<Rights>> = string entity Choice { attr x: selected<Rights.All - Rights.Read + Rights.Write + Rights.None> }";
+    const flagsUri = vscode.Uri.file(path.join(root, 'flags.yambl'));
+    fs.writeFileSync(flagsUri.fsPath, flagsText);
+    const flagsDoc = await vscode.workspace.openTextDocument(flagsUri);
+    await vscode.window.showTextDocument(flagsDoc);
+    const flagCompletions = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', flagsUri, flagsDoc.positionAt(flagsText.lastIndexOf('Write')));
+    assert.ok(flagCompletions.items.some(item => item.label === 'None'));
+    assert.ok(flagCompletions.items.some(item => item.label === 'All'));
+    const flagTargets = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', flagsUri, flagsDoc.positionAt(flagsText.lastIndexOf('Write')));
+    assert.equal(flagTargets[0].range.start.character, flagsText.indexOf('Write'));
+    const zeroHover = await vscode.commands.executeCommand('vscode.executeHoverProvider', flagsUri, flagsDoc.positionAt(flagsText.lastIndexOf('None')));
+    assert.match(zeroHover[0].contents[0].value.replaceAll('&nbsp;', ' '), /0 \(generated\)/);
+    assert.deepEqual(vscode.languages.getDiagnostics(flagsUri).map(d => d.message), []);
+    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None'] }));
   } catch (error) {
     fs.writeFileSync(output, JSON.stringify({ ok: false, error: error.stack })); throw error;
   }

@@ -80,7 +80,7 @@
       }
     },
     {
-      "match": "^\\s*(-)\\s+(-?\\d+)\\s+([A-Za-z0-9_]+)\\s*(:)",
+      "match": "^\\s*(-)\\s+(-?(?:0b[01]+|\\d+))\\s+([A-Za-z0-9_]+)\\s*(:)",
       "captures": {
         "1": {
           "name": "punctuation.definition.list.yambl"
@@ -184,11 +184,15 @@
     },
     {
       "name": "constant.numeric.yambl",
-      "match": "(?<![\\w.])-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b"
+      "match": "(?<![\\w.])-?(?:0b[01]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b"
     },
     {
       "name": "keyword.operator.assignment.yambl",
       "match": "="
+    },
+    {
+      "name": "keyword.operator.bitwise.yambl",
+      "match": "[+-]"
     },
     {
       "name": "punctuation.section.yambl",

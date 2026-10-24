@@ -1,6 +1,7 @@
 'use strict';
 
 const { values, generics, stringValue } = require('./syntax.cjs');
+const { isFlags, codeEntries } = require('./decodes.cjs');
 const type = (name, kind = 'value', options = {}) => ({ name, kind, args: [], key: null, params: [], exact: null, dependency: '', ...options });
 const unknown = type('?', 'unknown');
 const entity = type('Entity', 'reference', { key: '\0\0Entity' });
@@ -95,7 +96,23 @@ class Resolver {
       }
     }
     for (const access of node.accesses || []) result = this.access(result, access);
+    for (const operation of node.operations || []) result = this.combine(result, this.evaluate(operation.term), operation);
     return result;
+  }
+  combine(left, right, node) {
+    const operator = node.operator.value;
+    if (left.sort !== 'value' || right.sort !== 'value' || left.type.name !== 'code' || right.type.name !== 'code' || !equal(base(left.type), base(right.type))) {
+      this.issue(node, `${operator} requires codes from the same flags Decodes`); return term(unknown);
+    }
+    const declaration = this.symbols.get(left.type.args[0].key);
+    if (!declaration || !isFlags(declaration)) { this.issue(node, `${operator} requires codes from the same flags Decodes`); return term(unknown); }
+    let exact = null;
+    if (left.type.exact !== null && right.type.exact !== null) {
+      const first = new Set(left.type.exact.split('+').filter(Boolean)), second = right.type.exact.split('+').filter(Boolean);
+      for (const code of second) { if (operator === '+') first.add(code); else first.delete(code); }
+      exact = [...first].sort().join('+');
+    }
+    return term({ ...left.type, exact }, 'value', { path: left.path + operator + right.path });
   }
   parameters(node) {
     const { name, params } = node;
@@ -133,10 +150,15 @@ class Resolver {
     }
     if (value.type.name === 'Decodes' && value.type.exact !== null) {
       const dictionary = this.symbols.get(value.type.exact);
-      const entry = dictionary.entries.find(e => e.code.value === member);
+      const entry = codeEntries(dictionary).find(e => e.name.value === member);
       if (!entry) this.issue(site, `unknown Decodes code: ${value.path}.${member}`);
-      else this.bind(access.token, { ...entry, name: entry.code, doc: dictionary.doc, kind: 'code' });
-      return term(type('code', 'value', { args: [type(dictionary.name.value, 'value', { key: dictionary.key })], exact: member }), 'value', { path });
+      else this.bind(access.token, entry);
+      let exact = member;
+      if (isFlags(dictionary)) {
+        if (member === 'None') exact = '';
+        else if (member === 'All') exact = [...new Set(dictionary.entries.map(e => e.code.value))].sort().join('+');
+      }
+      return term(type('code', 'value', { args: [type(dictionary.name.value, 'value', { key: dictionary.key })], exact }), 'value', { path });
     }
     if (value.type.kind !== 'reference' || value.sort === 'field') { this.issue(site, 'field access requires an entity instance or entity type'); return term(unknown); }
     const source = (value.path === 'self' ? this.owner : this.symbols.get(value.type.key))?.effective?.get(member);
@@ -186,7 +208,7 @@ class Resolver {
     for (const decl of this.symbols.values()) {
       if (target.key !== decl.key && !decl.ancestors?.some(a => a.key === target.key)) continue;
       for (const field of decl.effective?.values() || []) {
-        if (field.mode === 'id' || (category.type.exact !== null && field.mode !== category.type.exact)) continue;
+        if (field.mode === 'id' || (category.type.exact !== null && !category.type.exact.split('+').includes(field.mode[0].toUpperCase() + field.mode.slice(1)))) continue;
         const identity = field.doc.uri + ':' + field.type.token.start;
         if (this.active.includes(identity)) continue;
         const resolved = new Resolver(field.doc, () => {}, this.symbols, field.owner, true, new Map(), [...this.active, identity]).resolve(field.type);
@@ -196,7 +218,7 @@ class Resolver {
     return type('attrs', 'value', { args: [category.type, target], members: [...members.values()].map(group => commonType(group, this.symbols) || unknown) });
   }
   code(node, argument) {
-    if (!argument.args && !argument.params && !(argument.accesses || []).length && !argument.literal && !this.bindings.has(argument.name)) {
+    if (!argument.args && !argument.params && !(argument.accesses || []).length && !(argument.operations || []).length && !argument.literal && !this.bindings.has(argument.name)) {
       const name = argument.name, symbol = this.doc.scope.get(name);
       if ((symbol && symbol.kind !== 'decodes') || (!symbol && [...values, ...generics, 'Entity'].includes(name))) this.issue(node, 'code requires a Decodes instance identifier');
       else if (!symbol) this.issue(node, `undefined Decodes: ${name}`, true);

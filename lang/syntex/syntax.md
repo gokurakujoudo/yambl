@@ -127,7 +127,8 @@ decodes Currencies {
 ```
 
 条目形式为 `- ordering code: decode`。本例的 `ordering` 是整数，`code`
-使用裸词元，`decode` 使用单引号字符串。`ordering` 是使用方的升序排序基准，
+使用 PascalCase 裸词元（大写字母开头，后接字母或数字），`decode` 使用单引号字符串。
+`ordering` 支持十进制和 `0b` 二进制整数，是使用方的升序排序基准，
 不会使 `entries` 集合具有顺序。模型定义及字段映射见 [Decodes](../models/decodes.yambl)。
 
 `Decodes` 按 `decodes_id` 唯一标识，是禁止继承与 extend 的 final 实体。
@@ -139,8 +140,16 @@ attr x: code<Currencies>  # 合理取值为 Currencies.CNY
 attr y: Decodes  # 合理取值为 Currencies
 ```
 
-`Currencies.CNY` 是字典限定的代码值写法。`attr x: Currencies` 不合法，
-因为 `Currencies` 是字典实例名称。
+`Currencies.CNY` 是字典限定的代码值写法。override/overload 中的
+`attr x: Currencies` 等价于 `attr x: exact<Currencies>`，约束为固定字典引用。
+
+`@flags` 将 decodes 条目数值解释为位掩码，显式条目必须是互不重复的正单比特。
+每个 flags 字典自动提供 `None = 0` 和全选值 `All`，禁止在源文件重复定义这两个 code。
+`AttrCats.Attr + AttrCats.Config` 表示同一 flags 字典的按位并集；重复项不改变结果，
+None 不增加位。该组合仍是该字典的 code，可以用于 attrs、field_mapping 和泛型参数。
+`AttrCats.All - AttrCats.Snapshot` 移除 Snapshot；重复移除只生效一次。
+`+` 和 `-` 同优先级、从左到右计算，均低于 `.` 和 `::`。
+完整声明与边界见 [Decodes](../models/decodes.yambl)。
 
 ## 实体与标识字段
 
@@ -298,7 +307,7 @@ ordering 升序查找存在的数据。该参数不生成实体属性或字段�
 ## 条件配置组与依赖字段类型
 
 [ConfigGroup](../models/config_group.yambl) 是内置 final 实体。
-`type<Entity>`、`type<Security>` 和 `field_mapping<AttrCats.static, self.selected_kind::value>`
+`type<Entity>`、`type<Security>` 和 `field_mapping<AttrCats.Static, self.selected_kind::value>`
 的约束与任意类型字段引用见[实体类型与字段映射](../builtins/field-mapping.md)。
 这些声明已由编译器及 LSP 支持；配置组实例语法和配置执行尚未实现。
 

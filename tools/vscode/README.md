@@ -12,7 +12,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.2.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.5.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -25,6 +25,8 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 - Problems 面板中的实时语法、类型及引用诊断；未定义动态 Decodes 不产生 warning。
 - Format Document 格式化当前文档；存在语法错误时不提供修改。
 - 输入补全，包括关键字、注解、内置类型和当前文件可见的声明。
+- `@flags`、二进制掩码和 `+`、`-` 支持高亮；字典点号后补全 PascalCase code，包括
+  flags 自动生成的 `None`、`All`。组合中每一项可跳转到条目；生成项跳转所属字典声明。
 - 属性悬停显示完整类型（含泛型与参数）、存在的 title 和 description。
 - 在引用处 Go to Definition 跳转实体或字典；Ctrl+Click 字典声明展开引用列表。
 - 字典实例名与值类型使用相同颜色，包括声明、导入和 `code<Currencies>` 的裸名称；

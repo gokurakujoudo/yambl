@@ -9,6 +9,7 @@ const { validate, describe } = require('./language/validation.cjs');
 const { sources, readPrefix, rootName, configError } = require('./repository.cjs');
 const { modelRoot } = require('./language/relationships.cjs');
 const { Resolver } = require('./language/expressions.cjs');
+const { codeEntries } = require('./language/decodes.cjs');
 function uriKey(uri) {
   if (!uri.startsWith('file:')) return uri;
   const file = path.resolve(fileURLToPath(uri));
@@ -28,6 +29,7 @@ function inside(root, uri) {
   return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 }
 const help = {
+  flags: 'Independent positive single-bit codes; None is zero and All selects every declared flag. Use + to add and - to remove flags, left to right; repeated additions or removals have no further effect.',
   value: 'Final structured value; fields are static, non-collection values or entity IDs.',
   Hierarchy: 'Prioritized dimension candidates; lower ordering is tried first.',
   final: 'This entity cannot be inherited or extended.',
@@ -155,7 +157,8 @@ class Service {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       if (/::[a-z]*$/.test(doc.text.slice(0, offset))) return { isIncomplete: false, items: ['type', 'value'].map(label => ({ label, kind: 10, detail: help.self })) };
       const selfPath = /\bself(?:\.[a-zA-Z_][a-zA-Z_0-9]*::value)*\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
-      if (selfPath) {
+      const codePath = /\b([A-Z][a-zA-Z_0-9]*)\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
+      if (selfPath || codePath) {
         let completionDoc = doc;
         if (doc.errors.length) {
           const prefix = doc.text.slice(0, offset).replace(/[a-zA-Z_0-9]*$/, '__completion');
@@ -165,6 +168,10 @@ class Service {
             const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
             validate([...siblings, recovered]); completionDoc = recovered;
           }
+        }
+        if (codePath) {
+          const dictionary = completionDoc.scope.get(codePath[1]);
+          return { isIncomplete: false, items: dictionary?.kind === 'decodes' ? codeEntries(dictionary).map(e => ({ label: e.name.value, kind: 20, detail: describe(e) })) : [] };
         }
         const declaration = completionDoc.declarations.find(d => d.bodyStart <= offset && offset <= d.end);
         let owner = declaration && completionDoc.scope.get(declaration.name.value);

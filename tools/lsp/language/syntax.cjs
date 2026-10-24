@@ -3,7 +3,7 @@
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
   'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as'];
-const annotations = ['title', 'description', 'temporal', 'dimension', 'overload', 'override'];
+const annotations = ['title', 'description', 'temporal', 'dimension', 'overload', 'override', 'flags'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id'];
 const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
 const entities = [];
@@ -32,7 +32,7 @@ function parse(text, uri = '') {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, ' ') + masked.slice(end);
   }
   let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|[{}\[\]()<>,:.=@-]/y;
+  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|[{}\[\]()<>,:.=@+-]/y;
   while (offset < text.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(masked);
@@ -56,8 +56,9 @@ function parse(text, uri = '') {
   const literal = () => /^(?:'|-?\d)/.test(peek().value) ? take() : fail();
   const qualified = () => { let value = name().value; while (is('.')) { take(); value += '.' + name().value; } return value; };
   const piece = (start, indent) => doc.pieces.push({ tokens: doc.tokens.slice(start, index), indent });
-  function type() {
+  function type(operand = false) {
     const token = /^(?:'|-?\d)/.test(peek().value) ? take() : name();
+    if (/^-?0b/.test(token.value)) throw token;
     const node = { token, name: token.value.startsWith("'") ? stringValue(token.value) : token.value, args: null, params: null, accesses: [] };
     if (token.value.startsWith("'")) node.quoted = true;
     if (/^-?\d/.test(token.value) || ['true', 'false'].includes(token.value)) node.literal = true;
@@ -81,14 +82,27 @@ function parse(text, uri = '') {
       take(']');
     }
     while (is('.') || is('::')) { const operator = take(); node.accesses.push({ operator, token: name() }); }
-    if (is('as')) { take(); node.binding = name(); }
+    if (!operand) {
+      node.operations = [];
+      while (is('+') || is('-') || /^-\d/.test(peek().value)) {
+        // In A-1 the lexer keeps -1 intact; here it follows a complete operand.
+        if (/^-\d/.test(peek().value)) {
+          const signed = peek();
+          doc.tokens.splice(index, 1,
+            { ...signed, value: '-', end: signed.start + 1, range: range(text, signed.start, signed.start + 1) },
+            { ...signed, value: signed.value.slice(1), start: signed.start + 1, range: range(text, signed.start + 1, signed.end) });
+        }
+        const operator = take(); node.operations.push({ operator, term: type(true) });
+      }
+      if (is('as')) { take(); node.binding = name(); }
+    }
     return node;
   }
   function annotation(indent) {
     const start = index;
     const token = take('@'); const kind = name();
     if (!annotations.includes(kind.value)) throw kind;
-    if (['overload', 'override'].includes(kind.value)) { piece(start, indent); return { token, markerToken: kind, name: kind.value, dimensions: [] }; }
+    if (['overload', 'override', 'flags'].includes(kind.value)) { piece(start, indent); return { token, markerToken: kind, name: kind.value, dimensions: [] }; }
     take('(');
     const node = { token, name: kind.value, dimensions: [] };
     if (['title', 'description'].includes(kind.value)) {
@@ -115,7 +129,7 @@ function parse(text, uri = '') {
       const metadata = [];
       while (is('@')) {
         const item = annotation(0);
-        if (!item.value) throw item.token;
+        if (!item.value && item.name !== 'flags') throw item.token;
         metadata.push(item);
       }
       if (is('type')) {
@@ -142,13 +156,14 @@ function parse(text, uri = '') {
       while (!is('}')) {
         if (declaration.kind === 'decodes') {
           const start = index; const token = take('-'); const order = take();
-          if (!/^-?\d+$/.test(order.value)) throw order;
+          if (!/^-?(?:0b[01]+|\d+)$/.test(order.value)) throw order;
           const code = name(); take(':');
           if (!peek().value.startsWith("'")) fail();
-          declaration.entries.push({ token, code, value: take() }); piece(start, 1);
+          declaration.entries.push({ token, order, code, value: take() }); piece(start, 1);
         } else {
           const metadata = [];
           while (is('@')) metadata.push(annotation(1));
+          if (metadata.some(a => a.name === 'flags')) fail();
           const start = index; const token = take(); const mode = token.value;
           if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static'].includes(mode)) throw token;
           if (['snapshot', 'scd', 'config', 'static'].includes(mode)) take('attr');
@@ -156,6 +171,7 @@ function parse(text, uri = '') {
           if (is('=')) {
             field.defaultToken = take();
             field.default = ['true', 'false'].includes(peek().value) ? take() : literal();
+            if (/^-?0b/.test(field.default.value)) throw field.default;
           }
           field.end = peek().start;
           declaration.fields.push(field); piece(start, 1);

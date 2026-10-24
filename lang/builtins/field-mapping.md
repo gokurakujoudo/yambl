@@ -3,7 +3,11 @@
 `attrs<类别, 目标>` 是字段 qualified name 的值类型。类别是
 [AttrCats](attr_cats.yambl) 的 code；目标是实体类型值，例如 Security 或
 `self.selected_kind::value`。候选包括目标的继承、自有、extend 及后代字段，
-按类别过滤，并排除 ID 和所有集合类型字段。普通 attr 属于 AttrCats.attr。
+按类别过滤，并排除 ID 和所有集合类型字段。普通 attr 属于 AttrCats.Attr。
+AttrCats 是 flags 字典：`AttrCats.Static + AttrCats.Config` 选择两个类别的并集；
+`AttrCats.None` 不选择任何字段。重复组合同一类别不会增加候选。
+`AttrCats.All` 选择全部类别；`AttrCats.All - AttrCats.Snapshot - AttrCats.Scd`
+排除 snapshot 和 scd。`+`、`-` 从左到右计算，重复移除不产生额外影响。
 
 固定目标 Entity 没有业务字段；动态 type<Entity> 字段在实例选择 Security 后，
 按 Security 的业务树选择字段。字段 qualified name 使用完整 namespace、
@@ -17,8 +21,9 @@ entity Security {
 }
 entity Selection {
     attr selected_kind: type<Security>
-    attr rules: field_mapping<AttrCats.config, self.selected_kind::value>
-    attr conditions: mapping<attrs<AttrCats.static, Security> as Attr, Attr::type>
+    attr rules: field_mapping<AttrCats.Config, self.selected_kind::value>
+    attr conditions: mapping<attrs<AttrCats.Static, Security> as Attr, Attr::type>
+    attr settings: field_mapping<AttrCats.Static + AttrCats.Config, Security>
 }
 ```
 

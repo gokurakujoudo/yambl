@@ -110,3 +110,9 @@ formatting. Root-configuration edits, including unsaved changes, refresh diagnos
 Type definitions (`type ... = ...`), attrs/mapping key bindings, exact constraints,
 and dependent `::type` / `::value` paths share the compiler syntax and diagnostics.
 The packaged lang tree includes language-defined AttrCats and field_mapping.
+
+`@flags` dictionaries accept distinct positive single-bit entry masks and provide
+`None` and `All` automatically. Codes declared in YAMBL use PascalCase. `+` adds
+flags and `-` removes them, left to right; repeated additions or removals have no
+further effect. Dictionary member completion includes both generated codes.
+Code references navigate to entries; generated members navigate to the dictionary.

@@ -7,6 +7,41 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { Service, rootFor, sources, inside, uriKey } = require('../service.cjs');
 
+test('flags codes complete, hover and navigate through unions and generated None', () => {
+  const service = new Service(() => {}), uri = 'untitled:flags';
+  const text = "@flags decodes Rights { - 0b01 Read: 'Read' - 2 Write: 'Write' } type chosen<a: code<Rights>> = string entity A { attr x: chosen<Rights.Read + Rights.Write + Rights.None - Rights.All> }";
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  assert.deepEqual(service.document(uri).diagnostics, []);
+  const request = (method, character) => service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 0, character } });
+  for (const name of ['Read', 'Write', 'None', 'All']) {
+    const definition = request('definition', text.lastIndexOf(name));
+    assert.equal(definition.uri, uri);
+    assert.equal(definition.range.start.character, text.indexOf(['None', 'All'].includes(name) ? 'Rights' : name));
+    assert.match(request('hover', text.lastIndexOf(name)).contents.value, name === 'None' ? /0 \(generated\)/ : new RegExp(name));
+  }
+  assert.match(request('hover', text.indexOf('flags')).contents.value, /single-bit/);
+  assert.match(request('hover', text.indexOf('attr x') + 5).contents.value, /Rights.Read \+ Rights.Write \+ Rights.None/);
+  const completions = request('completion', 0);
+  assert.ok(completions.items.some(i => i.label === 'flags'));
+  for (const suffix of ['', 'Wr', 'Write']) {
+    const current = text.replace('Rights.Write', 'Rights.' + suffix);
+    service.open.set(uri, { text: current, version: 2 }); service.refresh();
+    const result = request('completion', current.indexOf(' + Rights.') + 10 + suffix.length);
+    assert.deepEqual(result.items.map(i => i.label), ['Read', 'Write', 'None', 'All']);
+  }
+  for (const source of [
+    'entity A { attr x: attrs<AttrCats.All - AttrCats., A> }',
+    'entity A { attr x: attrs<AttrCats.Attr + AttrCats.No, A> }',
+  ]) {
+    service.open.set(uri, { text: source, version: 3 }); service.refresh();
+    const result = request('completion', source.indexOf(', A>'));
+    assert.deepEqual(result.items.map(i => i.label), ['Attr', 'Static', 'Config', 'Snapshot', 'Scd', 'None', 'All']);
+  }
+  const ordinary = "decodes Codes { - 1 Read: 'Read' } type chosen<a: code<Codes>> = string entity A { attr x: chosen<Codes.> }";
+  service.open.set(uri, { text: ordinary, version: 4 }); service.refresh();
+  assert.deepEqual(request('completion', ordinary.indexOf('Codes.>') + 6).items.map(i => i.label), ['Read']);
+});
+
 test('relationship markers navigate across files and react to unsaved edits', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-markers-')); t.after(() => fs.rmSync(root, { recursive: true }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''");
@@ -36,7 +71,7 @@ test('relationship markers navigate across files and react to unsaved edits', t 
 
 test('self navigation and completion accept arbitrary type fields and incomplete references', () => {
   const service = new Service(() => {}), uri = 'untitled:selection';
-  const text = 'entity Base { config attr arbitrary: type<Entity> attr ignored: string } entity Child inherits Base {} extend Child { attr data: field_mapping<AttrCats.config, self.arbitrary::value> }';
+  const text = 'entity Base { config attr arbitrary: type<Entity> attr ignored: string } entity Child inherits Base {} extend Child { attr data: field_mapping<AttrCats.Config, self.arbitrary::value> }';
   service.open.set(uri, { text, version: 1 }); service.refresh();
   const definition = service.feature('textDocument/definition', { textDocument: { uri }, position: { line: 0, character: text.lastIndexOf('arbitrary') } });
   assert.equal(definition.range.start.character, text.indexOf('arbitrary'));
@@ -242,7 +277,7 @@ entity Security { attr amount: money }
 entity Selection {
     attr security: Security
     attr amount: self.security::value.amount::type
-    attr selected: mapping<attrs<AttrCats.attr, Security> as Attr, Attr::type>
+    attr selected: mapping<attrs<AttrCats.Attr, Security> as Attr, Attr::type>
 }`;
   service.open.set(uri, { text, version: 1 }); service.refresh();
   assert.deepEqual(service.document(uri).diagnostics, []);

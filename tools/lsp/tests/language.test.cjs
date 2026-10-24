@@ -3,7 +3,39 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parse, format, range } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
-const cases = [...require('./cases.json'), ...require('./expression-cases.json')];
+const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json')];
+
+test('flags union selects categories, normalizes exact values and rejects invalid masks', () => {
+  const { Resolver, equal } = require('../language/expressions.cjs');
+  const doc = parse(require('./flags-cases.json')[0][0]);
+  const symbols = validate([doc]); assert.deepEqual(doc.diagnostics, []);
+  const selection = doc.scope.get('Selection'), resolver = new Resolver(doc, () => {}, symbols, selection);
+  const resolved = name => resolver.resolve(selection.effective.get(name).type);
+  assert.deepEqual(resolved('keys').members.map(t => t.name), ['integer', 'bool', 'decimal', 'date']);
+  assert.deepEqual(resolved('empty').members, []);
+  assert.deepEqual(resolved('identity').members.map(t => t.name), ['bool', 'decimal']);
+  assert.deepEqual(resolved('union').args[0].members.map(t => t.name), ['integer', 'bool', 'decimal']);
+  assert.equal(resolved('symbolic').args[0].exact, null);
+  assert.equal(resolved('symbolic_difference').args[0].exact, null);
+  assert.deepEqual(resolved('cleared').members, []);
+  assert.deepEqual(resolved('absent').members, []);
+  assert.ok(equal(resolved('all'), resolved('restored')));
+  assert.deepEqual(resolved('removed').members.map(t => t.name), ['integer', 'bool', 'decimal']);
+  const permission = owner => new Resolver(doc, () => {}, symbols, owner, true).resolve(owner.effective.get('permissions').type);
+  assert.ok(equal(permission(doc.scope.get('Child')), permission(doc.scope.get('Grandchild'))));
+  for (const [source] of require('./flags-cases.json').slice(1)) {
+    const invalid = parse(source); validate([invalid]); assert.ok(invalid.diagnostics.length, source);
+  }
+  for (const source of [
+    "@flags decodes Codes { - 0b1" + '0'.repeat(512) + " High: 'High' }",
+    `@flags decodes Codes { - ${1n << 512n} High: 'High' }`,
+    "decodes Codes { - 0 None: 'None' - 0b10 USD: 'USD' - -3 SomeValue: 'Some value' }",
+    "@flags decodes Codes {} type chosen<a: code<Codes>> = string entity A { attr x: chosen<Codes.None + Codes.None> }",
+    "@flags decodes Codes {} entity A { attr x: code<Codes> } entity B inherits A { @override attr x: exact<Codes.All> } entity C inherits B { @override attr x: exact<Codes.None> }",
+  ]) {
+    const valid = parse(source); validate([valid]); assert.deepEqual(valid.diagnostics, []);
+  }
+});
 
 test('transparent mappings retain exact branch contracts and business field identities', () => {
   const { Resolver, equal } = require('../language/expressions.cjs');
@@ -80,7 +112,7 @@ test('overload identities, branch defaults and effective mapping candidates', ()
   assert.equal(bond.identity, stock.identity); assert.equal(deep.identity, bond.identity);
   assert.deepEqual(mappingCandidates(scope.get('Base'), 'config', symbols).get('category').map(f => f.default.value), ['1', '2', '3']);
   assert.equal(mappingCandidates(scope.get('Base'), 'static', symbols).get('currency').length, 1);
-  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'static', symbols).keys()], ['entity_type']);
+  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'attr', symbols).keys()], ['entity_type']);
 });
 
 test('signature equivalence resolves imports, dimensions and quoted dictionaries', () => {
