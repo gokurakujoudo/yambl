@@ -43,7 +43,8 @@
 [语法说明](../syntex/syntax.md)记录了 `entity`、`extend`、`inherits`、`id`、
 `snapshot`、`scd`、`config`、`attr`、元信息和维度注解，以及 `namespace` 写法。
 通用注解声明、调用和重复规则见 [Decorator](../syntex/decorators.md)，
-内置签名在 [decorators.yambl](decorators.yambl) 中定义。
+内置签名和显式 `@targets` 范围在 [decorators.yambl](decorators.yambl) 中定义。
+[DecoratorTargets](decorator_targets.yambl) 是用于范围选择的 flags 字典。
 
 实体类型值 `type<T>` 和 `field_mapping<类别, 目标>` 见
 [实体类型与字段映射](field-mapping.md)。

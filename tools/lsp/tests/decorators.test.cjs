@@ -8,7 +8,7 @@ const { validate } = require('../language/validation.cjs');
 
 test('decorator declarations, keywords and builtins navigate and hover', () => {
   const service = new Service(() => {}), uri = 'untitled:decorators';
-  const text = "@allow_multiple decorator @tag(text: string = 'x', rank: integer = 1, *source?: string) @tag(text='y') entity A { @title(text='Name') attr name: string }";
+  const text = "@allow_multiple @targets(DecoratorTargets.All) decorator @tag(text: string = 'x', rank: integer = 1, *source?: string) @tag(text='y') entity A { @title(text='Name') attr name: string }";
   service.open.set(uri, { text, version: 1 }); service.refresh();
   assert.deepEqual(service.document(uri).diagnostics, []);
   const request = (method, character) => service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 0, character } });
@@ -26,7 +26,7 @@ test('decorator declarations, keywords and builtins navigate and hover', () => {
 
 test('incomplete decorator calls offer visible names and named value parameters', () => {
   const service = new Service(() => {}), uri = 'untitled:decorator-completion';
-  const prefix = "decorator @tag(text: string = 'x', rank: integer = 1, *source?: string) ";
+  const prefix = "@targets(DecoratorTargets.All) decorator @tag(text: string = 'x', rank: integer = 1, *source?: string) ";
   for (const [tail, labels] of [
     ['@', ['tag', 'title', 'allow_multiple']],
     ['@ta', ['tag', 'title', 'allow_multiple']],
@@ -47,12 +47,44 @@ test('incomplete decorator calls offer visible names and named value parameters'
 });
 
 test('captured field owners and normalized metadata distinguish valid overrides', () => {
-  const text = "decorator @proxy(target: type<self::entity>) decorator @tag(text: string = 'x') entity Holding { @proxy(Holding) @tag attr security: Security } entity Security {} entity Child inherits Holding { @override @proxy(Holding) @tag(text='x') attr security: Security }";
+  const text = "@targets(DecoratorTargets.All) decorator @proxy(target: type<self::entity>) @targets(DecoratorTargets.All) decorator @tag(text: string = 'x') entity Holding { @proxy(Holding) @tag attr security: Security } entity Security {} entity Child inherits Holding { @override @proxy(Holding) @tag(text='x') attr security: Security }";
   const doc = parse(text); validate([doc]);
   assert.ok(doc.diagnostics.some(d => d.message === 'incompatible decorator argument'));
   const valid = parse(text.replace('@proxy(Holding) @tag(text=', '@proxy(Child) @tag(text=')); validate([valid]);
   // The owner-dependent arguments differ, so the metadata contract differs too.
   assert.ok(valid.diagnostics.some(d => d.message.includes('override signature mismatch')));
-  const defaults = parse("decorator @tag(text: string = 'x') entity A { @tag attr x: string } entity B inherits A { @override @tag(text='x') attr x: string }");
+  const defaults = parse("@targets(DecoratorTargets.All) decorator @tag(text: string = 'x') entity A { @tag attr x: string } entity B inherits A { @override @tag(text='x') attr x: string }");
   validate([defaults]); assert.deepEqual(defaults.diagnostics, []);
+});
+
+test('explicit target contracts provide diagnostics, completion, hover and navigation', () => {
+  const service = new Service(() => {}), uri = 'untitled:targets';
+  let text = '@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot + AttrCats.Scd) decorator @tag() entity A { @tag snapshot attr x: string }';
+  const open = source => { text = source; service.open.set(uri, { text, version: 1 }); service.refresh(); };
+  const request = (method, character) => service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 0, character } });
+  open(text);
+  assert.deepEqual(service.document(uri).diagnostics, []);
+  assert.match(request('hover', text.lastIndexOf('@tag') + 1).contents.value, /^@targets\(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot \+ AttrCats.Scd\)/);
+  assert.match(request('definition', 1).uri, /builtins\/decorators.yambl$/);
+  assert.match(request('definition', text.indexOf('categories=')).uri, /builtins\/decorators.yambl$/);
+  const target = request('definition', text.indexOf('EntityAttr'));
+  assert.match(target.uri, /builtins\/decorator_targets.yambl$/);
+  const builtin = require('node:fs').readFileSync(require('node:url').fileURLToPath(target.uri), 'utf8');
+  assert.match(builtin.split('\n')[target.range.start.line], /EntityAttr:/);
+  const callStart = text.lastIndexOf('@tag');
+  open(text.replace('snapshot attr', 'static attr'));
+  assert.deepEqual(service.document(uri).diagnostics.map(d => [d.message, d.range.start.character]), [['decorator tag does not allow this target', callStart]]);
+  open('decorator @tag()');
+  assert.deepEqual(service.document(uri).diagnostics.map(d => d.message), ['decorator requires explicit @targets']);
+  for (const [source, labels] of [
+    ['@', ['targets']],
+    ['@targets(', ['targets', 'categories']],
+    ['@targets(DecoratorTargets.EntityAttr, ', ['categories']],
+    ['@targets(DecoratorTargets.', ['Entity', 'Value', 'Decodes', 'Type', 'Decorator', 'Id', 'EntityAttr', 'ValueAttr', 'None', 'All']],
+    ['@targets(DecoratorTargets.EntityAttr, categories=AttrCats.', ['Attr', 'Static', 'Config', 'Snapshot', 'Scd', 'None', 'All']],
+  ]) {
+    open(source);
+    const result = request('completion', text.length);
+    for (const label of labels) assert.ok(result.items.some(i => i.label === label), source + ': ' + label);
+  }
 });

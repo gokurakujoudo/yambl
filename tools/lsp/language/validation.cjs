@@ -77,7 +77,6 @@ function validate(documents) {
         pendingTypes.push([doc, field.type, target, field.metadata.some(a => ['overload', 'override'].includes(a.name))]);
         const markers = field.metadata.filter(a => ['overload', 'override'].includes(a.name));
         if (markers.length > 1) issue(doc, markers.at(-1).token, 'only one overload or override marker is allowed');
-        if (markers.length && field.mode === 'id') issue(doc, markers[0].token, 'field markers require an attr');
         if (decl.kind === 'value' && !['attr', 'static'].includes(field.mode)) issue(doc, field.token, 'value fields must be attr or static attr');
         if (field.default) {
           if (field.mode !== 'config') issue(doc, field.defaultToken, 'defaults are currently supported only on config attr');
@@ -138,7 +137,10 @@ function formatType(node) {
 
 function describe(target) {
   if (target.kind === 'decorator_parameter') return `${target.pair ? '*' : ''}${target.name.value}${target.optional ? '?' : ''}: ${formatType(target.type)}${target.default ? ' = ' + formatType(target.default) : ''}`;
-  if (target.kind === 'decorator') return `${target.metadata.some(a => a.name === 'allow_multiple') ? '@allow_multiple\n' : ''}decorator @${target.name.value}(${target.parameters.map(describe).join(', ')})`;
+  if (target.kind === 'decorator') {
+    const targets = target.metadata.filter(a => a.name === 'targets').map(a => `@targets(${a.arguments.map(arg => (arg.mode === 'keyword' ? arg.key.value + '=' : '') + formatType(arg.type)).join(', ')})\n`).join('');
+    return `${targets}${target.metadata.some(a => a.name === 'allow_multiple') ? '@allow_multiple\n' : ''}decorator @${target.name.value}(${target.parameters.map(describe).join(', ')})`;
+  }
   if (target.kind === 'code') return `code ${target.name.value}${target.generated ? ' = ' + (target.name.value === 'None' ? '0' : 'all declared flags') + ' (generated)' : ': ' + stringValue(target.value.value) + ' (' + target.order.value + ')'}`;
   const details = ['title', 'description'].flatMap(name => (target.metadata || []).filter(a => a.name === name && a.value).map(a => `${name}: ${stringValue(a.value.value)}`));
   const mode = ['snapshot', 'scd', 'config', 'static'].includes(target.mode) ? target.mode + ' attr' : target.mode;

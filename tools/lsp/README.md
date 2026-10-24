@@ -109,7 +109,7 @@ formatting. Root-configuration edits, including unsaved changes, refresh diagnos
 
 Type definitions (`type ... = ...`), attrs/mapping key bindings, exact constraints,
 and dependent `::type` / `::value` paths share the compiler syntax and diagnostics.
-The packaged lang tree includes language-defined AttrCats and field_mapping.
+The packaged lang tree includes language-defined AttrCats, DecoratorTargets, decorator signatures and field_mapping.
 
 `@flags` dictionaries accept distinct positive single-bit entry masks and provide
 `None` and `All` automatically. Codes declared in YAMBL use PascalCase. `+` adds
@@ -123,7 +123,10 @@ The language service resolves `decorator @name(...)` declarations from the curre
 namespace, imports and bundled built-ins. It checks positional and named values,
 caller-defined key/type pairs, defaults, repetition and captured `self` constraints.
 Completion after `@` lists visible decorators; inside a call it offers ordinary
-parameter names with `=`. Hovers show signatures, defaults and `@allow_multiple`.
+parameter names with `=`. Hovers show signatures, defaults, explicit `@targets` scopes and `@allow_multiple`.
+Every decorator must declare `@targets`; diagnostics check its target kinds and
+attribute categories from the language sources. Target codes, generated All/None
+and named arguments complete and navigate to their definitions.
 Decorator calls navigate to declarations and named arguments to formal parameters.
 Override and overload calls retain their field-relationship navigation.
 `::entity` selects a concrete field descriptor's declaring entity.

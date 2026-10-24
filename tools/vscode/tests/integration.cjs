@@ -116,9 +116,9 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     const flagTargets = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', flagsUri, flagsDoc.positionAt(flagsText.lastIndexOf('Write')));
     assert.equal(flagTargets[0].range.start.character, flagsText.indexOf('Write'));
     const zeroHover = await vscode.commands.executeCommand('vscode.executeHoverProvider', flagsUri, flagsDoc.positionAt(flagsText.lastIndexOf('None')));
-    assert.match(zeroHover[0].contents[0].value.replaceAll('&nbsp;', ' '), /0 \(generated\)/);
+    assert.ok(zeroHover[0].contents[0].value.includes(new vscode.MarkdownString().appendText('0 (generated)').value));
     assert.deepEqual(vscode.languages.getDiagnostics(flagsUri).map(d => d.message), []);
-    const decoratorText = "namespace metadata @allow_multiple decorator @note(text: string = 'Note') @note(text='Review') entity Annotated {}";
+    const decoratorText = "namespace metadata @allow_multiple @targets(DecoratorTargets.All) decorator @note(text: string = 'Note') @note(text='Review') entity Annotated {}";
     const decoratorUri = vscode.Uri.file(path.join(root, 'decorators.yambl'));
     fs.writeFileSync(decoratorUri.fsPath, decoratorText);
     const decoratorDoc = await vscode.workspace.openTextDocument(decoratorUri);
@@ -126,7 +126,10 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     const parameterTargets = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', decoratorUri, decoratorDoc.positionAt(decoratorText.indexOf("text='Review'")));
     assert.equal(parameterTargets[0].range.start.character, decoratorText.indexOf('text: string'));
     const decoratorHover = await vscode.commands.executeCommand('vscode.executeHoverProvider', decoratorUri, decoratorDoc.positionAt(decoratorText.lastIndexOf('@note') + 1));
-    assert.match(decoratorHover[0].contents[0].value.replaceAll('&nbsp;', ' '), /@allow_multiple/);
+    assert.ok(decoratorHover[0].contents[0].value.includes(new vscode.MarkdownString().appendText('@allow_multiple').value));
+    assert.ok(decoratorHover[0].contents[0].value.includes(new vscode.MarkdownString().appendText('@targets(DecoratorTargets.All)').value));
+    const scopeTargets = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', decoratorUri, decoratorDoc.positionAt(decoratorText.indexOf('@targets') + 1));
+    assert.match(scopeTargets[0].uri.path, /builtins\/decorators.yambl$/);
     const parameterCompletions = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', decoratorUri, decoratorDoc.positionAt(decoratorText.indexOf("text='Review'")));
     assert.ok(parameterCompletions.items.some(item => item.label === 'text'));
     assert.deepEqual(vscode.languages.getDiagnostics(decoratorUri).map(d => d.message), []);

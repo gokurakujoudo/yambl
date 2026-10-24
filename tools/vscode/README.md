@@ -12,7 +12,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.7.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.8.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -96,7 +96,7 @@ TextMate 高亮检查。
 
 Type definitions (`type ... = ...`), attrs/mapping key bindings, exact constraints,
 and dependent `::type` / `::value` paths share the compiler syntax and diagnostics.
-The packaged lang tree includes language-defined AttrCats and field_mapping.
+The packaged lang tree includes language-defined AttrCats, DecoratorTargets, decorator signatures and field_mapping.
 
 ## Decorators
 
@@ -104,7 +104,10 @@ The language service resolves `decorator @name(...)` declarations from the curre
 namespace, imports and bundled built-ins. It checks positional and named values,
 caller-defined key/type pairs, defaults, repetition and captured `self` constraints.
 Completion after `@` lists visible decorators; inside a call it offers ordinary
-parameter names with `=`. Hovers show signatures, defaults and `@allow_multiple`.
+parameter names with `=`. Hovers show signatures, defaults, explicit `@targets` scopes and `@allow_multiple`.
+Every decorator must declare `@targets`; diagnostics check its target kinds and
+attribute categories from the language sources. Target codes, generated All/None
+and named arguments complete and navigate to their definitions.
 Decorator calls navigate to declarations and named arguments to formal parameters.
 Override and overload calls retain their field-relationship navigation.
 `::entity` selects a concrete field descriptor's declaring entity.

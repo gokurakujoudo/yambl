@@ -43,6 +43,13 @@ async function main() {
   }
 
   expectScope('@flags', '@flags', 'entity.name.function.yambl');
+  expectScope('@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot + AttrCats.Scd)', '@targets', 'entity.name.function.yambl');
+  expectScope('@targets(DecoratorTargets.EntityAttr)', 'DecoratorTargets', 'support.type.yambl');
+  expectScope('@targets(DecoratorTargets.EntityAttr)', 'EntityAttr', 'constant.other.yambl');
+  expectScope('@targets(DecoratorTargets.All - DecoratorTargets.Id)', 'All', 'constant.other.yambl');
+  expectScope('@targets(DecoratorTargets.All - DecoratorTargets.Id)', '-', 'keyword.operator.bitwise.yambl');
+  expectScope('@targets(DecoratorTargets.None)', 'None', 'constant.other.yambl');
+  expectScope('@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot)', 'categories', 'variable.parameter.yambl');
   expectScope('decorator @tag(text: string)', 'decorator', 'keyword.declaration.yambl');
   expectScope('decorator @tag(text: string)', '@tag', 'entity.name.function.yambl');
   expectScope('@allow_multiple', '@allow_multiple', 'entity.name.function.yambl');

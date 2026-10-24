@@ -29,6 +29,7 @@ function argumentType(resolver, syntax, expected) {
 }
 
 function checkParameters(declaration, issue, symbols) {
+  if (!declaration.metadata.some(a => a.name === 'targets')) issue(declaration.doc, declaration.token, 'decorator requires explicit @targets');
   const seen = new Set(); let pairSeen = false, optionalSeen = false;
   const resolver = new Resolver(declaration.doc, issue, symbols, null);
   for (const formal of declaration.parameters) {
@@ -48,7 +49,7 @@ function checkParameters(declaration, issue, symbols) {
   }
 }
 
-function bindCall(call, node, issue, symbols) {
+function bindCall(call, node, issue, symbols, values = null) {
   const doc = node.doc, name = call.name;
   const actualResolver = new Resolver(doc, issue, symbols, null, false, new Map([['self', capture(node, symbols)]]));
   const declaration = doc.scope.get(name);
@@ -84,7 +85,10 @@ function bindCall(call, node, issue, symbols) {
     if (expected.kind === 'collection') formalResolver.issue(formal.type, 'decorator parameters cannot be collections');
     const argument = supplied.get(name);
     if (!argument) {
-      if (formal.default) bound.push([name, '', canonical(argumentType(formalResolver, formal.default, expected))]);
+      if (formal.default) {
+        const actual = argumentType(formalResolver, formal.default, expected);
+        bound.push([name, '', canonical(actual)]); values?.set(name, actual);
+      }
       else if (!formal.optional) actualResolver.issue(call, `missing decorator argument: ${name}`);
       continue;
     }
@@ -92,12 +96,32 @@ function bindCall(call, node, issue, symbols) {
       const actual = actualResolver.resolve(argument.type);
       if (actual.kind === 'collection' || !accepts(expected, actual, symbols)) actualResolver.issue(argument.type, 'incompatible decorator pair type');
       bound.push([name, argument.key.value, canonical(actual)]);
+      values?.set(name, actual);
     } else {
-      bound.push([name, '', canonical(argumentType(actualResolver, argument.type, expected))]);
+      const actual = argumentType(actualResolver, argument.type, expected);
+      bound.push([name, '', canonical(actual)]); values?.set(name, actual);
       if (['title', 'description'].includes(call.name) && argument.type.quoted) call.value = argument.type.token;
     }
   }
   return JSON.stringify([declaration.key, bound]);
+}
+
+function checkTarget(call, node, declaration, issue, symbols) {
+  const definition = node.doc.scope.get(call.name);
+  const targets = definition.metadata.find(a => a.name === 'targets');
+  if (!targets) return;
+  const values = new Map(); let invalid = false;
+  bindCall(targets, definition, () => { invalid = true; }, symbols, values);
+  if (invalid) return;
+  let mode = node.mode;
+  let kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type_alias: 'Type', decorator: 'Decorator' }[node.kind];
+  if (!node.kind) {
+    kind = mode === 'id' ? 'Id' : declaration.kind === 'value' ? 'ValueAttr' : 'EntityAttr';
+    if (kind === 'ValueAttr') mode = 'static';
+  }
+  let allowed = (values.get('targets')?.exact || '').split('+').includes(kind);
+  if (['EntityAttr', 'ValueAttr'].includes(kind)) allowed &&= (values.get('categories')?.exact || '').split('+').includes(mode[0].toUpperCase() + mode.slice(1));
+  if (!allowed) issue(node.doc, call.token, `decorator ${call.name} does not allow this target`);
 }
 
 function checkDecorators(documents, issue, symbols) {
@@ -109,15 +133,9 @@ function checkDecorators(documents, issue, symbols) {
         const name = call.name;
         bindCall(call, node, issue, symbols);
         const definition = doc.scope.get(name);
+        if (definition?.kind === 'decorator') checkTarget(call, node, declaration, issue, symbols);
         if (definition?.kind === 'decorator' && seen.has(name) && (name === 'allow_multiple' || !definition.metadata.some(a => a.name === 'allow_multiple'))) issue(doc, call.token, `duplicate decorator: ${name}`);
         seen.add(name);
-        let message = '';
-        if (name === 'allow_multiple' && node.kind !== 'decorator') message = 'allow_multiple requires a decorator declaration';
-        else if (name === 'flags' && node.kind !== 'decodes') message = 'flags requires a Decodes declaration';
-        else if (['override', 'overload'].includes(name) && (node.kind || node.mode === 'id' || declaration.kind === 'value')) message = 'field markers require an entity attr';
-        else if (name === 'temporal' && !['snapshot', 'scd'].includes(node.mode)) message = 'temporal requires snapshot or scd attr';
-        else if (name === 'dimension' && (!['attr', 'snapshot', 'scd'].includes(node.mode) || declaration.kind === 'value')) message = 'dimension requires attr, snapshot or scd';
-        if (message) issue(doc, call.token, message);
         if (['temporal', 'dimension'].includes(name)) {
           if (name === 'dimension' && call.dimensions.length) {
             const first = new Resolver(doc, () => {}, symbols, null, false, new Map([['self', capture(node, symbols)]])).resolve(call.dimensions[0].type);

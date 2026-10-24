@@ -345,6 +345,6 @@ final value。字段只允许 attr 或等价的 static attr，天然 static，�
 ## Decorator 声明
 
 `decorator @name(...)` 定义有类型的元信息；参数绑定、`*` pair、默认值、
-`self::entity` 和 `@allow_multiple` 见 [Decorator 规则](decorators.md)。
+`self::entity`、必须显式声明的 `@targets` 范围和 `@allow_multiple` 见 [Decorator 规则](decorators.md)。
 `@title(text='Name')` 与 `@title('Name')` 等价。
 `@temporal` 的 date 参数由调用者命名，不限于 `as_of_date`。

@@ -5,6 +5,7 @@ Decorator 为定义添加有类型的元信息。声明和调用使用同一套 
 [decorators.yambl](../builtins/decorators.yambl)。
 
 ```text
+@targets(DecoratorTargets.All)
 decorator @note(text: string = 'Model note', *variation: string, *selector?: Hierarchy)
 
 @note(text='Price source', source: code<'PriceSources'>)
@@ -26,9 +27,51 @@ Type 按现有类型兼容规则检查。每个 `*` 参数只接收一个 pair�
 也保留位置/命名调用方式。调用中的等号写为 `text='Name'`，声明默认值写为
 `text: string = 'Name'`。声明和调用均不接受尾随逗号。
 
+## 声明适用范围
+
+[DecoratorTargets](../builtins/decorator_targets.yambl) 是自举的 flags decodes。
+它包含以下对象类别：
+
+| Code | 对象 |
+| --- | --- |
+| Entity | 实体声明 |
+| Value | 结构化值声明 |
+| Decodes | 字典声明 |
+| Type | 类型别名声明 |
+| Decorator | decorator 声明 |
+| Id | 实体 ID 字段 |
+| EntityAttr | 实体自身或 extend 中的属性 |
+| ValueAttr | 结构化值中的属性 |
+
+`None` 与 `All` 自动生成；`+` 合并范围，`-` 移除范围，重复操作幂等。
+`None` 声明不允许任何应用对象；`All` 不开放 extend 块、字典条目或形式参数。
+
+```text
+@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot + AttrCats.Scd)
+decorator @observation(text: string)
+
+entity Security {
+    @observation('Independent price snapshot')
+    snapshot attr price: decimal
+}
+```
+
+`@targets` 的签名为 `targets: code<DecoratorTargets>` 与
+`categories: code<AttrCats> = AttrCats.All`。普通调用参数绑定规则同样适用，
+例如 `@targets(categories=AttrCats.Static, targets=DecoratorTargets.EntityAttr)`。
+`categories` 只筛选属性类别，对实体声明、ID 等其他对象类别不生效。
+value 中的 `attr` 和 `static attr` 都属于 `AttrCats.Static`；
+实体中的普通 `attr` 属于 `AttrCats.Attr`。集合属性也按所属对象和类别匹配。
+
+`@targets` 自身声明 `@targets(DecoratorTargets.Decorator)`。
+检查器先收集全部声明，再解析范围和调用，因此支持前向引用、自身修饰以及
+`@flags`、DecoratorTargets、`@targets` 之间的相互引用，无需执行 decorator。
+范围表达式在被修饰的 decorator 声明文件作用域内解析，跨文件调用保留该范围。
+
 ## 捕获被修饰对象
 
 ```text
+@targets(DecoratorTargets.EntityAttr)
 decorator @proxy(target: type<self::entity>)
 
 entity Security {}
@@ -53,6 +96,7 @@ extend 中的字段归属被扩展实体；继承但未重声明的字段保留�
 
 ```text
 entity Security { id security_id: string }
+@targets(DecoratorTargets.Entity)
 decorator @related(target: Security)
 
 @related(target='SEC001')
@@ -71,6 +115,7 @@ entity Holding {}
 ```text
 @title(text='Model note')
 @allow_multiple
+@targets(DecoratorTargets.All)
 decorator @note(text: string)
 
 @note('Reviewed')
@@ -78,12 +123,14 @@ decorator @note(text: string)
 type label = string
 ```
 
-自定义 decorator 可修饰 entity、value、decodes、id/attr、类型别名和 decorator 声明。
+每个 decorator 必须通过 `@targets(...)` 显式声明适用范围；缺少声明时报错，
+即使该 decorator 尚未使用。允许所有对象也必须写 `@targets(DecoratorTargets.All)`。
 extend 块、字典条目和形式参数不能添加 decorator。
 `@allow_multiple` 仅修饰 decorator 声明，自身不可重复。
 未标记的 decorator 在一个对象上最多出现一次；标记后每次调用均保留，包括相同调用。
 
-内置注解保留各自的适用位置和特殊行为。dimension 标记为 allow_multiple，
+内置注解的适用范围也在语言定义中声明，检查器统一读取 `@targets` 验证。
+内置特殊行为继续由检查器实现。dimension 标记为 allow_multiple，
 每次声明一个维度及可选 Hierarchy 参数。temporal 接收一个由调用者命名的 date 参数，
 如 `@temporal(effective_date: date)`，仅用于 snapshot/scd attr。
 flags 仅用于字典；override/overload 仅用于实体 attr。

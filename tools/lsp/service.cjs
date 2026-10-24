@@ -56,6 +56,7 @@ const help = {
   title: 'Short display title.', description: 'Descriptive metadata.',
   temporal: 'One caller-named date parameter on snapshot or scd attr.', dimension: 'Independent data dimension with an optional Hierarchy selector.',
   decorator: 'Declare typed metadata with value parameters and caller-defined key/type pairs.',
+  targets: 'Declare the allowed definition kinds and optional attribute categories for a decorator.',
   allow_multiple: 'Allow repeated uses of the decorated decorator on one definition.',
 };
 
@@ -200,7 +201,8 @@ class Service {
           }
         }
         if (codePath) {
-          const dictionary = completionDoc.scope.get(codePath[1]);
+          const scope = completionDoc.errors.length ? this.completionScope(doc, codePath.index, offset) : completionDoc.scope;
+          const dictionary = scope.get(codePath[1]);
           return { isIncomplete: false, items: dictionary?.kind === 'decodes' ? codeEntries(dictionary).map(e => ({ label: e.name.value, kind: 20, detail: describe(e) })) : [] };
         }
         const declaration = completionDoc.declarations.find(d => d.bodyStart <= offset && offset <= d.end);
