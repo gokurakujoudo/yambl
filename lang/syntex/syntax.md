@@ -146,7 +146,7 @@ attr y: Decodes  # 合理取值为 Currencies
 
 `@flags` 将 decodes 条目数值解释为位掩码，显式条目必须是互不重复的正单比特。
 每个 flags 字典自动提供 `None = 0` 和全选值 `All`，禁止在源文件重复定义这两个 code。
-`AttrCats.Attr + AttrCats.Config` 表示同一 flags 字典的按位并集；重复项不改变结果，
+`AttrCats.Static + AttrCats.Config` 表示同一 flags 字典的按位并集；重复项不改变结果，
 None 不增加位。该组合仍是该字典的 code，可以用于 attrs、field_mapping 和泛型参数。
 `AttrCats.All - AttrCats.Snapshot` 移除 Snapshot；重复移除只生效一次。
 `+` 和 `-` 同优先级、从左到右计算，均低于 `.` 和 `::`。
@@ -270,7 +270,7 @@ entity Bond inherits Security {
 
 | 属性形式 | 含义 |
 | --- | --- |
-| `attr` | 普通属性，不自动用于条件筛选 |
+| `attr` | `static attr` 的简写，可用于条件筛选 |
 | `static attr` | 时间无关、可用于索引筛选的属性 |
 | `snapshot attr` | 按时间参数描述独立快照 |
 | `scd attr` | SCD Type 2 时间相关属性，保留变化历史 |
@@ -280,7 +280,7 @@ entity Bond inherits Security {
 `@dimension(source: code<'PriceSources'>, price_dimension: Hierarchy)` 描述一个维度，
 用于同一实体、同一时间（如适用）的多份独立数据。多个注解定义正交维度。
 每个注解第一参数必须为 string（含参数形式）或 code；可选第二参数必须为 Hierarchy。
-仅普通、snapshot、scd 属性可使用 dimension，id、static、config 和 value 字段禁止。
+static（包括普通 attr）、snapshot、scd 属性可使用 dimension；id、config 和 value 字段禁止。
 同一字段的维度、Hierarchy 参数及时间参数名称均为 snake_case，且互不重复。
 
 显式 source 优先；没有 source 时可给 price_dimension 引用，按 Hierarchy 的

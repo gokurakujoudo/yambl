@@ -31,11 +31,11 @@ test('flags codes complete, hover and navigate through unions and generated None
   }
   for (const source of [
     'entity A { attr x: attrs<AttrCats.All - AttrCats., A> }',
-    'entity A { attr x: attrs<AttrCats.Attr + AttrCats.No, A> }',
+    'entity A { attr x: attrs<AttrCats.Static + AttrCats.No, A> }',
   ]) {
     service.open.set(uri, { text: source, version: 3 }); service.refresh();
     const result = request('completion', source.indexOf(', A>'));
-    assert.deepEqual(result.items.map(i => i.label), ['Attr', 'Static', 'Config', 'Snapshot', 'Scd', 'None', 'All']);
+    assert.deepEqual(result.items.map(i => i.label), ['Static', 'Config', 'Snapshot', 'Scd', 'None', 'All']);
   }
   const ordinary = "decodes Codes { - 1 Read: 'Read' } type chosen<a: code<Codes>> = string entity A { attr x: chosen<Codes.> }";
   service.open.set(uri, { text: ordinary, version: 4 }); service.refresh();
@@ -163,8 +163,8 @@ test('attribute hover includes metadata, modifiers and complete generic/paramete
   const doc = service.document(uri);
   const hover = field => service.feature('textDocument/hover', { textDocument: { uri }, position: field.name.range.start }).contents.value;
   assert.equal(hover(doc.declarations[0].fields[0]), "snapshot attr weights: mapping<string[regex: '[A-Z]+'], decimal[precision: 18, scale: 4]>\n\ntitle: Weights\n\ndescription: Security's value");
-  assert.equal(hover(doc.declarations[0].fields[1]), "attr codes: values<code<'Currencies'>>");
-  assert.equal(hover(doc.declarations[0].fields[2]), 'attr plain: decimal[18, 4]');
+  assert.equal(hover(doc.declarations[0].fields[1]), "static attr codes: values<code<'Currencies'>>");
+  assert.equal(hover(doc.declarations[0].fields[2]), 'static attr plain: decimal[18, 4]');
 });
 
 test('Decodes references follow symbol identity and quoted names retain string styling', t => {
@@ -292,7 +292,7 @@ entity Security { attr amount: money }
 entity Selection {
     attr security: Security
     attr amount: self.security::value.amount::type
-    attr selected: mapping<attrs<AttrCats.Attr, Security> as Attr, Attr::type>
+    attr selected: mapping<attrs<AttrCats.Static, Security> as Attr, Attr::type>
 }`;
   service.open.set(uri, { text, version: 1 }); service.refresh();
   assert.deepEqual(service.document(uri).diagnostics, []);

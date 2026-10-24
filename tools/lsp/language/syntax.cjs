@@ -192,7 +192,7 @@ function parse(text, uri = '') {
           const start = index; const token = take(); const mode = token.value;
           if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static'].includes(mode)) throw token;
           if (['snapshot', 'scd', 'config', 'static'].includes(mode)) take('attr');
-          const field = { token, mode, name: name(), metadata, doc }; take(':'); field.type = type();
+          const field = { token, mode: mode === 'attr' ? 'static' : mode, name: name(), metadata, doc }; take(':'); field.type = type();
           if (is('=')) {
             field.defaultToken = take();
             field.default = ['true', 'false'].includes(peek().value) ? take() : literal();

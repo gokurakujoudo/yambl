@@ -61,7 +61,7 @@ entity Security {
 例如 `@targets(categories=AttrCats.Static, targets=DecoratorTargets.EntityAttr)`。
 `categories` 只筛选属性类别，对实体声明、ID 等其他对象类别不生效。
 value 中的 `attr` 和 `static attr` 都属于 `AttrCats.Static`；
-实体中的普通 `attr` 属于 `AttrCats.Attr`。集合属性也按所属对象和类别匹配。
+实体中的普通 `attr` 属于 `AttrCats.Static`。集合属性也按所属对象和类别匹配。
 
 `@targets` 自身声明 `@targets(DecoratorTargets.Decorator)`。
 检查器先收集全部声明，再解析范围和调用，因此支持前向引用、自身修饰以及

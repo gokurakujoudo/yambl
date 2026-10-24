@@ -42,7 +42,7 @@ test('result constants cannot shadow declarations or gain assignment and propaga
     }
     for (const text of [
       `@title(${name}) entity A {}`, `entity A { attr x: exact<${name}> }`,
-      `entity A { attr x: ${name} + AttrCats.Attr }`,
+      `entity A { attr x: ${name} + AttrCats.Static }`,
       `@targets(DecoratorTargets.All) decorator @note(text: string = ${name})`,
     ]) {
       const doc = parse(text); validate([doc]);

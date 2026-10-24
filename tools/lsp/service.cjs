@@ -64,7 +64,7 @@ function decoratorSites(doc, start, used) {
     if (next === 'id') return owner === 'entity' ? [['Id']] : [];
     if (next && next !== '}' && !['attr', 'static', 'config', 'snapshot', 'scd'].includes(next)) return [];
     if (owner === 'value') return !next || ['}', 'attr', 'static'].includes(next) ? [['ValueAttr', 'static']] : [];
-    if (next && next !== '}') return [['EntityAttr', next]];
+    if (next && next !== '}') return [['EntityAttr', next === 'attr' ? 'static' : next]];
     return owner === 'entity' ? [['Id'], ['EntityAttr']] : [['EntityAttr']];
   }
   const kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type: 'Type', decorator: 'Decorator', final: 'Entity' }[next];

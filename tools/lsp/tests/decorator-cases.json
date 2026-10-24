@@ -63,7 +63,7 @@
     "decodes Codes { - 1 One: 'One' } @targets(DecoratorTargets.All) decorator @tag(dict: Decodes, code: code<Codes>, target: type<Entity>) @tag(Codes, Codes.One, A) entity A {}"
   ],
   [
-    "@targets(DecoratorTargets.All) decorator @tag(flags: code<AttrCats> = AttrCats.All - AttrCats.Attr) @tag(AttrCats.Config + AttrCats.Static) entity A {}"
+    "@targets(DecoratorTargets.All) decorator @tag(flags: code<AttrCats> = AttrCats.All - AttrCats.Static) @tag(AttrCats.Config + AttrCats.Static) entity A {}"
   ],
   [
     "@targets(DecoratorTargets.All) decorator @tag(text: string = 'x') entity A { @tag attr x: string } entity B inherits A { @override @tag(text='x') attr x: string }"
@@ -456,7 +456,7 @@
     "@targets(DecoratorTargets.EntityAttr, categories=AttrCats.None) decorator @tag() entity A { @tag attr x: string }"
   ],
   [
-    "@targets(DecoratorTargets.ValueAttr, categories=AttrCats.Attr) decorator @tag() value item { @tag attr x: string }"
+    "@targets(DecoratorTargets.ValueAttr, categories=AttrCats.Static) decorator @tag() value item { @tag attr x: string }"
   ],
   [
     "@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Config) decorator @tag() entity A { @tag static attr x: string }"

@@ -1,17 +1,16 @@
 # 单文件 JSON 中间模型
 
 编译路径为模型仓库 → `model.yambl-ir.json` → 独立加载和静态校验。
-JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。本阶段不提供数据库、文件存储、
-Python 类型或取数 API 生成器，也不执行实例读取。
+JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、表结构参考文档和 Python 读取包由独立生成步骤产生。
 
 ## 修订与独立性
 
-首版 `format_revision` 为整数 `1`。格式尚未固化，不承诺修订间兼容；结构变化时递增
+当前 `format_revision` 为整数 `2`。格式尚未固化，不承诺修订间兼容；结构变化时递增
 修订号。读取器拒绝不支持的修订号，要求重新编译，不自动迁移。
 
 文件完整保存本次采用的内置声明、原语目录和七个结果常量的含义。独立校验仅依赖
 文件内容和该修订的检查算法，不读取原仓库，不加载本机另一版内置模型，不查询外部
-字典数据。七个常量没有新增赋值、存储编码、回退、比较或运算传播规则。
+字典数据。IR 不附加结果常量的赋值、回退、比较或运算传播规则；SQLite 的读取和状态编码约定见 [存储与读取](storage.md)。
 
 ## 顶层契约
 
@@ -56,7 +55,7 @@ Python 类型或取数 API 生成器，也不执行实例读取。
 
 字段保存 `name`、逻辑 `identity`、声明 `implementation`、`category`、原始解析表达式
 `expression`、别名展开表达式 `expanded`、有效 `type`、`default`、`decorators`、
-`extension` 和 `source`。`category` 为 `id/attr/static/config/snapshot/scd`。
+`extension` 和 `source`。`category` 为 `id/static/config/snapshot/scd`。
 `extension` 标记来源是否为 extend；它不会创建额外实体。
 
 `effective` 每项包含 `{name, implementation, identity}`，直接说明该实体采用哪个
@@ -106,7 +105,7 @@ Python 类型或取数 API 生成器，也不执行实例读取。
 - code 保存字典身份和 code；flags 保存字典身份、排序后的独立选择项与十进制 mask。
 - 可静态求值的 flags 运算归一化为独立选择项；动态操作继续保留结构化节点。
 
-例如，`AttrCats.Attr + AttrCats.Config + AttrCats.Attr` 绑定后的 flags 值片段为：
+例如，`AttrCats.Static + AttrCats.Config + AttrCats.Static` 绑定后的 flags 值片段为：
 
 ```json
 {
@@ -142,7 +141,7 @@ origin 为 model 或 builtin；path 为各自仓库的相对 POSIX 路径，不�
 尤其用于跨文件 extend。源码注释、Markdown 文本块和完整源码不进入 IR。
 
 声明、字段、字典项和无序候选按身份或名称排序。参数、pair、access 和动态运算等
-具有语义顺序的内容保持顺序。输出为 UTF-8 无 BOM、LF、四空格缩进和一个末尾换行，
+具有语义顺序的内容保持顺序。输出为 UTF-8 无 BOM、LF、无缩进，使用紧凑分隔符和一个末尾换行，
 不包含时间戳或机器信息。同一输入和工具版本产生相同字节。
 
 摘要使用去除 source、sites、compiler_version 和摘要自身字段的规范化内容；
@@ -157,3 +156,10 @@ decorator 使用绑定结果，忽略 arguments 的位置/命名拼写。JSON �
 
 写入前完成全部分析和 IR 校验，再以同目录临时文件原子替换。编译或发布失败不覆盖
 旧产物。`--dryrun` 完成同样校验但不创建输出文件或目录；`check-ir` 始终只读。
+
+## JSON Schema
+
+[ir.schema.json](ir.schema.json) 使用 Draft 2020-12，随编译器分发且只包含本地引用。
+加载先拒绝重复 key 和非标准数值，再进行 Schema、类型化解码与语义一致性校验。
+Schema 由 IR 数据类型生成；`yambl schema -o output ./build/ir.schema.json` 可导出同一契约。
+修订号 2 将普通 attr 归为 static；修订号 1 的产物需要从源码重新编译。

@@ -19,7 +19,7 @@ const vocabulary = require('../language/syntax.cjs');
 for (const name of ['NOT_DEFINED', 'NOT_APPLICABLE', 'EMPTY', 'NO_ENTRY', 'NO_DATA', 'ENTITY_NOT_FOUND', 'ERROR']) {
   for (const text of [
     `entity A { attr x: ${name} }`, `type label = ${name}`, `@title(${name}) entity A {}`,
-    `entity A { attr x: exact<${name}> }`, `entity A { attr x: ${name} + AttrCats.Attr }`,
+    `entity A { attr x: exact<${name}> }`, `entity A { attr x: ${name} + AttrCats.Static }`,
     `@targets(DecoratorTargets.All) decorator @note(text: string = ${name})`,
     `entity ${name} {}`, `namespace builtins entity ${name} {}`,
     `entity A { config attr x: string = ${name} }`,

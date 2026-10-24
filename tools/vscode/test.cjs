@@ -60,11 +60,11 @@ async function main() {
   expectScope('type<self::entity>', 'entity', 'variable.language.yambl');
   expectScope("    - 0b00001 Attr: 'Attribute'", '0b00001', 'constant.numeric.yambl');
   expectScope("    - 0b00001 Attr: 'Attribute'", 'Attr', 'constant.other.yambl');
-  expectScope('attrs<AttrCats.Attr+AttrCats.Config, Entity>', '+', 'keyword.operator.bitwise.yambl');
+  expectScope('attrs<AttrCats.Static+AttrCats.Config, Entity>', '+', 'keyword.operator.bitwise.yambl');
   expectScope('attrs<AttrCats.None, Entity>', 'None', 'constant.other.yambl');
   expectScope('attrs<AttrCats.All-AttrCats.Snapshot, Entity>', 'All', 'constant.other.yambl');
   expectScope('attrs<AttrCats.All-AttrCats.Snapshot, Entity>', '-', 'keyword.operator.bitwise.yambl');
-  expectScope('attrs<AttrCats.Attr+AttrCats.Config, Entity>', 'Config', 'constant.other.yambl');
+  expectScope('attrs<AttrCats.Static+AttrCats.Config, Entity>', 'Config', 'constant.other.yambl');
 
   expectScope('attr x: Attr::type', '::', 'punctuation.accessor.yambl');
   expectScope('attr x: Attr::type', 'type', 'variable.language.yambl');
@@ -176,6 +176,8 @@ async function main() {
   const nextLine = grammar.tokenizeLine('entity Fund {', unfinished.ruleStack);
   assert.ok(nextLine.tokens.some(token => token.scopes.includes('storage.type.yambl')));
   checks++;
+  expectScope('@dimension(source: string) static attr value: string', 'static', 'keyword.declaration.yambl');
+  expectScope('AttrCats.Static + AttrCats.Config', 'Static', 'constant.other.yambl');
   registry.dispose();
   console.log(`Passed ${checks} TextMate highlighting checks using VS Code's bundled engine.`);
 }

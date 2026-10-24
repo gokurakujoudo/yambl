@@ -2,7 +2,7 @@
 
 `+` 添加、`-` 移除来自同一个 `@flags` 字典的 code，同优先级、从左到右计算，
 优先级低于 `.` 和 `::`。
-例如 `field_mapping<AttrCats.Attr + AttrCats.Config, Security>` 选择两个类别的并集。
+例如 `field_mapping<AttrCats.Static + AttrCats.Config, Security>` 选择两个类别的并集。
 `AttrCats.None` 为自动生成的零值，`AttrCats.All` 为全选值。
 重复添加或移除同一项只生效一次；普通字典不支持 `+`、`-`。
 

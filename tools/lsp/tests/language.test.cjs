@@ -5,22 +5,31 @@ const { parse, format, range } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json')];
 
+test('ordinary attrs share static identity, targets and filtering', () => {
+  const doc = parse('entity A { @dimension(source: string) attr label: string } entity B inherits A { @override @dimension(source: string) static attr label: string }');
+  validate([doc]); assert.deepEqual(doc.diagnostics, []);
+  assert.equal(doc.scope.get('A').effective.get('label').mode, 'static');
+  assert.equal(format(doc).includes('@dimension(source: string)\n    attr label: string'), true);
+  const invalid = parse('entity A { attr keys: attrs<AttrCats.Attr, A> }');
+  validate([invalid]); assert.ok(invalid.diagnostics.some(d => d.message.includes('Attr')));
+});
+
 test('flags union selects categories, normalizes exact values and rejects invalid masks', () => {
   const { Resolver, equal } = require('../language/expressions.cjs');
   const doc = parse(require('./flags-cases.json')[0][0]);
   const symbols = validate([doc]); assert.deepEqual(doc.diagnostics, []);
   const selection = doc.scope.get('Selection'), resolver = new Resolver(doc, () => {}, symbols, selection);
   const resolved = name => resolver.resolve(selection.effective.get(name).type);
-  assert.deepEqual(resolved('keys').members.map(t => t.name), ['integer', 'bool', 'decimal', 'date']);
+  assert.deepEqual(resolved('keys').members.map(t => t.name), ['string', 'integer', 'bool', 'code', 'decimal', 'date']);
   assert.deepEqual(resolved('empty').members, []);
   assert.deepEqual(resolved('identity').members.map(t => t.name), ['bool', 'decimal']);
-  assert.deepEqual(resolved('union').args[0].members.map(t => t.name), ['integer', 'bool', 'decimal']);
+  assert.deepEqual(resolved('union').args[0].members.map(t => t.name), ['string', 'integer', 'bool', 'code', 'decimal']);
   assert.equal(resolved('symbolic').args[0].exact, null);
   assert.equal(resolved('symbolic_difference').args[0].exact, null);
   assert.deepEqual(resolved('cleared').members, []);
   assert.deepEqual(resolved('absent').members, []);
   assert.ok(equal(resolved('all'), resolved('restored')));
-  assert.deepEqual(resolved('removed').members.map(t => t.name), ['integer', 'bool', 'decimal']);
+  assert.deepEqual(resolved('removed').members.map(t => t.name), ['bool', 'decimal']);
   const permission = owner => new Resolver(doc, () => {}, symbols, owner, true).resolve(owner.effective.get('permissions').type);
   assert.ok(equal(permission(doc.scope.get('Child')), permission(doc.scope.get('Grandchild'))));
   for (const [source] of require('./flags-cases.json').slice(1)) {
@@ -82,12 +91,12 @@ test('all accepted corpus files format idempotently and end with exactly one LF'
   }
 });
 test('source positions use UTF-16, strings preserve escaped quotes and comments', () => {
-  const text = "entity A { @description('😀\\' #') attr x: code<'Missing'> }";
+  const text = "entity A { @description('馃榾\\' #') attr x: code<'Missing'> }";
   const doc = parse(text); validate([doc]);
   assert.equal(doc.errors.length, 0);
   assert.equal(doc.diagnostics[0].range.start.character, text.indexOf('code<'));
-  assert.ok(format(doc).includes("@description('😀\\' #')"));
-  assert.deepEqual(range('😀\nx', 3, 4), { start: { line: 1, character: 0 }, end: { line: 1, character: 1 } });
+  assert.ok(format(doc).includes("@description('馃榾\\' #')"));
+  assert.deepEqual(range('馃榾\nx', 3, 4), { start: { line: 1, character: 0 }, end: { line: 1, character: 1 } });
 });
 test('extensions resolve in their original file and conflicting inherited fields are errors', () => {
   const docs = cases[1].map(text => parse(text)); validate(docs);
@@ -112,7 +121,7 @@ test('overload identities, branch defaults and effective mapping candidates', ()
   assert.equal(bond.identity, stock.identity); assert.equal(deep.identity, bond.identity);
   assert.deepEqual(mappingCandidates(scope.get('Base'), 'config', symbols).get('category').map(f => f.default.value), ['1', '2', '3']);
   assert.equal(mappingCandidates(scope.get('Base'), 'static', symbols).get('currency').length, 1);
-  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'attr', symbols).keys()], ['entity_type']);
+  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'static', symbols).keys()], ['entity_type']);
 });
 
 test('signature equivalence resolves imports, dimensions and quoted dictionaries', () => {

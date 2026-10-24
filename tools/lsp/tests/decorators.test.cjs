@@ -81,7 +81,7 @@ test('explicit target contracts provide diagnostics, completion, hover and navig
     ['@targets(', ['targets', 'categories']],
     ['@targets(DecoratorTargets.EntityAttr, ', ['categories']],
     ['@targets(DecoratorTargets.', ['Entity', 'Value', 'Decodes', 'Type', 'Decorator', 'Id', 'EntityAttr', 'ValueAttr', 'None', 'All']],
-    ['@targets(DecoratorTargets.EntityAttr, categories=AttrCats.', ['Attr', 'Static', 'Config', 'Snapshot', 'Scd', 'None', 'All']],
+    ['@targets(DecoratorTargets.EntityAttr, categories=AttrCats.', ['Static', 'Config', 'Snapshot', 'Scd', 'None', 'All']],
   ]) {
     open(source);
     const result = request('completion', text.length);
@@ -112,8 +112,8 @@ test('decorator completion filters all definition kinds and attribute categories
     ['@| type label = string', [...common, 'definition', 'model']],
     ['@| @targets(DecoratorTargets.None) decorator @other()', [...common, 'allow_multiple', 'definition']],
     ['entity A { @| id key: string }', [...common, 'definition', 'identity']],
-    ['entity A { @| attr x: string }', [...common, 'dimension', 'overload', 'override']],
-    ['entity A { @| static attr x: string }', [...common, 'overload', 'override', 'setting']],
+    ['entity A { @| attr x: string }', [...common, 'dimension', 'overload', 'override', 'setting']],
+    ['entity A { @| static attr x: string }', [...common, 'dimension', 'overload', 'override', 'setting']],
     ['entity A { @| config attr x: string }', [...common, 'overload', 'override', 'setting']],
     ['entity A { @| snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
     ['entity A { @| scd attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
