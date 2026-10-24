@@ -99,6 +99,16 @@ snapshot 点查询匹配指定日期，区间查询返回 `[start, end)` 内已�
 `EntityRef[T]`，通过 `reader.resolve(ref)` 显式解析。批量身份读取保持输入顺序和重复项。
 会话使用 SQLite 只读连接和固定读取事务，关闭后 handle 不再可用。
 
+生成的 Python 类与读取方法使用结构化 rST docstring。实体类携带自身声明的 title、
+description（如有），不推断元信息继承。attr 的点查询和区间查询方法携带 title、description、
+解析后的 YAMBL 类型、维度说明以及实际声明该逻辑字段的实体列表。列表使用完整名称，去重后
+按字母序排列：override/overload 保留所有声明实体，extend 归属被扩展实体，仅继承而未重声明的
+子类不加入列表。Hierarchy selector 标明为元信息，只有实际维度成为 Python 必填参数。
+
+所有生成方法包含 `:param name:`、`:returns:` 和 `:rtype:`，说明日期边界、返回结果、
+批量顺序和重复项、config 默认值及错误行为。title/description 等模型文本作为 rST 字面块
+保留，并转义 Python 字符串；文档中的引号、反斜杠和 rST 指令不会改变生成代码或文档结构。
+
 `ReadResult[T] = Success[T] | NonNormalResult`。所有正常 API 失败通过结果返回：
 
 | 情况 | 结果 |
