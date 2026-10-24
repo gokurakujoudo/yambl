@@ -12,7 +12,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.9.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.10.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -109,6 +109,10 @@ it offers candidates for the kinds still possible at the current nesting level.
 Value attributes use Static; extend bodies use entity attributes. Comments, strings,
 dictionary entries and formal parameters do not offer decorator names. Missing or
 invalid target contracts are omitted. Imports and unsaved scope changes are respected.
+Decorators already used on the same object are omitted unless declared
+`@allow_multiple`. Uses both before and after the cursor count; the invocation
+whose name is being edited does not. Other fields and enclosing declarations do
+not consume that object's decorator choices.
 Inside a call, completion offers ordinary parameter names with `=`. Hovers show signatures, defaults, explicit `@targets` scopes and `@allow_multiple`.
 Every decorator must declare `@targets`; diagnostics check its target kinds and
 attribute categories from the language sources. Target codes, generated All/None

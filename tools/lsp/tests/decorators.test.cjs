@@ -110,7 +110,7 @@ test('decorator completion filters all definition kinds and attribute categories
     ['@| value item {}', [...common, 'definition']],
     ['@| decodes Codes {}', [...common, 'definition', 'flags']],
     ['@| type label = string', [...common, 'definition', 'model']],
-    ['@| @targets(DecoratorTargets.None) decorator @other()', [...common, 'allow_multiple', 'definition', 'targets']],
+    ['@| @targets(DecoratorTargets.None) decorator @other()', [...common, 'allow_multiple', 'definition']],
     ['entity A { @| id key: string }', [...common, 'definition', 'identity']],
     ['entity A { @| attr x: string }', [...common, 'dimension', 'overload', 'override']],
     ['entity A { @| static attr x: string }', [...common, 'overload', 'override', 'setting']],
@@ -124,7 +124,7 @@ test('decorator completion filters all definition kinds and attribute categories
     ['entity A { @|', [...common, 'definition', 'dimension', 'identity', 'overload', 'override', 'setting', 'temporal']],
     ['entity A {} extend A { @| }', [...common, 'dimension', 'overload', 'override', 'setting', 'temporal']],
     ['value item { @|', [...common, 'value_field']],
-    ['entity A { @t| # misleading decodes {}\n @title(\'@flags }\') snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
+    ['entity A { @t| # misleading decodes {}\n @title(\'@flags }\') snapshot attr x: string }', [...common.filter(n => n !== 'title'), 'dimension', 'overload', 'override', 'temporal']],
     ['entity A { @tem|poral(day: date) snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
     ['entity A { @|(day: date) snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
     ['@| extend A {} entity A {}', []],
@@ -143,6 +143,55 @@ test('decorator completion filters all definition kinds and attribute categories
     const position = require('../language/syntax.cjs').position(text, offset);
     const result = service.feature('textDocument/completion', { textDocument: { uri }, position });
     assert.deepEqual(result.items.map(item => item.label).sort(), [...expected].sort(), sample);
+  }
+});
+
+test('decorator completion removes nonrepeatable uses on only the current object', () => {
+  const service = new Service(() => {}), uri = 'untitled:repeat-filter';
+  const prefix = '@targets(DecoratorTargets.All) decorator @once(text: string = \'x\') @targets(DecoratorTargets.All) @allow_multiple decorator @many(text: string = \'x\')\n';
+  const cases = [
+    ['@once @many @| entity A {}', false, true],
+    ['@| @once() @many() entity A {}', false, true],
+    ["@once(text='x') @| @many('x') entity A {}", false, true],
+    ['@once @many @|', false, true],
+    ['@on|ce entity A {}', true, true],
+    ['@|once() entity A {}', true, true],
+    ['@once @on|ce entity A {}', false, true],
+    ['@on|ce @once entity A {}', false, true],
+    ['@once entity A {} @| entity B {}', true, true],
+    ['@once entity A { @| attr x: string }', true, true],
+    ['entity A { @once attr x: string @| attr y: string }', true, true],
+    ['entity A { @| attr x: string @once attr y: string }', true, true],
+    ['entity A { @once attr x: string } entity B inherits A { @override @| attr x: string }', true, true],
+    ['entity A {} extend A { @once @| attr x: string }', false, true],
+    ['value item { @once @| attr x: string }', false, true],
+    ['entity A { @once @| id key: string }', false, true],
+    ['@once @| type name = string', false, true],
+    ['@once @| decodes Codes {}', false, true],
+    ['@once @| @targets(DecoratorTargets.All) decorator @other()', false, true],
+    ['entity A { @once @many @|', false, true],
+    ["@once(\n text='@many ( )'\n) # @other\n @| entity A {}", false, true],
+    ["# @once\n@| entity A {}", true, true],
+    ["@title('@once') @| entity A {}", true, true],
+  ];
+  for (const [sample, once, many] of cases) {
+    const marked = prefix + sample, offset = marked.indexOf('|'), text = marked.replace('|', '');
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const result = service.feature('textDocument/completion', { textDocument: { uri }, position: require('../language/syntax.cjs').position(text, offset) });
+    const labels = result.items.map(i => i.label);
+    assert.equal(labels.includes('once'), once, sample);
+    assert.equal(labels.includes('many'), many, sample);
+  }
+  for (const [sample, excluded, included] of [
+    ["entity A { @title('X') @description('D') @temporal(day: date) @dimension(source: string) @| snapshot attr x: string }", ['title', 'description', 'temporal'], ['dimension']],
+    ['@flags @| decodes Codes {}', ['flags'], ['title']],
+    ['@allow_multiple @targets(DecoratorTargets.All) @| decorator @other()', ['allow_multiple', 'targets'], ['title']],
+  ]) {
+    const offset = sample.indexOf('|'), text = sample.replace('|', '');
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const labels = service.feature('textDocument/completion', { textDocument: { uri }, position: require('../language/syntax.cjs').position(text, offset) }).items.map(i => i.label);
+    for (const name of excluded) assert.ok(!labels.includes(name), sample + ': ' + name);
+    for (const name of included) assert.ok(labels.includes(name), sample + ': ' + name);
   }
 });
 
@@ -167,6 +216,11 @@ test('target-filtered completion retains imports in unfinished bodies and reacts
     const prefix = 'namespace app from meta import observed ';
     assert.ok(complete(prefix + 'entity A { @|').includes('observed'));
     assert.ok(complete(prefix + 'entity A { @| snapshot attr x: string }').includes('observed'));
+    assert.ok(!complete(prefix + 'entity A { @observed @| snapshot attr x: string }').includes('observed'));
+    service.open.set(metaUri, { text: definition.replace('decorator @observed', '@allow_multiple decorator @observed'), version: 2 });
+    assert.ok(complete(prefix + 'entity A { @observed @| snapshot attr x: string }').includes('observed'));
+    service.open.set(metaUri, { text: definition, version: 3 });
+    assert.ok(!complete(prefix + 'entity A { @observed @| snapshot attr x: string }').includes('observed'));
     assert.ok(!complete(prefix + 'entity A { @| static attr x: string }').includes('observed'));
     assert.ok(!complete('namespace app entity A { @| snapshot attr x: string }').includes('observed'));
     service.open.set(metaUri, { text: definition.replace('AttrCats.Snapshot', 'AttrCats.Static'), version: 2 });

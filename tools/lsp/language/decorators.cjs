@@ -121,6 +121,10 @@ function allowsTarget(contract, kind, mode) {
   return mode ? categories.includes(mode[0].toUpperCase() + mode.slice(1)) : categories.length > 0;
 }
 
+function allowsMultiple(definition) {
+  return definition.name.value !== 'allow_multiple' && definition.metadata.some(a => a.name === 'allow_multiple');
+}
+
 function checkTarget(call, node, declaration, issue, symbols) {
   const contract = targetContract(node.doc.scope.get(call.name), symbols);
   if (!contract) return;
@@ -143,7 +147,7 @@ function checkDecorators(documents, issue, symbols) {
         bindCall(call, node, issue, symbols);
         const definition = doc.scope.get(name);
         if (definition?.kind === 'decorator') checkTarget(call, node, declaration, issue, symbols);
-        if (definition?.kind === 'decorator' && seen.has(name) && (name === 'allow_multiple' || !definition.metadata.some(a => a.name === 'allow_multiple'))) issue(doc, call.token, `duplicate decorator: ${name}`);
+        if (definition?.kind === 'decorator' && seen.has(name) && !allowsMultiple(definition)) issue(doc, call.token, `duplicate decorator: ${name}`);
         seen.add(name);
         if (['temporal', 'dimension'].includes(name)) {
           if (name === 'dimension' && call.dimensions.length) {
@@ -161,4 +165,4 @@ function checkDecorators(documents, issue, symbols) {
   }
 }
 
-module.exports = { capture, bindCall, checkDecorators, targetContract, allowsTarget };
+module.exports = { capture, bindCall, checkDecorators, targetContract, allowsTarget, allowsMultiple };

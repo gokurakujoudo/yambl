@@ -134,14 +134,15 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     assert.ok(parameterCompletions.items.some(item => item.label === 'text'));
     assert.deepEqual(vscode.languages.getDiagnostics(decoratorUri).map(d => d.message), []);
     const filteredUri = vscode.Uri.file(path.join(root, 'filtered-decorators.yambl'));
-    const filteredText = 'namespace filtered entity Item { @title snapshot attr price: decimal @title static attr currency: string }';
+    const filteredText = "namespace filtered entity Item { @title('Price') @dimension(source: string) @description snapshot attr price: decimal @title static attr currency: string }";
     fs.writeFileSync(filteredUri.fsPath, filteredText);
     const filteredDoc = await vscode.workspace.openTextDocument(filteredUri);
     await vscode.window.showTextDocument(filteredDoc);
-    for (const [offset, temporal] of [[filteredText.indexOf('@title'), true], [filteredText.lastIndexOf('@title'), false]]) {
+    for (const [offset, temporal, title] of [[filteredText.indexOf('@description'), true, false], [filteredText.lastIndexOf('@title'), false, true]]) {
       const result = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', filteredUri, filteredDoc.positionAt(offset + 1));
       const labels = result.items.map(item => item.label);
-      assert.ok(labels.includes('title'));
+      assert.equal(labels.includes('title'), title);
+      assert.ok(labels.includes('description'));
       assert.equal(labels.includes('temporal'), temporal);
       assert.equal(labels.includes('dimension'), temporal);
       assert.ok(!labels.includes('flags') && !labels.includes('targets') && !labels.includes('allow_multiple'));

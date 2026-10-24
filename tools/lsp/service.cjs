@@ -10,10 +10,10 @@ const { sources, readPrefix, rootName, configError } = require('./repository.cjs
 const { modelRoot } = require('./language/relationships.cjs');
 const { Resolver } = require('./language/expressions.cjs');
 const { codeEntries } = require('./language/decodes.cjs');
-const { targetContract, allowsTarget } = require('./language/decorators.cjs');
+const { targetContract, allowsTarget, allowsMultiple } = require('./language/decorators.cjs');
 
 // Use lexer tokens so comments, strings and Markdown cannot invent a surrounding declaration.
-function decoratorSites(doc, start) {
+function decoratorSites(doc, start, used) {
   const tokens = doc.tokens, marker = tokens.findIndex(t => t.start === start && t.value === '@');
   if (marker < 0 || tokens[marker - 1]?.value === 'decorator') return [];
   const stack = [];
@@ -27,11 +27,28 @@ function decoratorSites(doc, start) {
   if (stack.some(frame => frame.value !== '{') || stack.length > 1) return [];
   const owner = stack[0]?.kind;
   if (owner === 'decodes') return [];
+  // Walk only the adjacent annotation group; declarations and fields are boundaries.
+  let previous = marker - 1;
+  while (previous >= 0) {
+    if (tokens[previous].value === ')') {
+      let depth = 1;
+      while (--previous >= 0 && depth) {
+        if (tokens[previous].value === ')') depth++;
+        if (tokens[previous].value === '(') depth--;
+      }
+    }
+    if (tokens[previous - 1]?.value !== '@' || tokens[previous - 2]?.value === 'decorator') break;
+    used.add(tokens[previous].value);
+    previous -= 2;
+  }
   let index = marker;
   do {
     const at = tokens[index++];
     // The current name may be empty or only partly typed; later annotations have full names.
-    if (/^[A-Za-z_][A-Za-z_0-9]*$/.test(tokens[index]?.value || '') && (tokens[index].start === at.end || index - 1 !== marker)) index++;
+    if (/^[A-Za-z_][A-Za-z_0-9]*$/.test(tokens[index]?.value || '') && (tokens[index].start === at.end || index - 1 !== marker)) {
+      if (at.start !== start) used.add(tokens[index].value);
+      index++;
+    }
     if (tokens[index]?.value === '(') {
       let depth = 0;
       do {
@@ -230,12 +247,15 @@ class Service {
       }
       const decorator = /@[a-z_0-9]*$/.exec(before);
       if (decorator) {
-        const sites = decoratorSites(doc, decorator.index);
+        const used = new Set();
+        const sites = decoratorSites(doc, decorator.index, used);
         if (!sites.length) return { isIncomplete: false, items: [] };
         const scope = doc.errors.length ? this.completionScope(doc, decorator.index, offset, true) : doc.scope;
         const symbols = new Map([...scope.values()].map(d => [d.key, d]));
+        const usedKeys = new Set([...used].map(name => scope.get(name)?.key));
         const applicable = [...scope.values()].filter(d => {
           if (d.kind !== 'decorator') return false;
+          if (usedKeys.has(d.key) && !allowsMultiple(d)) return false;
           const contract = targetContract(d, symbols);
           return sites.some(([kind, mode]) => allowsTarget(contract, kind, mode));
         });
