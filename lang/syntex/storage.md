@@ -11,8 +11,10 @@ yambl generate -o path ./build/model.yambl-ir.json -o output ./build/generated -
 
 ## 表结构
 
-每个业务根实体有一张身份表，保存 ID 和实际实体类型；同一继承树共享 ID 空间。
-static 字段按根实体和维度结构分组，config 单独分组。普通 `attr` 是 `static attr`
+每个业务根实体有一张身份宽表，保存 ID、实际实体类型及所有无维度的 static 字段；
+同一继承树共享 ID 空间，子类型字段也并入根实体宽表，读取仍检查实际类型上的适用性。
+无维度的 static 集合将状态放入宽表、成员放入独立表。有维度的 static 字段按根实体和
+维度结构分组，config 按根实体独立存入长表。普通 `attr` 是 `static attr`
 的简写；源码格式化保留写法，签名、筛选和 IR 都使用 static。
 `AttrCats.Static`、Config、Snapshot、Scd 的位值分别为 2、4、8、16，All 为 30。
 `AttrCats.Attr` 已移除。`@dimension` 允许 static、snapshot、scd，禁止 config。
@@ -20,6 +22,34 @@ static 字段按根实体和维度结构分组，config 单独分组。普通 `a
 每个逻辑 snapshot/SCD 字段有独立时间表；关系声明共享逻辑字段存储，但读取使用
 实际实体上的实现约束。维度列非空，参与键；维度名称或类型不同就分表。
 Hierarchy selector 是元信息，不是维度列，本阶段必须显式提供全部维度。
+
+表名使用 `tb_` 前缀，namespace 各段与实体的 snake_case 名称用单下划线连接；
+内置表省略 `builtins` namespace。数据库名保留仓库 prefix，字段表使用逻辑身份所属的
+根实体，因此 Fund 的 holdings 属于 Portfolio 的表组。FMC 示例为：
+
+| 表名 | 用途 |
+| --- | --- |
+| `tb_core_portfolio` | Portfolio 身份及无维度 static 宽表 |
+| `tb_core_portfolio_holdings` | holdings 的 portfolio、date、成员引用 |
+| `tb_core_portfolio_holdings_status` | holdings 的 portfolio、date、状态 |
+| `tb_core_holding_entry` | HoldingEntry 身份及无维度 static 宽表 |
+| `tb_core_security` | Security 身份及无维度 static 宽表 |
+| `tb_core_security_price` | price snapshot，含 source 维度 |
+
+snapshot/SCD 标量表使用根表名加字段名；集合成员表也使用此命名，独立状态表增加
+`_status`。config 长表使用 `_config`，有维度的 static 分组使用 `_static_维度名称`；
+同名维度但类型不同的后续分组增加 `_2`、`_3` 等稳定序号。分组按 IR 的逻辑字段顺序分配。
+其他名称冲突在生成前报错，不覆盖已有结构。业务表的物理 ID 列仍为 `id`，
+集合成员列为 `member_id`，对应的 YAMBL ID 字段和引用目标记录在 manifest 和表结构文档中。
+
+每个 config 长表仅有 `id`、`field`、`state`、`value` 四列，主键为 `(id, field)`；
+field 保存逻辑字段 qualified name，override/overload 沿用同一身份。不同配置字段和对象
+各占一行；manifest 的 `key_values` 保存字段选择条件。SQL 限定 field 为本根实体支持的
+config 字段，逐字段检查状态和载荷存储类型。value 声明为 BLOB 以关闭 SQLite 类型亲和转换，
+实际标量和引用载荷为 TEXT（包括精确整数、Decimal），bool 为 INTEGER 0/1，
+非正常状态为 NULL。这不会把数字字符串转换为浮点数或整数。
+config 集合的长表行仅存状态，value 为 NULL；成员表通过 `(id, field)` 外键关联长表。
+读取仍根据实际实现解码类型，缺行或 NO_ENTRY 才使用模型默认值。
 
 每个字段独立保存 VALUE、NO_ENTRY、EMPTY、NOT_APPLICABLE 状态。缺行或字段状态
 NO_ENTRY 表示无记录；EMPTY 的载荷为 NULL。集合有记录表和成员表，成员引用去重；
@@ -29,10 +59,33 @@ VALUE 记录存在但无成员表示正常空集合。实体引用不建立强�
 Decimal、整数和相应 ID 使用 TEXT，避免 SQLite 数值精度限制。bool 使用 0/1，
 date 使用 ISO 日期。本地字典代码校验成员身份，外部字典只保存带字典类型的字符串。
 不执行任意正则，不生成 Snowflake ID。数据库保存布局修订号和模型摘要，读取器要求匹配。
+当前布局修订号为 2；IR 仍为修订号 2。布局 1 的数据库须重新生成，本轮不提供迁移。
+内部元数据表为 `tb_yambl_metadata`，也使用统一前缀。
 
 `schema.md` 包含全部表、列、主键、CHECK、外键、索引、逻辑字段映射和各表 DDL。
 文档区分模型默认值与 SQL 默认值，区分逻辑引用与实际外键；它与 SQL 和 manifest
 由同一份存储模型生成。
+
+### 内置表
+
+始终生成 `tb_decodes`、`tb_decodes_entries`、`tb_hierarchy`、`tb_hierarchy_entries`、
+`tb_config_group`、`tb_config_group_when` 和 `tb_config_group_then_set`。
+三个 final 内置实体以各自声明的 ID 字段为主键，无需实际子类型列。集合和映射状态保存在
+所属身份宽表，子表有指向所属身份表的实际外键。
+
+Decodes 条目主键为 `(decodes_id, code)`；Hierarchy 条目主键为 `(hierarchy_id, ordering)`。
+条目字段来自 IR 内携带的 value 定义，整数 ordering 使用精确 TEXT。DDL 初始化所有已声明
+字典及其条目，包括内置 flags 自动生成的 None/All。带引号的外部字典不创建伪造实例。
+
+ConfigGroup 的 entity_type 是可空类型 qualified name，配有独立状态列。when 和 then_set
+子表每项保存 `config_group_id`、`field`（逻辑字段 qualified name）和 `value`。value 是
+紧凑 JSON 对象：`type` 为 IR 中展开后的 Type 对象，`value` 为对应 JSON 载荷。
+整数及 Decimal 载荷使用精确字符串，引用保存 ID；集合可用 JSON 数组表达。
+SQL 校验 JSON 对象及 type/value 包装结构，主键保证同组同字段不重复；内部类型结构、
+字段候选范围和载荷兼容性尚无写入校验器。这里不定义七个非正常结果的 JSON 编码。
+
+内置表当前用于持久化和参考，不生成内置模型的读取方法，不执行 Hierarchy 选择或
+ConfigGroup 条件及覆盖规则。manifest 对这些字段标记 `readable: false`。
 
 ## 时间和结果
 
@@ -73,26 +126,26 @@ EMPTY 和 NOT_APPLICABLE 不回退。不执行 ConfigGroup、Hierarchy、价格�
 | namespace、import、仓库根、qualified name | 已定义 | 已实现 | 已解析 | 使用身份映射 | 使用身份映射 |
 | entity、继承、final、extend | 已定义 | 已实现 | 已实现 | 根身份与有效字段 | 实际子类型 handle |
 | override、overload、exact | 已定义 | 已实现 | 保留实现与共同契约 | 共享逻辑存储 | 按实际实现校验 |
-| attr/static 统一、类别筛选 | 已定义 | 已实现 | static | 分组表 | 显式方法 |
-| config 默认值 | 已定义 | 已实现 | 已实现 | 独立状态 | NO_ENTRY 使用默认值 |
+| attr/static 统一、类别筛选 | 已定义 | 已实现 | static | 无维度身份宽表，有维度分组 | 显式方法 |
+| config 默认值 | 已定义 | 已实现 | 已实现 | 根实体长表，独立字段行与状态 | NO_ENTRY 使用默认值 |
 | string、bool、integer、decimal、date、snowflake_id | 已定义 | 已实现 | 已实现 | 已实现 | 已实现；不生成 ID |
 | decimal 参数 | 已定义 | 已实现 | 已实现 | 精确 TEXT | 精度和小数位校验 |
 | string regex | 方言待定 | 保留约束 | 已实现 | 保存字符串 | 不执行正则 |
 | float、datetime | 运行时细节待定 | 已实现 | 已实现 | 待实现 | 待实现 |
 | 静态可展开泛型别名 | 已定义 | 已实现 | 保留并展开 | 使用展开类型 | 使用展开类型 |
-| `type<T>` 类型值和字段描述值 | 已定义 | 已实现 | 已实现 | 待实现 | 待实现 |
+| `type<T>` 类型值和字段描述值 | 已定义 | 已实现 | 已实现 | ConfigGroup 类型值 TEXT；一般业务字段待实现 | 待实现 |
 | Decodes 实例引用 | 已定义 | 已实现 | 已实现 | 待实现 | 待实现 |
 | 实体引用 | 已定义 | 已实现 | 已实现 | 保存 ID | 强类型引用、显式解析 |
 | 本地/外部 code | 已定义 | 已实现 | 已实现 | TEXT | 枚举 / 字典专属字符串 |
 | collection | 已定义 | 已实现 | 已实现 | 记录和成员表 | 不可变引用集合 |
-| value、values、mapping | 已定义 | 已实现 | 已实现 | 待实现 | 待实现 |
+| value、values、mapping | 已定义 | 已实现 | 已实现 | 内置条目和 ConfigGroup 映射子表；一般业务字段待实现 | 待实现 |
 | self 依赖、alias、attrs、field_mapping | 已定义 | 已实现 | 结构化表达式 | 待实现 | 待实现 |
 | flags | 已定义 | 已实现 | 已规范化 | 业务值待实现 | 业务值待实现 |
 | decorator、targets、重复元信息 | 已定义 | 已实现 | 已绑定 | 使用时间与维度元信息 | 不执行自定义代码 |
 | snapshot / temporal | 已定义 | 已实现 | 已实现 | 独立时间表 | 精确点与稀疏区间 |
 | scd | 已定义 | 已实现 | 已实现 | 显式期间 | 起点、变化与缺口 |
 | dimension | 已定义 | 已实现 | 已绑定 | 非空键列 | 必填显式参数 |
-| Hierarchy、ConfigGroup | 部分运行时规则待定 | 静态已实现 | 保留 | 待实现 | 待实现 |
+| Decodes、Hierarchy、ConfigGroup 存储 | 已定义 | 静态已实现 | 保留 | 身份宽表和条目/映射子表 | 内置读取和选择/覆盖待实现 |
 | 七个非正常结果 | 已定义 | 已实现 | 保留 | 三种字段状态 | 统一结果对象 |
 | 回退、比较、运算传播 | 未定义 | 无执行器 | 不附加规则 | 不执行 | 不执行 |
 
