@@ -2,10 +2,10 @@
 
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
-  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value'];
+  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as'];
 const annotations = ['title', 'description', 'temporal', 'dimension', 'overload', 'override'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id'];
-const generics = ['collection', 'values', 'map', 'code', 'type', 'field_mapping'];
+const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
 const entities = [];
 const structures = [];
 const constants = ['NOT_DEFINED', 'true', 'false'];
@@ -32,7 +32,7 @@ function parse(text, uri = '') {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, ' ') + masked.slice(end);
   }
   let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\]()<>,:.=@-]/y;
+  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|[{}\[\]()<>,:.=@-]/y;
   while (offset < text.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(masked);
@@ -57,18 +57,15 @@ function parse(text, uri = '') {
   const qualified = () => { let value = name().value; while (is('.')) { take(); value += '.' + name().value; } return value; };
   const piece = (start, indent) => doc.pieces.push({ tokens: doc.tokens.slice(start, index), indent });
   function type() {
-    const token = name();
-    const node = { token, name: token.value, args: null, params: null };
+    const token = /^(?:'|-?\d)/.test(peek().value) ? take() : name();
+    const node = { token, name: token.value.startsWith("'") ? stringValue(token.value) : token.value, args: null, params: null, accesses: [] };
+    if (token.value.startsWith("'")) node.quoted = true;
+    if (/^-?\d/.test(token.value) || ['true', 'false'].includes(token.value)) node.literal = true;
     if (is('<')) {
       take(); node.args = [];
       do {
         if (node.args.length) take(',');
-        if (peek().value.startsWith("'")) {
-          const quoted = take(); node.args.push({ token: quoted, name: stringValue(quoted.value), quoted: true });
-        } else if (is('self')) {
-          const token = take(); take('.'); const field = name();
-          node.args.push({ token, name: 'self', selfField: field });
-        } else node.args.push(type());
+        node.args.push(type());
       } while (is(','));
       take('>');
     } else if (is('[')) {
@@ -83,6 +80,8 @@ function parse(text, uri = '') {
       } while (is(','));
       take(']');
     }
+    while (is('.') || is('::')) { const operator = take(); node.accesses.push({ operator, token: name() }); }
+    if (is('as')) { take(); node.binding = name(); }
     return node;
   }
   function annotation(indent) {
@@ -118,6 +117,21 @@ function parse(text, uri = '') {
         const item = annotation(0);
         if (!item.value) throw item.token;
         metadata.push(item);
+      }
+      if (is('type')) {
+        if (metadata.length) fail();
+        const start = index, token = take(), aliasName = name(), parameters = [];
+        if (is('<')) {
+          take();
+          do {
+            if (parameters.length) take(',');
+            const parameter = name(); take(':'); parameters.push({ token: parameter, type: type() });
+          } while (is(','));
+          take('>');
+        }
+        take('='); const body = type();
+        doc.declarations.push({ kind: 'type_alias', token, name: aliasName, parameters, type: body, metadata, fields: [], entries: [], doc, end: doc.tokens[index - 1].end });
+        piece(start, 0); continue;
       }
       const start = index; const final = is('final') ? take() : null; const token = take();
       if (final && token.value !== 'entity') throw token;
@@ -163,7 +177,7 @@ function format(doc) {
     let text = '', previous = '';
     for (const token of piece.tokens) {
       const value = token.value;
-      const space = text && !'.:,)>](['.includes(value) && value !== '<' && !'.@(<['.includes(previous);
+      const space = text && !['.', '::', ':', ',', ')', '>', ']', '(', '[', '<'].includes(value) && !['.', '::', '@', '(', '<', '['].includes(previous);
       text += (space ? ' ' : '') + value; previous = value;
     }
     return { start: piece.tokens[0].start, end: piece.tokens.at(-1).end, text, indent: piece.indent };

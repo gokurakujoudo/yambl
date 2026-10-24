@@ -82,7 +82,7 @@ entity A inherits Base { @overload config attr category: integer = 1 @override c
 entity B inherits Base { @overload config attr category: integer = 2 }
 entity C inherits Base { @overload config attr category: integer = 3 }
 entity Deep inherits A { @override config attr days: integer = 5 }
-final entity Selection { attr chosen: type<Base> attr rules: field_mapping<config, self.chosen> }
+final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrCats.config, self.chosen::value> }
 `;
     const relationshipsUri = vscode.Uri.file(path.join(root, 'relationships.yambl'));
     fs.writeFileSync(relationshipsUri.fsPath, relationshipText);

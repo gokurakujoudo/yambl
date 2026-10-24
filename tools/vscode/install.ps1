@@ -19,14 +19,14 @@ try {
         ) | Out-Null
     }
     $lspRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../lsp'))
-    foreach ($relative in @('server.cjs', 'service.cjs', 'repository.cjs', 'protocol.cjs', 'language/syntax.cjs', 'language/validation.cjs', 'language/relationships.cjs', 'README.md')) {
+    foreach ($relative in @('server.cjs', 'service.cjs', 'repository.cjs', 'protocol.cjs', 'language/syntax.cjs', 'language/validation.cjs', 'language/relationships.cjs', 'language/expressions.cjs', 'README.md')) {
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
             $archive, (Join-Path $lspRoot $relative), "extension/lsp/$relative"
         ) | Out-Null
     }
-    $modelsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../models'))
-    foreach ($model in Get-ChildItem -LiteralPath $modelsRoot -File | Where-Object { $_.Extension -in '.yambl', '.lclcfg' }) {
-        [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $model.FullName, "extension/lsp/models/$($model.Name)") | Out-Null
+    $modelsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../lang'))
+    foreach ($model in Get-ChildItem -LiteralPath $modelsRoot -File -Recurse | Where-Object { $_.Extension -in '.yambl', '.lclcfg' }) {
+        [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $model.FullName, "extension/lsp/lang/$([IO.Path]::GetRelativePath($modelsRoot, $model.FullName).Replace('\', '/'))") | Out-Null
     }
     $documents = @{
         '[Content_Types].xml' = @'

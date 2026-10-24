@@ -8,6 +8,7 @@ const { validate, describe } = require('./language/validation.cjs');
 
 const { sources, readPrefix, rootName, configError } = require('./repository.cjs');
 const { modelRoot } = require('./language/relationships.cjs');
+const { Resolver } = require('./language/expressions.cjs');
 function uriKey(uri) {
   if (!uri.startsWith('file:')) return uri;
   const file = path.resolve(fileURLToPath(uri));
@@ -32,9 +33,9 @@ const help = {
   final: 'This entity cannot be inherited or extended.',
   static: 'Time-independent attribute available for condition filtering.',
   type: 'Entity type value constrained by Entity or a specific entity and its descendants.',
-  Entity: 'Constraint accepting any entity type; not an entity root.',
+  Entity: 'Abstract ultimate base of all entities; business trees keep separate field identities.',
   field_mapping: 'Unordered partial mapping from filtered entity fields to their declared value types.',
-  self: 'The current entity instance; self.field selects its type-valued field.',
+  self: 'The current entity instance; self.field selects a descriptor; ::type and ::value select its type and instance value.',
   overload: 'Same-signature field shared by independent branches of one inheritance tree.',
   override: 'Same-signature redeclaration of an inherited field; config defaults may differ.',
   ConfigGroup: 'Final built-in conditional configuration model with entity_type, when and then_set.',
@@ -44,7 +45,11 @@ const help = {
   config: 'Time-independent parameter that configuration can override.',
   code: 'A Decodes code value. Dynamic dictionaries may be provided outside the model.',
   collection: 'Unordered unique entity references.', values: 'Unordered unique values.',
-  map: 'Keys: string or entity reference. Values: non-collection values or references.',
+  mapping: 'Unordered unique string-compatible or reference keys and non-collection values.',
+  attrs: 'Qualified field identities; excludes IDs and collection attributes.',
+  alias: 'Same value as an instance-rooted field expression.',
+  exact: 'Singleton constraint permitted on override and overload fields.',
+  as: 'Bind a mapping key for its value type expression.',
   NOT_DEFINED: 'The requested subtype attribute does not apply to the instance’s actual type.',
   title: 'Short display title.', description: 'Descriptive metadata.',
   temporal: 'Temporal parameter: as_of_date: date.', dimension: 'Independent data dimension with an optional Hierarchy selector.',
@@ -131,7 +136,7 @@ class Service {
     if (method === 'textDocument/references') return this.references(target, params.context?.includeDeclaration === true);
     if (method === 'textDocument/semanticTokens/full') {
       const classified = new Map(doc.valueTypeTokens);
-      for (const token of doc.tokens) if (['decodes', 'value'].includes(doc.bindings.get(token.start)?.kind)) classified.set(token.start, token);
+      for (const token of doc.tokens) if (['decodes', 'value', 'type_alias'].includes(doc.bindings.get(token.start)?.kind)) classified.set(token.start, token);
       const data = []; let lastLine = 0, lastCharacter = 0;
       for (const token of [...classified.values()].sort((a, b) => a.start - b.start)) {
         if (token.value.startsWith("'")) continue;
@@ -148,10 +153,12 @@ class Service {
     }
     if (method === 'textDocument/completion') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
-      if (/\bself\.[a-zA-Z_0-9]*$/.test(doc.text.slice(0, offset))) {
+      if (/::[a-z]*$/.test(doc.text.slice(0, offset))) return { isIncomplete: false, items: ['type', 'value'].map(label => ({ label, kind: 10, detail: help.self })) };
+      const selfPath = /\bself(?:\.[a-zA-Z_][a-zA-Z_0-9]*::value)*\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
+      if (selfPath) {
         let completionDoc = doc;
         if (doc.errors.length) {
-          const prefix = doc.text.slice(0, offset).replace(/\bself\.[a-zA-Z_0-9]*$/, 'self.__completion');
+          const prefix = doc.text.slice(0, offset).replace(/[a-zA-Z_0-9]*$/, '__completion');
           const recovered = Object.assign(parse(prefix + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
           if (!recovered.errors.length) {
             const root = rootFor(doc.uri);
@@ -160,8 +167,13 @@ class Service {
           }
         }
         const declaration = completionDoc.declarations.find(d => d.bodyStart <= offset && offset <= d.end);
-        const owner = declaration && completionDoc.scope.get(declaration.name.value);
-        return { isIncomplete: false, items: [...(owner?.effective || [])].filter(([, f]) => f.type.name === 'type').map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
+        let owner = declaration && completionDoc.scope.get(declaration.name.value);
+        const symbols = new Map([...this.documents.values(), completionDoc].flatMap(d => [...d.scope.values()].map(decl => [decl.key, decl])));
+        for (const segment of selfPath[0].split('.').slice(1, -1)) {
+          const field = owner?.effective?.get(segment.replace(/::value$/, ''));
+          owner = field ? symbols.get(new Resolver(field.doc, () => {}, symbols, field.owner).resolve(field.type).key) : null;
+        }
+        return { isIncomplete: false, items: [...(owner?.effective || [])].map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
       }
       const items = [...keywords, ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: 14, detail: help[label] || 'YAMBL built-in' }));
       for (const [label, decl] of doc.scope) items.push({ label, kind: decl.kind === 'entity' ? 7 : 20, detail: describe(decl) });

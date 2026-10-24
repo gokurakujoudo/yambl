@@ -42,6 +42,10 @@ async function main() {
     checks++;
   }
 
+  expectScope('attr x: Attr::type', '::', 'punctuation.accessor.yambl');
+  expectScope('attr x: Attr::type', 'type', 'variable.language.yambl');
+  expectScope('attr x: self.kind::value', 'value', 'variable.language.yambl');
+  expectScope('type selected<t: type<Entity>> = t', 'selected', 'support.type.yambl');
   expectScope('value quote {', 'value', 'storage.type.yambl');
   expectScope('value quote {', 'quote', 'support.type.yambl');
   expectScope('@dimension(source: string, preference: Hierarchy)', 'Hierarchy', 'entity.name.type.yambl');
@@ -57,9 +61,9 @@ async function main() {
   // A new language-server keyword must also have a TextMate scope in this release.
   const vocabulary = require('../lsp/language/syntax.cjs');
   for (const keyword of vocabulary.keywords) {
-    const scope = keyword === 'entity' ? 'storage.type.yambl'
+    const scope = ['entity', 'type'].includes(keyword) ? 'storage.type.yambl'
       : ['namespace', 'from', 'import'].includes(keyword) ? 'keyword.control.yambl' : 'keyword.declaration.yambl';
-    const line = keyword === 'namespace' ? 'namespace core' : `${keyword} Thing`;
+    const line = keyword === 'namespace' ? 'namespace core' : keyword === 'type' ? 'type example = string' : `${keyword} Thing`;
     expectScope(line, keyword, scope);
   }
   for (const annotation of vocabulary.annotations) expectScope(`@${annotation}('x')`, '@' + annotation, 'entity.name.function.yambl');
@@ -74,8 +78,8 @@ async function main() {
   expectScope('static attr selected: type<Entity>', 'static', 'keyword.declaration.yambl');
   expectScope('static attr selected: type<Entity>', 'type', 'support.type.yambl');
   expectScope('static attr selected: type<Entity>', 'Entity', 'entity.name.type.yambl');
-  expectScope('attr when: field_mapping<static, self.selected>', 'field_mapping', 'support.type.yambl');
-  expectScope('attr when: field_mapping<static, self.selected>', 'self', 'keyword.declaration.yambl');
+  expectScope('attr when: field_mapping<AttrCats.static, self.selected::value>', 'field_mapping', 'support.type.yambl');
+  expectScope('attr when: field_mapping<AttrCats.static, self.selected::value>', 'self', 'keyword.declaration.yambl');
   expectScope('@overload', '@overload', 'entity.name.function.yambl');
   expectScope('@override', '@override', 'entity.name.function.yambl');
   expectScope('namespace decodes', 'decodes', 'entity.name.namespace.yambl');
@@ -127,11 +131,11 @@ async function main() {
   expectScope('@temporal(as_of_date: date)', 'as_of_date', 'variable.other.property.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'snapshot', 'keyword.declaration.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'HoldingEntry', 'entity.name.type.yambl');
-  for (const type of ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'collection', 'values', 'map']) {
+  for (const type of ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'collection', 'values', 'mapping']) {
     expectScope(`attr field: ${type}`, type, 'support.type.yambl');
   }
-  expectScope('attr weights: map<Security, decimal[precision: 18, scale: 4]>', 'precision', 'variable.parameter.yambl');
-  expectScope('attr weights: map<Security, decimal[precision: 18, scale: 4]>', '18', 'constant.numeric.yambl');
+  expectScope('attr weights: mapping<Security, decimal[precision: 18, scale: 4]>', 'precision', 'variable.parameter.yambl');
+  expectScope('attr weights: mapping<Security, decimal[precision: 18, scale: 4]>', '18', 'constant.numeric.yambl');
   expectScope('attr labels: values<string>', '<', 'punctuation.section.yambl');
   expectScope('#comment without a space', '#', 'comment.line.number-sign.yambl');
   expectScope('attr amount: decimal#comment', '#', 'comment.line.number-sign.yambl');

@@ -36,7 +36,7 @@ test('relationship markers navigate across files and react to unsaved edits', t 
 
 test('self navigation and completion accept arbitrary type fields and incomplete references', () => {
   const service = new Service(() => {}), uri = 'untitled:selection';
-  const text = 'entity Base { config attr arbitrary: type<Entity> attr ignored: string } entity Child inherits Base {} extend Child { attr data: field_mapping<config, self.arbitrary> }';
+  const text = 'entity Base { config attr arbitrary: type<Entity> attr ignored: string } entity Child inherits Base {} extend Child { attr data: field_mapping<AttrCats.config, self.arbitrary::value> }';
   service.open.set(uri, { text, version: 1 }); service.refresh();
   const definition = service.feature('textDocument/definition', { textDocument: { uri }, position: { line: 0, character: text.lastIndexOf('arbitrary') } });
   assert.equal(definition.range.start.character, text.indexOf('arbitrary'));
@@ -44,7 +44,7 @@ test('self navigation and completion accept arbitrary type fields and incomplete
     const current = text.replace('self.arbitrary', 'self.' + suffix);
     service.open.set(uri, { text: current, version: 2 }); service.refresh();
     const completions = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: current.indexOf('self.') + 5 + suffix.length } });
-    assert.deepEqual(completions.items.map(i => i.label), ['arbitrary']);
+    assert.deepEqual(completions.items.map(i => i.label), ['arbitrary', 'ignored', 'data']);
   }
   const completions = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: 0 } });
   for (const label of ['final', 'static', 'self', 'type', 'field_mapping', 'Entity', 'ConfigGroup', 'overload', 'override']) assert.ok(completions.items.some(i => i.label === label), label);
@@ -106,13 +106,13 @@ test('attribute hover includes metadata, modifiers and complete generic/paramete
   service.open.set(uri, { version: 1, text: `entity A {
     @description('Security\\'s value')
     @title('Weights')
-    snapshot attr weights: map<string[regex: '[A-Z]+'], decimal[precision: 18, scale: 4]>
+    snapshot attr weights: mapping<string[regex: '[A-Z]+'], decimal[precision: 18, scale: 4]>
     attr codes: values<code<'Currencies'>>
     attr plain: decimal[18, 4]
 }` }); service.refresh();
   const doc = service.document(uri);
   const hover = field => service.feature('textDocument/hover', { textDocument: { uri }, position: field.name.range.start }).contents.value;
-  assert.equal(hover(doc.declarations[0].fields[0]), "snapshot attr weights: map<string[regex: '[A-Z]+'], decimal[precision: 18, scale: 4]>\n\ntitle: Weights\n\ndescription: Security's value");
+  assert.equal(hover(doc.declarations[0].fields[0]), "snapshot attr weights: mapping<string[regex: '[A-Z]+'], decimal[precision: 18, scale: 4]>\n\ntitle: Weights\n\ndescription: Security's value");
   assert.equal(hover(doc.declarations[0].fields[1]), "attr codes: values<code<'Currencies'>>");
   assert.equal(hover(doc.declarations[0].fields[2]), 'attr plain: decimal[18, 4]');
 });
@@ -219,10 +219,10 @@ test('Markdown blocks suppress language features and values navigate by identity
 
 test('built-in model repository checks its own declarations exactly once', () => {
   const { modelRoot } = require('../language/relationships.cjs');
-  const uri = pathToFileURL(path.join(modelRoot, 'hierarchy.yambl')).href;
+  const uri = pathToFileURL(path.join(modelRoot, 'models/hierarchy.yambl')).href;
   const service = new Service(() => {});
   service.open.set(uri, { version: 1, text: fs.readFileSync(new URL(uri), 'utf8') }); service.refresh();
-  assert.equal(service.documents.size, 3);
+  assert.equal(service.documents.size, 5);
   assert.ok([...service.documents.values()].every(doc => doc.diagnostics.length === 0));
 });
 
@@ -235,18 +235,44 @@ test('literal configuration grammar rejects expressions and missing prefixes', (
   }
 });
 
+test('type aliases, bound field descriptions and nested paths navigate and complete', () => {
+  const uri = 'untitled:expressions', service = new Service(() => {});
+  const text = `type money = decimal
+entity Security { attr amount: money }
+entity Selection {
+    attr security: Security
+    attr amount: self.security::value.amount::type
+    attr selected: mapping<attrs<AttrCats.attr, Security> as Attr, Attr::type>
+}`;
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  assert.deepEqual(service.document(uri).diagnostics, []);
+  const feature = (name, line, character) => service.feature('textDocument/' + name, { textDocument: { uri }, position: { line, character } });
+  assert.equal(feature('definition', 1, text.split('\n')[1].indexOf('money')).range.start.line, 0);
+  assert.match(feature('hover', 1, text.split('\n')[1].indexOf('money')).contents.value, /type money = decimal/);
+  assert.equal(feature('definition', 4, text.split('\n')[4].lastIndexOf('amount')).range.start.line, 1);
+  const line = text.split('\n')[5];
+  assert.equal(feature('definition', 5, line.lastIndexOf('Attr')).range.start.character, line.indexOf('as Attr') + 3);
+  assert.ok(feature('semanticTokens/full').data.length > 0);
+  for (const suffix of ['', 'amo', 'amount']) {
+    const current = text.replace('self.security::value.amount::type', 'self.security::value.' + suffix + '::type');
+    service.open.set(uri, { text: current, version: 2 }); service.refresh();
+    const col = current.split('\n')[4].indexOf('self.security::value.') + 'self.security::value.'.length + suffix.length;
+    assert.deepEqual(feature('completion', 4, col).items.map(i => i.label), ['amount']);
+  }
+  const col = text.split('\n')[4].indexOf('::type') + 2;
+  assert.deepEqual(feature('completion', 4, col).items.map(i => i.label), ['type', 'value']);
+});
+
 test('builtins authoring works outside the extension resource directory', t => {
   const { modelRoot } = require('../language/relationships.cjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-builtins-checkout-'));
   t.after(() => fs.rmSync(root, { recursive: true }));
-  for (const name of fs.readdirSync(modelRoot).filter(n => /\.(yambl|lclcfg)$/.test(n))) {
-    fs.copyFileSync(path.join(modelRoot, name), path.join(root, name));
-  }
-  const uri = pathToFileURL(path.join(root, 'hierarchy.yambl')).href;
+  fs.cpSync(modelRoot, root, { recursive: true });
+  const uri = pathToFileURL(path.join(root, 'models/hierarchy.yambl')).href;
   const service = new Service(() => {});
   const text = fs.readFileSync(new URL(uri), 'utf8');
   service.open.set(uri, { version: 1, text }); service.refresh();
-  assert.equal(service.documents.size, 3);
+  assert.equal(service.documents.size, 5);
   assert.ok([...service.documents.values()].every(d => !d.diagnostics.length));
   const doc = service.document(uri), field = doc.declarations[0].fields[1];
   const params = { textDocument: { uri }, position: field.type.args[0].token.range.start };

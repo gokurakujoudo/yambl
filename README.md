@@ -8,12 +8,15 @@ proposals for discussion. The companion compiler checks and formats the current
 examples, including attribute extensions, final entities, overload/override field
 contracts, dependent field mappings, ConfigGroup, and external Decodes.
 
+The built-in data repository is [lang/](lang/README.md). Expressible definitions,
+including AttrCats and the field_mapping alias, are compiled from its source files.
+
 ## Repository structure
 
-- [language/](language/README.md): lexical rules, syntax, source formatting, file
+- [lang/syntex/](lang/syntex/README.md): lexical rules, syntax, source formatting, file
   structure, and model repository structure.
-- [builtins/](builtins/README.md): built-in keywords, types, and constants.
-- [models/](models/README.md): built-in data models.
+- [lang/builtins/](lang/builtins/README.md): built-in keywords, types, and constants.
+- [lang/models/](lang/models/README.md): built-in data models.
 - [tools/vscode/](tools/vscode/README.md): VS Code highlighting, language features,
   and local installation scripts.
 - [tools/lsp/](tools/lsp/README.md): a self-contained language server included in

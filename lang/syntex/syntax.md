@@ -2,7 +2,8 @@
 
 本文记录当前案例使用的语法及已确认的语义。对应的首版解析、静态检查与格式化
 工具位于 `yambl-compiler`。
-结构化值类型使用 `value` 声明；尚未引入类型别名语法。
+结构化值类型使用 `value` 声明，透明别名使用 `type ... = ...`。
+类型值、依赖路径、exact 和双冒号访问见[类型表达式](type-expressions.md)。
 
 ## 命名
 
@@ -17,7 +18,7 @@
 内置值类型清单、使用示例及类型参数规则见
 [内置值类型](../builtins/value-types.md)。结构化值类型的声明见下文。
 
-`collection<T>`、`values<T>` 和 `map<TKey, TValue>` 的泛型约束及语义见
+`collection<T>`、`values<T>` 和 `mapping<TKey, TValue>` 的泛型约束及语义见
 [内置集合类型](../builtins/collection-types.md)。
 
 内置值类型原语 `code<decodes_id>` 通过实例名称指定代码字典，支持
@@ -188,7 +189,7 @@ attr quantity: decimal
 `ref` 关键字。
 
 `collection<HoldingEntry>` 表示无序且不重复的持仓条目实体引用集合，不表示
-内嵌实体。值的集合使用 `values<T>`，键值映射使用 `map<TKey, TValue>`；
+内嵌实体。值的集合使用 `values<T>`，键值映射使用 `mapping<TKey, TValue>`；
 类型参数限制统一在 [builtins](../builtins/collection-types.md) 中定义。
 
 ## 独立快照属性
@@ -249,7 +250,7 @@ entity Bond inherits Security {
 签名一致性、逻辑字段身份及 `final entity` 规则见[字段关系](field-relationships.md)。
 扩展只能添加属性，不能补充 `id`；final 实体禁止扩展。父类型和扩展目标按当前文件可见名称查找。
 `Decodes` 禁止继承，字典实例也不能作为父类型。当前编译器尚不支持扩展内置实体
-或继承其他内置实体；ConfigGroup 明确声明为 final。
+其他 final 内置实体；Entity 是抽象最终基类，可作为继承目标。
 
 父类型或其他子类型的实例允许获取子类型特有字段；字段不适用于该实例的实际
 类型时，结果为内置常量 [NOT_DEFINED](../builtins/constants.md)。例如普通
@@ -297,7 +298,7 @@ ordering 升序查找存在的数据。该参数不生成实体属性或字段�
 ## 条件配置组与依赖字段类型
 
 [ConfigGroup](../models/config_group.yambl) 是内置 final 实体。
-`type<Entity>`、`type<Security>` 和 `field_mapping<static, self.selected_kind>`
+`type<Entity>`、`type<Security>` 和 `field_mapping<AttrCats.static, self.selected_kind::value>`
 的约束与任意类型字段引用见[实体类型与字段映射](../builtins/field-mapping.md)。
 这些声明已由编译器及 LSP 支持；配置组实例语法和配置执行尚未实现。
 
@@ -318,7 +319,7 @@ entity Observation {
 value 名称为 snake_case，天然 final，不能继承、被继承或 extend，不接受显式
 final value。字段只允许 attr 或等价的 static attr，天然 static，无 ID。
 字段可以是非集合值（含嵌套 value）或实体引用；引用保存目标实体 ID。
-禁止 collection、values、map、field_mapping 字段及直接或间接值嵌套循环。
+禁止 collection、values、mapping、field_mapping 字段及直接或间接值嵌套循环。
 实体引用不形成值嵌套循环。只允许 title、description 注解；禁止默认值和字段关系标记。
 同一值类型按所有字段判等，引用字段比较引用 ID；除明确定义外不支持大小比较。
 这些是值语义约定，当前工具只检查声明，不执行值比较。

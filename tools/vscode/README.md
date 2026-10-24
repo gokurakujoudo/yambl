@@ -90,3 +90,7 @@ TextMate 高亮检查。
 扩展通过后缀识别 `.yambl`。当前父工作区的 `.vscode/settings.json` 使用四空格
 缩进，并将 `gokurakujoudo.yambl` 设为 YAMBL 默认格式化器。设置位于三个仓库
 之外；单独打开其他模型仓库时，仍可使用本扩展提供的 Format Document。
+
+Type definitions (`type ... = ...`), attrs/mapping key bindings, exact constraints,
+and dependent `::type` / `::value` paths share the compiler syntax and diagnostics.
+The packaged lang tree includes language-defined AttrCats and field_mapping.

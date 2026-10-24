@@ -9,7 +9,7 @@
       "end": "^[ \\t]*---[ \\t]*$"
     },
     {
-      "match": "\\b(value)\\s+([a-z][a-z0-9_]*)\\b",
+      "match": "\\b(value|type)\\s+([a-z][a-z0-9_]*)\\b",
       "captures": {
         "1": {
           "name": "storage.type.yambl"
@@ -40,6 +40,17 @@
         },
         "4": {
           "name": "variable.other.yambl"
+        }
+      }
+    },
+    {
+      "match": "(::)(type|value)\\b",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.yambl"
+        },
+        "2": {
+          "name": "variable.language.yambl"
         }
       }
     },
@@ -141,7 +152,7 @@
     },
     {
       "name": "keyword.declaration.yambl",
-      "match": "\\b(?:value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|final|self|attr)\\b"
+      "match": "\\b(?:value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|final|self|as|attr)\\b"
     },
     {
       "name": "keyword.control.yambl",
@@ -153,7 +164,7 @@
     },
     {
       "name": "support.type.yambl",
-      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|collection|values|map|type|field_mapping)\\b"
+      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|collection|values|mapping|attrs|alias|exact|type|field_mapping)\\b"
     },
     {
       "name": "variable.parameter.yambl",
@@ -161,7 +172,7 @@
     },
     {
       "name": "variable.other.property.yambl",
-      "match": "\\b[a-z][a-z0-9_]*(?=\\s*:)"
+      "match": "\\b[a-z][a-z0-9_]*(?=\\s*:(?!:))"
     },
     {
       "name": "constant.language.yambl",

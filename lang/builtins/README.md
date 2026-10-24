@@ -30,19 +30,23 @@
 
 ## 内置集合类型
 
-`collection<T>`、`values<T>` 和 `map<TKey, TValue>` 的泛型约束、集合语义
+`collection<T>`、`values<T>` 和 `mapping<TKey, TValue>` 的泛型约束、集合语义
 和使用示例见[内置集合类型](collection-types.md)。
 
 ## 待确定
 
 - 实体身份的作用域、组合标识和标识继承规则。
-- 字段的类型兼容规则。
+- 尚未定义的其他值类型转换。
 - 内置关键字与保留字清单。
 
 [内置常量](constants.md)定义不适用于实例实际类型的字段读取结果 `NOT_DEFINED`。
-[语法说明](../language/syntax.md)记录了 `entity`、`extend`、`inherits`、`id`、
+[语法说明](../syntex/syntax.md)记录了 `entity`、`extend`、`inherits`、`id`、
 `snapshot`、`scd`、`config`、`attr`、元信息和维度注解，以及 `namespace` 写法。
 完整的保留字清单、通用注解机制仍需确认。
 
 实体类型值 `type<T>` 和 `field_mapping<类别, 目标>` 见
 [实体类型与字段映射](field-mapping.md)。
+
+[AttrCats](attr_cats.yambl) 与 [field_mapping](field_mapping.yambl) 在本目录自举定义。
+基础原语还有 type、attrs、mapping、alias 和 exact，语义见
+[类型表达式](../syntex/type-expressions.md)。Entity 是抽象最终实体基类。

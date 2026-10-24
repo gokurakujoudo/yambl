@@ -85,9 +85,9 @@ string[regex: '']
 ## snowflake_id
 
 `snowflake_id` 是内置值类型，可直接用于标识字段、普通值字段、
-`values<snowflake_id>` 或 `map` 的值类型位置，无需声明或导入。
-它不是实体引用，因此不能作为 `collection` 的元素类型；`map` 的键仍限于
-`string` 或实体引用。
+`values<snowflake_id>` 或 `mapping` 的值类型位置，无需声明或导入。
+它不是实体引用，因此不能作为 `collection` 的元素类型；它可单向视作 string，
+也可作为 mapping 的键。
 
 该类型描述标识值，不规定自动生成行为。位宽、位结构、纪元、节点编号以及
 ID 生成策略尚待确定。
@@ -124,20 +124,20 @@ warning，包含文件、行、列；仅有此类 warning 时 `check` 仍成功�
 显式导入失败及其他类型错误仍正常显示。字典名称在编辑器中与值类型同色，
 Ctrl+Click 字典声明可查看当前编译单元内的引用列表。
 
-`code<Currencies>` 属于值类型，可以用作 `values` 的元素类型或 `map` 的
-值类型；不能作为 `collection` 的元素类型。按目前 map 键仅限 `string` 或
-实体引用的规则，`code` 也不能用作 map 键。它与 `string` 的兼容关系尚未确定。
+`code<Currencies>` 属于值类型，可以用作 `values` 的元素类型或 `mapping` 的
+值类型；不能作为 `collection` 的元素类型。code 可单向视作 string，
+可以作为 mapping 的键；不同字典的 code 可在 overload 中共同暴露为 string。
 
 ## 结构化值类型
 
-`value` 声明有限的结构化值，规则见[语言语法](../language/syntax.md#结构化值类型)。
+`value` 声明有限的结构化值，规则见[语言语法](../syntex/syntax.md#结构化值类型)。
 内置 hierarchy_entry 和 decodes_entry 均由模型仓库中的 value 声明定义。
-值别名和其他自定义标量类型尚未定义。
+透明别名使用 type 声明，见[类型表达式](../syntex/type-expressions.md)。其他自定义标量类型仍待定义。
 
 ## 待确定
 
 - 基础值类型的完整相等规则；结构化 value 已定义为同类型所有字段相等。
-- `code` 的完整名称写法、跨字典兼容规则及其与 `string` 的关系。
+- 运行时如何验证外部字典中的代码，以及字典更新后的引用处理。
 - 内置值类型的位宽、取值范围、时区、字面量和可空性，以及到数据库或 Python
   类型的映射。
 - `decimal` 参数的合法范围、是否允许部分参数，以及参数重复和命名参数的

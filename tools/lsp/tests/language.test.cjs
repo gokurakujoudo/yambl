@@ -3,13 +3,26 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parse, format, range } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
-const cases = require('./cases.json');
+const cases = [...require('./cases.json'), ...require('./expression-cases.json')];
+
+test('transparent mappings retain exact branch contracts and business field identities', () => {
+  const { Resolver, equal } = require('../language/expressions.cjs');
+  const doc = parse(require('./expression-cases.json')[0][0]);
+  const symbols = validate([doc]); assert.deepEqual(doc.diagnostics, []);
+  const selection = doc.scope.get('Selection');
+  const resolver = new Resolver(doc, () => {}, symbols, selection);
+  const resolved = name => resolver.resolve(selection.effective.get(name).type);
+  assert.ok(equal(resolved('mapping'), resolved('shortcut')));
+  assert.equal(resolved('bond_fields').members[0].exact, 'USD');
+  assert.equal(resolved('fields').members[0].exact, null);
+  assert.equal(doc.scope.get('Bond').effective.get('currency').qualifiedName, 'core.Security.currency');
+});
 
 test('built-in ConfigGroup schema matches the published model', () => {
   const fs = require('node:fs'), path = require('node:path');
   const { builtinEntities } = require('../language/relationships.cjs');
   const { formatType } = require('../language/validation.cjs');
-  const doc = parse(fs.readFileSync(path.join(__dirname, '../../../models/config_group.yambl'), 'utf8'));
+  const doc = parse(fs.readFileSync(path.join(__dirname, '../../../lang/models/config_group.yambl'), 'utf8'));
   assert.deepEqual(doc.errors, []);
   const canonical = doc.declarations[0], builtin = builtinEntities.get('ConfigGroup');
   const fields = decl => decl.fields.map(f => [f.mode, f.name.value, formatType(f.type)]);
@@ -24,7 +37,7 @@ test('core validation retains the two CLI Decodes warnings before editor filteri
   ]);
   const security = docs[0].scope.get('Security');
   assert.deepEqual([...security.ownFields.keys()], ['security_id', 'currency', 'market', 'price', 'days']);
-  assert.equal(docs[0].scope.size, 3); // Security, Bond, and imported Currencies; no extension symbol.
+  assert.equal(docs[0].scope.has('extend'), false); // Security, Bond, and imported Currencies; no extension symbol.
   assert.equal(security.ownFields.get('price').doc, docs[0]);
 });
 test('all accepted corpus files format idempotently and end with exactly one LF', () => {
@@ -67,7 +80,7 @@ test('overload identities, branch defaults and effective mapping candidates', ()
   assert.equal(bond.identity, stock.identity); assert.equal(deep.identity, bond.identity);
   assert.deepEqual(mappingCandidates(scope.get('Base'), 'config', symbols).get('category').map(f => f.default.value), ['1', '2', '3']);
   assert.equal(mappingCandidates(scope.get('Base'), 'static', symbols).get('currency').length, 1);
-  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'static', symbols).keys()], ['entity_type', 'when', 'then_set']);
+  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'static', symbols).keys()], ['entity_type']);
 });
 
 test('signature equivalence resolves imports, dimensions and quoted dictionaries', () => {

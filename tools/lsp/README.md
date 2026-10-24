@@ -41,9 +41,10 @@ entity references, inheritance, extension targets, and defined Decodes names,
 including quoted identifiers. External Decodes have no definition to navigate to.
 On an `@overload` marker, definition lookup returns the other branch implementations.
 On `@override`, it returns the nearest inherited declaration. Invalid field contracts
-produce no marker navigation. `self.field` navigates to any declared type-valued field,
-and completion after `self.` lists effective type-valued fields, including inherited
-and extended ones.
+produce no marker navigation. `self.field` selects a field descriptor; `::type`
+and `::value` access its type and instance value. Completion after `self.` lists
+effective fields, including inherited and extended ones. Nested instance paths
+also offer field navigation and completion.
 The outline shows extension attributes as `Entity.field`, without adding an entity.
 
 Attribute hover includes its full type, including generic arguments and named or
@@ -100,8 +101,12 @@ code actions, incremental text edits, or runtime evaluation. The server requests
 full document synchronization. It rescans an affected compilation unit rather than
 maintaining a dependency cache; large repositories may need indexing later.
 
-Built-in models are read from `yambl/models` during development and from resources
+Built-in models are read from `yambl/lang` during development and from resources
 included in the VSIX after installation. The installed extension needs no source
 checkout. Value types receive value-type semantic coloring and support navigation.
 Markdown blocks are opaque to language features and retain body whitespace during
 formatting. Root-configuration edits, including unsaved changes, refresh diagnostics.
+
+Type definitions (`type ... = ...`), attrs/mapping key bindings, exact constraints,
+and dependent `::type` / `::value` paths share the compiler syntax and diagnostics.
+The packaged lang tree includes language-defined AttrCats and field_mapping.
