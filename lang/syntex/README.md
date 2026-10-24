@@ -26,6 +26,7 @@
 结构化值类型使用 `value` 声明；透明别名和 `::type` / `::value` 见
 [类型表达式](type-expressions.md)。
 通用元信息声明、参数绑定和重复修饰见 [Decorator](decorators.md)。
+模型仓库的编译产物、独立校验和修订规则见 [JSON 中间模型](ir.md)。
 
 最新业务案例保存在
 [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的
