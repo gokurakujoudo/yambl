@@ -1,7 +1,8 @@
-# SQLite 存储与 Python 读取
+# 双存储后端与惰性 Python 读取
 
 `yambl generate` 从已校验的 JSON IR 生成 SQLite DDL、`schema.md` 表结构参考、
-`storage-manifest.json` 和带 `py.typed` 的 Python 包。生成只接受新目录或空目录；
+`storage-manifest.json`、JSONL 仓库模板和带 `py.typed` 的自包含 Python 包。
+关系图与 Python API 参考一并生成。生成只接受新目录或空目录；
 `--dryrun` 完成校验和渲染，不创建目录。不执行数据库迁移，不提供生产写入 API。
 
 ```console
@@ -42,14 +43,12 @@ snapshot/SCD 标量表使用根表名加字段名；集合成员表也使用此�
 其他名称冲突在生成前报错，不覆盖已有结构。业务表的物理 ID 列仍为 `id`，
 集合成员列为 `member_id`，对应的 YAMBL ID 字段和引用目标记录在 manifest 和表结构文档中。
 
-每个 config 长表仅有 `id`、`field`、`state`、`value` 四列，主键为 `(id, field)`；
-field 保存逻辑字段 qualified name，override/overload 沿用同一身份。不同配置字段和对象
-各占一行；manifest 的 `key_values` 保存字段选择条件。SQL 限定 field 为本根实体支持的
-config 字段，逐字段检查状态和载荷存储类型。value 声明为 BLOB 以关闭 SQLite 类型亲和转换，
-实际标量和引用载荷为 TEXT（包括精确整数、Decimal），bool 为 INTEGER 0/1，
-非正常状态为 NULL。这不会把数字字符串转换为浮点数或整数。
-config 集合的长表行仅存状态，value 为 NULL；成员表通过 `(id, field)` 外键关联长表。
-读取仍根据实际实现解码类型，缺行或 NO_ENTRY 才使用模型默认值。
+config 与 sparse 共用长表类型列规则：主键 `(id, field)`，state 加上实际需要的
+`string`、`bool`、`int`、`decimal`、`date` 列。引用使用目标 ID 的列。
+正常标量仅对应载荷列非空，NO_ENTRY、EMPTY、NOT_APPLICABLE 的全部载荷列为 NULL。
+config 集合的记录行全部标量载荷列为 NULL，成员表通过 `(id, field)` 外键关联。
+field 保存逻辑字段 qualified name，manifest 的 `key_values` 保存选择条件。
+读取仍按实际实现检查类型，只有缺行或 NO_ENTRY 使用模型默认值。
 
 每个字段独立保存 VALUE、NO_ENTRY、EMPTY、NOT_APPLICABLE 状态。缺行或字段状态
 NO_ENTRY 表示无记录；EMPTY 的载荷为 NULL。集合有记录表和成员表，成员引用去重；
@@ -59,7 +58,7 @@ VALUE 记录存在但无成员表示正常空集合。实体引用不建立强�
 Decimal、整数和相应 ID 使用 TEXT，避免 SQLite 数值精度限制。bool 使用 0/1，
 date 使用 ISO 日期。本地字典代码校验成员身份，外部字典只保存带字典类型的字符串。
 不执行任意正则，不生成 Snowflake ID。数据库保存布局修订号和模型摘要，读取器要求匹配。
-当前布局修订号为 3；IR 仍为修订号 2。旧布局数据库须重新生成，本轮不提供迁移。
+当前布局修订号为 4；IR 仍为修订号 2。旧布局数据库须重新生成，本轮不提供迁移。
 内部元数据表为 `tb_yambl_metadata`，也使用统一前缀。
 
 `schema.md` 包含全部表、列、主键、CHECK、外键、索引、逻辑字段映射和各表 DDL。
@@ -131,9 +130,17 @@ snapshot 点查询匹配指定日期，区间查询返回 `[start, end)` 内已�
 缺口为 NO_ENTRY，重叠为 ERROR。相邻期间同一天只产生一个点，结果按日期升序。
 空区间成功返回空列表，反向区间报 ERROR。
 
-生成的实体是携带只读会话的 handle，通过 `read_*` 方法显式取数。引用返回
-`EntityRef[T]`，通过 `reader.resolve(ref)` 显式解析。批量身份读取保持输入顺序和重复项。
-会话使用 SQLite 只读连接和固定读取事务，关闭后 handle 不再可用。
+生成的实体是 frozen dataclass，保留身份判等，不按字段值判等。property 首次访问
+读取该实例该字段的全部记录；`read_*` 和 `read_*_range` 方法继续可用。
+无时间、无维度属性返回 `ReadResult[T]`；有维度 static、snapshot 和 SCD 返回
+`ReadResult[tuple[字段专属记录类, ...]]`。记录类也是 frozen dataclass，包含维度、
+日期或完整 `valid_from` / `valid_to`，以及 `value: ReadResult[T]`。坐标排序确定，
+无记录返回成功空元组，不补造坐标。引用与集合保存 `EntityRef`，显式 resolve。
+
+方法按规范化参数缓存，完整 property 缓存可用于计算点值和区间结果。ERROR 不缓存，
+包括记录内 ERROR；其他确定结果可缓存。关闭后已有缓存仍可访问，需要新增读取时返回 ERROR。
+区间方法仍返回列表，每次复制，调用者修改不会污染缓存。实体缓存由会话私有维护。
+SQLite 使用只读连接和固定读取事务。
 
 生成的 Python 类与读取方法使用结构化 rST docstring。实体类携带自身声明的 title、
 description（如有），不推断元信息继承。attr 的点查询和区间查询方法携带 title、description、
@@ -167,12 +174,12 @@ EMPTY 和 NOT_APPLICABLE 不回退。不执行 ConfigGroup、Hierarchy、价格�
 下表的“静态”包括 Python 检查器和 LSP；IR 保留完整语言能力，后端只接受已实现的业务类型。
 不支持的业务字段会报告身份、源码位置和原因；未使用的内置声明不阻止生成。
 
-| 能力 | 规范 | Python / LSP | IR | SQLite | Python 类型 / 读取 |
+| 能力 | 规范 | Python / LSP | IR | SQLite / JSONL | Python 类型 / 读取 |
 | --- | --- | --- | --- | --- | --- |
 | namespace、import、仓库根、qualified name | 已定义 | 已实现 | 已解析 | 使用身份映射 | 使用身份映射 |
 | entity、继承、final、extend | 已定义 | 已实现 | 已实现 | 根身份与有效字段 | 实际子类型 handle |
 | override、overload、exact | 已定义 | 已实现 | 保留实现与共同契约 | 共享逻辑存储 | 按实际实现校验 |
-| attr/static 统一、类别筛选 | 已定义 | 已实现 | static | 无维度身份宽表，有维度分组 | 显式方法 |
+| attr/static 统一、类别筛选 | 已定义 | 已实现 | static | 无维度身份宽表，有维度分组 | 惰性属性与显式方法 |
 | config 默认值 | 已定义 | 已实现 | 已实现 | 根实体长表，独立字段行与状态 | NO_ENTRY 使用默认值 |
 | string、bool、integer、decimal、date、snowflake_id | 已定义 | 已实现 | 已实现 | 已实现 | 已实现；不生成 ID |
 | decimal 参数 | 已定义 | 已实现 | 已实现 | 精确 TEXT | 精度和小数位校验 |
@@ -197,3 +204,44 @@ EMPTY 和 NOT_APPLICABLE 不回退。不执行 ConfigGroup、Hierarchy、价格�
 | 回退、比较、运算传播 | 未定义 | 无执行器 | 不附加规则 | 不执行 | 不执行 |
 
 对应验收集中于编译器 `tests/storage/`、`tests/ir/test_schema.py` 和 LSP/高亮对照测试。
+
+## 自包含包与 JSONL 仓库
+
+生成包只依赖 Python 3.14+ 标准库，携带公共运行时的同源副本、IR 和专用
+`runtime-contract.json`。运行时核对生成代码固定的契约 SHA-256，严格解码版本与结构；
+契约包含生成阶段已校验的类型、映射、实现、默认值和字典，不在读取时重编译 IR。
+`open_sqlite(path)`、`open_files(path)` 均返回 `ReadResult[Reader]`；`open(path)` 保留为 SQLite 别名。
+
+生成目录的 `repository/` 是 JSONL 空仓库模板，已初始化内置字典。元数据为
+`repository.json`，包括文件格式修订号 1、布局修订号 4、模型摘要和所有表文件的 SHA-256。
+每张表对应 `tables/<表名>.jsonl`，包括空表；每行必须提供完整物理列。
+整数、Decimal、日期及引用 ID 使用精确文本，bool 使用整数 0/1。
+
+打开只检查元数据和文件状态。表首次访问才读取、核对摘要、检查行并建立会话内索引。
+每次新增后端读取前检查全部文件状态，首次读取前后均检查；发现变化后禁止继续补充数据，
+已有字段缓存仍可使用。仓库更新后须重新打开。不支持会话中原地改写。
+重复 JSON key、非标准数值、未知列、重复主键、错误状态及载荷组合均拒绝，诊断带文件和行号。
+
+`schema-relations.mmd` 展示全部表：实线为实际外键，虚线为逻辑引用，同时嵌入 `schema.md`。
+`python-schema.md` 列出实体、属性、记录类、方法、后端入口和缓存约定，使用相同元信息。
+SQL、JSONL、manifest、文档及关系图共用存储模型。
+
+## 显式实例校验
+
+`reader.validate()` 返回 `ReadResult[ValidationReport]`，报告及问题列表不可变。
+普通打开和取数不会扫描整个仓库。包内命令为：
+
+```console
+python -m fmc_model check-data --backend sqlite --path example.db
+python -m fmc_model check-data --backend files --path example-repository
+```
+
+有效数据退出 0，数据违规或读取失败退出 1，用法错误退出 2。读取失败为外层 ERROR。
+引用环按继承根与逻辑 attr 分别检查，单引用和引用集合均参与，override/overload 共用身份。
+不同 attr 不合并，跨根引用不参与；维度按相同组合、snapshot 按同日、SCD 按共同有效期间检查。
+非正常状态和悬空引用不产生有效环边；不存在目标仍由 resolve 返回 ENTITY_NOT_FOUND。
+每个成环分量给出确定性的一个闭合 ID 路径，并报告字段、维度及日期或期间，不枚举全部环。
+
+FMC 示例初始化器从同一份数据创建 SQLite 或 JSONL，并在结束前显式校验；只接受新目标。
+本阶段仍无生产写入、迁移、SQLite 导出命令或通用查询语言，也不执行 Hierarchy、ConfigGroup、
+价格回退和一般运算传播规则。
