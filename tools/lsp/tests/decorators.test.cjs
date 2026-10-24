@@ -6,6 +6,35 @@ const { Service } = require('../service.cjs');
 const { parse } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 
+test('storage decorators complete, navigate and enforce mutually exclusive scalar groups', () => {
+  const service = new Service(() => {}), uri = 'untitled:storage';
+  for (const [sample, included, excluded] of [
+    ['entity A { @| attr x: string }', ['sparse', 'dense'], []],
+    ["entity A { @sparse('info') @| attr x: string }", ['title'], ['sparse', 'dense', 'dimension']],
+    ["entity A { @| @dense('info') attr x: string }", ['title'], ['sparse', 'dense', 'dimension']],
+    ['entity A { @dimension(source: string) @| attr x: string }', ['dimension'], ['sparse', 'dense']],
+    ['entity A { @| config attr x: string }', ['title'], ['sparse', 'dense']],
+    ['entity A { @| attr x: collection<A> }', ['dimension'], ['sparse', 'dense']],
+    ['type items = values<string> entity A { @| attr x: items }', ['dimension'], ['sparse', 'dense']],
+  ]) {
+    const character = sample.indexOf('|'), text = sample.replace('|', '');
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const labels = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character } }).items.map(i => i.label);
+    for (const name of included) assert.ok(labels.includes(name), sample + ': ' + name);
+    for (const name of excluded) assert.ok(!labels.includes(name), sample + ': ' + name);
+  }
+  for (const name of ['sparse', 'dense']) {
+    const text = `entity A { @${name}(cat='info') attr x: string }`;
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    assert.deepEqual(service.document(uri).diagnostics, []);
+    const request = (method, character) => service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 0, character } });
+    assert.match(request('hover', text.indexOf('@') + 1).contents.value, new RegExp('decorator @' + name + '\\(cat: string\\)'));
+    assert.match(request('definition', text.indexOf('@') + 1).uri, /builtins\/decorators.yambl$/);
+    assert.match(request('definition', text.indexOf('cat=')).uri, /builtins\/decorators.yambl$/);
+    assert.deepEqual(request('completion', text.indexOf('cat=')).items.map(i => i.label), ['cat']);
+  }
+});
+
 test('decorator declarations, keywords and builtins navigate and hover', () => {
   const service = new Service(() => {}), uri = 'untitled:decorators';
   const text = "@allow_multiple @targets(DecoratorTargets.All) decorator @tag(text: string = 'x', rank: integer = 1, *source?: string) @tag(text='y') entity A { @title(text='Name') attr name: string }";
@@ -112,8 +141,8 @@ test('decorator completion filters all definition kinds and attribute categories
     ['@| type label = string', [...common, 'definition', 'model']],
     ['@| @targets(DecoratorTargets.None) decorator @other()', [...common, 'allow_multiple', 'definition']],
     ['entity A { @| id key: string }', [...common, 'definition', 'identity']],
-    ['entity A { @| attr x: string }', [...common, 'dimension', 'overload', 'override', 'setting']],
-    ['entity A { @| static attr x: string }', [...common, 'dimension', 'overload', 'override', 'setting']],
+    ['entity A { @| attr x: string }', [...common, 'dense', 'sparse', 'dimension', 'overload', 'override', 'setting']],
+    ['entity A { @| static attr x: string }', [...common, 'dense', 'sparse', 'dimension', 'overload', 'override', 'setting']],
     ['entity A { @| config attr x: string }', [...common, 'overload', 'override', 'setting']],
     ['entity A { @| snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
     ['entity A { @| scd attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
@@ -121,8 +150,8 @@ test('decorator completion filters all definition kinds and attribute categories
     ['value item { @| attr x: string }', [...common, 'value_field']],
     ['value item { @| static attr x: string }', [...common, 'value_field']],
     ['@|', [...common, 'allow_multiple', 'definition', 'flags', 'model', 'targets']],
-    ['entity A { @|', [...common, 'definition', 'dimension', 'identity', 'overload', 'override', 'setting', 'temporal']],
-    ['entity A {} extend A { @| }', [...common, 'dimension', 'overload', 'override', 'setting', 'temporal']],
+    ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'identity', 'overload', 'override', 'setting', 'temporal']],
+    ['entity A {} extend A { @| }', [...common, 'dense', 'sparse', 'dimension', 'overload', 'override', 'setting', 'temporal']],
     ['value item { @|', [...common, 'value_field']],
     ['entity A { @t| # misleading decodes {}\n @title(\'@flags }\') snapshot attr x: string }', [...common.filter(n => n !== 'title'), 'dimension', 'overload', 'override', 'temporal']],
     ['entity A { @tem|poral(day: date) snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],

@@ -90,6 +90,8 @@ function inside(root, uri) {
   return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative);
 }
 const help = {
+  sparse: 'Store a non-collection, dimensionless static field in a typed long table grouped by inheritance root and cat. cat must be nonempty snake_case. Mutually exclusive with dense and dimension; reading semantics are unchanged.',
+  dense: 'Store a non-collection, dimensionless static field in a wide table grouped by inheritance root and cat. cat must be nonempty snake_case. Mutually exclusive with sparse and dimension; reading semantics are unchanged.',
   flags: 'Independent positive single-bit codes; None is zero and All selects every declared flag. Use + to add and - to remove flags, left to right; repeated additions or removals have no further effect.',
   value: 'Final structured value; fields are static, non-collection values or entity IDs.',
   Hierarchy: 'Prioritized dimension candidates; lower ordering is tried first.',
@@ -179,7 +181,7 @@ class Service {
   tokenAt(doc, pos) {
     return doc.tokens.find(t => t.range.start.line === pos.line && t.range.start.character <= pos.character && pos.character < t.range.end.character);
   }
-  completionScope(doc, start, end, decoratorName = false) {
+  completionScope(doc, start, end, decoratorName = false, onRecovered = null) {
     const replacement = decoratorName ? '@completion' : doc.text.slice(start, end).replace(/[^\r\n]/g, ' ');
     const text = doc.text.slice(0, start) + replacement + doc.text.slice(end);
     let recovered = parse(text, doc.uri);
@@ -192,6 +194,7 @@ class Service {
     const root = rootFor(doc.uri);
     const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
     validate([...siblings, recovered]);
+    onRecovered?.(recovered);
     return recovered.scope;
   }
   references(target, includeDeclaration) {
@@ -250,12 +253,18 @@ class Service {
         const used = new Set();
         const sites = decoratorSites(doc, decorator.index, used);
         if (!sites.length) return { isIncomplete: false, items: [] };
-        const scope = doc.errors.length ? this.completionScope(doc, decorator.index, offset, true) : doc.scope;
+        let completionDoc = doc;
+        const scope = doc.errors.length ? this.completionScope(doc, decorator.index, offset, true, recovered => { completionDoc = recovered; }) : doc.scope;
         const symbols = new Map([...scope.values()].map(d => [d.key, d]));
+        const field = completionDoc.declarations.flatMap(d => d.fields).find(f => f.metadata.some(a => a.token.start === decorator.index));
+        const collection = field && new Resolver(completionDoc, () => {}, symbols, field.owner).resolve(field.type).kind === 'collection';
         const usedKeys = new Set([...used].map(name => scope.get(name)?.key));
         const applicable = [...scope.values()].filter(d => {
           if (d.kind !== 'decorator') return false;
+          if (collection && ['sparse', 'dense'].includes(d.name.value)) return false;
           if (usedKeys.has(d.key) && !allowsMultiple(d)) return false;
+          if (['sparse', 'dense'].includes(d.name.value) && ['sparse', 'dense', 'dimension'].some(name => used.has(name))) return false;
+          if (d.name.value === 'dimension' && ['sparse', 'dense'].some(name => used.has(name))) return false;
           const contract = targetContract(d, symbols);
           return sites.some(([kind, mode]) => allowsTarget(contract, kind, mode));
         });

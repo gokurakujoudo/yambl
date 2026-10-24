@@ -70,6 +70,11 @@ value 中的 `attr` 和 `static attr` 都属于 `AttrCats.Static`；
 
 ## 捕获被修饰对象
 
+`@sparse(cat: string)` 和 `@dense(cat: string)` 的声明范围为 EntityAttr / Static，
+另须满足非集合、无维度约束。cat 为非空 snake_case；两者与 `@dimension` 互斥。
+它们只指定物理存储，不计入逻辑字段签名。继承树中的分组与实现冲突规则见
+[命名 static 分组](storage.md#命名-static-分组)。补全根据类型及已有互斥标记过滤这两个选项。
+
 ```text
 @targets(DecoratorTargets.EntityAttr)
 decorator @proxy(target: type<self::entity>)

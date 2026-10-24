@@ -43,6 +43,11 @@ async function main() {
   }
 
   expectScope('@flags', '@flags', 'entity.name.function.yambl');
+  for (const name of ['sparse', 'dense']) {
+    expectScope(`@${name}(cat='bond_info')`, '@' + name, 'entity.name.function.yambl');
+    expectScope(`@${name}(cat='bond_info')`, 'cat', 'variable.parameter.yambl');
+    expectScope(`@${name}(cat='bond_info')`, 'bond_info', 'string.quoted.single.yambl');
+  }
   expectScope('@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot + AttrCats.Scd)', '@targets', 'entity.name.function.yambl');
   expectScope('@targets(DecoratorTargets.EntityAttr)', 'DecoratorTargets', 'support.type.yambl');
   expectScope('@targets(DecoratorTargets.EntityAttr)', 'EntityAttr', 'constant.other.yambl');

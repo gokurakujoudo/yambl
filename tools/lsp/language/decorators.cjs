@@ -138,17 +138,33 @@ function checkTarget(call, node, declaration, issue, symbols) {
 }
 
 function checkDecorators(documents, issue, symbols) {
+  const groups = new Map(), placements = new Map();
   for (const doc of documents.filter(d => !d.errors.length)) for (const declaration of doc.declarations) {
     if (declaration.kind === 'decorator') checkParameters(declaration, issue, symbols);
     for (const node of [declaration, ...declaration.fields]) {
       const seen = new Set(), dimensions = new Set();
       for (const call of node.metadata) {
         const name = call.name;
-        bindCall(call, node, issue, symbols);
+        const values = new Map();
+        bindCall(call, node, issue, symbols, values);
         const definition = doc.scope.get(name);
         if (definition?.kind === 'decorator') checkTarget(call, node, declaration, issue, symbols);
         if (definition?.kind === 'decorator' && seen.has(name) && !allowsMultiple(definition)) issue(doc, call.token, `duplicate decorator: ${name}`);
         seen.add(name);
+        if (['sparse', 'dense'].includes(name)) {
+          if (!snake(values.get('cat')?.exact || '')) issue(doc, call.token, 'storage category must be nonempty snake_case');
+          if (node.metadata.some(a => a.name === 'dimension') || (node.metadata.some(a => a.name === 'sparse') && node.metadata.some(a => a.name === 'dense'))) issue(doc, call.token, 'sparse, dense and dimension are mutually exclusive');
+          if (!node.kind && new Resolver(doc, () => {}, symbols, node.owner).resolve(node.type).kind === 'collection') issue(doc, call.token, 'storage grouping requires a non-collection field');
+          if (!node.kind && node.owner?.kind === 'entity') {
+            const root = (node.owner.ancestors?.at(-1) || node.owner).key;
+            const category = values.get('cat')?.exact || '';
+            const groupKey = root + '\0' + category, fieldKey = root + '\0' + node.name.value;
+            const placement = JSON.stringify([name, category]);
+            if (groups.has(groupKey) && groups.get(groupKey) !== name) issue(doc, call.token, 'conflicting sparse/dense layout for storage category');
+            if (placements.has(fieldKey) && placements.get(fieldKey) !== placement) issue(doc, call.token, 'conflicting storage groups across field implementations');
+            groups.set(groupKey, name); placements.set(fieldKey, placement);
+          }
+        }
         if (['temporal', 'dimension'].includes(name)) {
           if (name === 'dimension' && call.dimensions.length) {
             const first = new Resolver(doc, () => {}, symbols, null, false, new Map([['self', capture(node, symbols)]])).resolve(call.dimensions[0].type);

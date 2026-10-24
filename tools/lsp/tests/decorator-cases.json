@@ -487,5 +487,83 @@
   ],
   [
     "@targets(DecoratorTargets.All) decorator @tag() @tag decodes Codes { @tag - 1 One: 'One' }"
+  ],
+  [
+    "entity A { @sparse('info') attr x: string @dense(cat='details') static attr y: integer }"
+  ],
+  [
+    "entity A { @sparse('info') attr x: string } entity B inherits A { @override attr x: string }"
+  ],
+  [
+    "entity A {} entity B inherits A { @overload @sparse('info') attr x: string } entity C inherits A { @overload attr x: string }"
+  ],
+  [
+    "entity A {} extend A { @sparse('info') attr x: decimal } entity B inherits A { @sparse('info') static attr y: bool }"
+  ],
+  [
+    "entity A { @sparse('info') attr x: string } entity B { @dense('info') attr x: string }"
+  ],
+  [
+    "@sparse('x') entity A {}"
+  ],
+  [
+    "value item { @dense('x') attr x: string }"
+  ],
+  [
+    "entity A { @sparse('') attr x: string }"
+  ],
+  [
+    "entity A { @dense('BondInfo') attr x: string }"
+  ],
+  [
+    "entity A { @sparse('x; DROP TABLE') attr x: string }"
+  ],
+  [
+    "entity A { @sparse attr x: string }"
+  ],
+  [
+    "entity A { @dense(2) attr x: string }"
+  ],
+  [
+    "entity A { @sparse('x') config attr x: string }"
+  ],
+  [
+    "entity A { @dense('x') snapshot attr x: string }"
+  ],
+  [
+    "entity A { @sparse('x') scd attr x: string }"
+  ],
+  [
+    "entity A { @dense('x') id key: string }"
+  ],
+  [
+    "entity A { @sparse('x') attr x: collection<A> }"
+  ],
+  [
+    "type items = values<string> entity A { @dense('x') attr x: items }"
+  ],
+  [
+    "entity A { @sparse('x') attr x: mapping<string, string> }"
+  ],
+  [
+    "entity A { @sparse('x') @dimension(source: string) attr x: string }"
+  ],
+  [
+    "entity A { @dense('x') @dimension(source: string) attr x: string }"
+  ],
+  [
+    "entity A { @sparse('x') @dense('x') attr x: string }"
+  ],
+  [
+    "entity A { @sparse('x') @sparse('x') attr x: string }"
+  ],
+  [
+    "entity A { @sparse('info') attr x: string } entity B inherits A { @dense('info') static attr y: integer }"
+  ],
+  [
+    "entity A { @sparse('info') attr x: string } entity B inherits A { @override @sparse('other') attr x: string }"
+  ],
+  [
+    "entity A {} entity B inherits A { @overload @sparse('info') attr x: string } entity C inherits A { @overload @dense('info') attr x: string }"
   ]
 ]

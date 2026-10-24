@@ -25,6 +25,8 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 - Problems 面板中的实时语法、类型及引用诊断；未定义的裸字典名称报错，带引号的外部字典不提示。
 - Format Document 格式化当前文档；存在语法错误时不提供修改。
 - 输入补全，包括关键字、注解、内置类型和当前文件可见的声明。
+- `@sparse` / `@dense` 提供 cat 参数补全、签名悬停和定义跳转；补全排除集合、
+  非 static 属性以及与已有 sparse/dense/dimension 标记互斥的选项。
 - 七个非正常值常量 `NOT_DEFINED`、`NOT_APPLICABLE`、`EMPTY`、`NO_ENTRY`、`NO_DATA`、
   `ENTITY_NOT_FOUND`、`ERROR` 提供高亮、常量补全和含义悬停。显式赋值、回退及运算
   传播规则尚未定义，不能用作模型表达式或 config 默认值。

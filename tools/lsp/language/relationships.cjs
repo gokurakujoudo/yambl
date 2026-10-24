@@ -8,7 +8,7 @@ function typeSignature(node, doc, owner, symbols) {
 }
 function signature(field, symbols = new Map(), includeType = true) {
   const { bindCall } = require('./decorators.cjs');
-  const annotations = field.metadata.filter(a => !['override', 'overload'].includes(a.name)).map(a => bindCall(a, field, () => {}, symbols));
+  const annotations = field.metadata.filter(a => !['override', 'overload', 'sparse', 'dense'].includes(a.name)).map(a => bindCall(a, field, () => {}, symbols));
   annotations.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   return JSON.stringify([field.mode, includeType ? typeSignature(field.type, field.doc, field.owner, symbols) : '', annotations]);
 }

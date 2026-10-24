@@ -11,7 +11,7 @@ yambl generate -o path ./build/model.yambl-ir.json -o output ./build/generated -
 
 ## 表结构
 
-每个业务根实体有一张身份宽表，保存 ID、实际实体类型及所有无维度的 static 字段；
+每个业务根实体有一张身份宽表，保存 ID、实际实体类型及未指定分组的无维度 static 字段；
 同一继承树共享 ID 空间，子类型字段也并入根实体宽表，读取仍检查实际类型上的适用性。
 无维度的 static 集合将状态放入宽表、成员放入独立表。有维度的 static 字段按根实体和
 维度结构分组，config 按根实体独立存入长表。普通 `attr` 是 `static attr`
@@ -59,12 +59,48 @@ VALUE 记录存在但无成员表示正常空集合。实体引用不建立强�
 Decimal、整数和相应 ID 使用 TEXT，避免 SQLite 数值精度限制。bool 使用 0/1，
 date 使用 ISO 日期。本地字典代码校验成员身份，外部字典只保存带字典类型的字符串。
 不执行任意正则，不生成 Snowflake ID。数据库保存布局修订号和模型摘要，读取器要求匹配。
-当前布局修订号为 2；IR 仍为修订号 2。布局 1 的数据库须重新生成，本轮不提供迁移。
+当前布局修订号为 3；IR 仍为修订号 2。旧布局数据库须重新生成，本轮不提供迁移。
 内部元数据表为 `tb_yambl_metadata`，也使用统一前缀。
 
 `schema.md` 包含全部表、列、主键、CHECK、外键、索引、逻辑字段映射和各表 DDL。
 文档区分模型默认值与 SQL 默认值，区分逻辑引用与实际外键；它与 SQL 和 manifest
 由同一份存储模型生成。
+
+### 命名 static 分组
+
+`@sparse(cat: string)` 与 `@dense(cat: string)` 仅修饰实体或 extend 中的非集合、
+无维度 static 属性，普通 `attr` 同样适用。两者与 `@dimension` 互斥。
+cat 必须是非空 snake_case，不接受路径、空白或任意 SQL 名称。
+
+```text
+entity Security { id security_id: string }
+entity Bond inherits Security {
+    @sparse('bond_info')
+    attr coupon: decimal
+    @sparse(cat='bond_info')
+    attr callable: bool
+    @dense('terms')
+    attr issuer_name: string
+}
+```
+
+分组按继承根实体与 cat 合并。以上字段分别进入 `tb_security_bond_info` 和
+`tb_security_terms`；在 core namespace 下使用 `tb_core_security_...`。
+同一继承树内同 cat 混用 sparse/dense 报错；不同继承树可使用不同布局。
+与身份表、时间表、config 表等物理名称冲突时，生成器在写出前报错。
+
+sparse 为长表，主键 `(id, field)`；field 保存逻辑字段 qualified name，state 保存状态。
+按组内实际需要建立 `string`、`bool`、`int`、`decimal`、`date` 载荷列。
+string 和 code 共用 string；integer 与 snowflake_id 共用 int；实体引用使用目标 ID 的列。
+除 bool 为 INTEGER 0/1 外，载荷列均为 TEXT，保留整数和 Decimal 的精度。
+SQL CHECK 约束正常行必须且只能填入该字段对应的一列，其他列为 NULL；
+NO_ENTRY、EMPTY、NOT_APPLICABLE 行的所有载荷列均为 NULL。组内未用到的列不生成。
+dense 为主键 id 的宽表，每个字段有独立载荷和状态列，行为与身份宽表上的 static 字段相同。
+
+两种标记只决定存储布局，不参与逻辑字段签名、类型兼容、筛选及读 API。
+继承和 override/overload 实现共享一个逻辑字段的分组：任一实现声明的分组适用于整个逻辑字段，
+其他实现可以省略或重复相同标记，显式指定不同分组或布局时报错。
+不支持的业务类型仍在生成前报告；分组不会让未支持的运行时类型自动变为可用。
 
 ### 内置表
 
@@ -155,6 +191,7 @@ EMPTY 和 NOT_APPLICABLE 不回退。不执行 ConfigGroup、Hierarchy、价格�
 | snapshot / temporal | 已定义 | 已实现 | 已实现 | 独立时间表 | 精确点与稀疏区间 |
 | scd | 已定义 | 已实现 | 已实现 | 显式期间 | 起点、变化与缺口 |
 | dimension | 已定义 | 已实现 | 已绑定 | 非空键列 | 必填显式参数 |
+| sparse / dense | 已定义 | 类型、互斥、分组冲突和补全已实现 | 已绑定 | 按继承根与 cat 的长表 / 宽表 | 复用同一读取语义 |
 | Decodes、Hierarchy、ConfigGroup 存储 | 已定义 | 静态已实现 | 保留 | 身份宽表和条目/映射子表 | 内置读取和选择/覆盖待实现 |
 | 七个非正常结果 | 已定义 | 已实现 | 保留 | 三种字段状态 | 统一结果对象 |
 | 回退、比较、运算传播 | 未定义 | 无执行器 | 不附加规则 | 不执行 | 不执行 |

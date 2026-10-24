@@ -14,7 +14,8 @@ Decorator 按已解析身份和绑定参数比较，补齐默认值；忽略调�
 解码后的值，忽略注解及命名参数顺序；`decimal[18, 4]` 与
 `decimal[scale: 4, precision: 18]`、`code<Currencies>` 与
 `code<'Currencies'>` 分别等价。注释、源码位置及 config 默认值不计入签名。
-缺少元信息与显式提供元信息不同。
+缺少元信息与显式提供元信息不同。`@sparse` 和 `@dense` 是例外：它们只影响
+物理分组，不计入逻辑字段签名；同一逻辑字段的显式存储分组必须一致。
 
 ## @overload
 
