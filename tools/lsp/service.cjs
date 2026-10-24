@@ -10,6 +10,50 @@ const { sources, readPrefix, rootName, configError } = require('./repository.cjs
 const { modelRoot } = require('./language/relationships.cjs');
 const { Resolver } = require('./language/expressions.cjs');
 const { codeEntries } = require('./language/decodes.cjs');
+const { targetContract, allowsTarget } = require('./language/decorators.cjs');
+
+// Use lexer tokens so comments, strings and Markdown cannot invent a surrounding declaration.
+function decoratorSites(doc, start) {
+  const tokens = doc.tokens, marker = tokens.findIndex(t => t.start === start && t.value === '@');
+  if (marker < 0 || tokens[marker - 1]?.value === 'decorator') return [];
+  const stack = [];
+  for (let i = 0; i < marker; i++) {
+    const value = tokens[i].value;
+    if (['(', '[', '<', '{'].includes(value)) {
+      const kind = value === '{' ? tokens.slice(0, i).findLast(t => ['entity', 'extend', 'value', 'decodes'].includes(t.value))?.value : null;
+      stack.push({ value, kind });
+    } else if ([')', ']', '>', '}'].includes(value)) stack.pop();
+  }
+  if (stack.some(frame => frame.value !== '{') || stack.length > 1) return [];
+  const owner = stack[0]?.kind;
+  if (owner === 'decodes') return [];
+  let index = marker;
+  do {
+    const at = tokens[index++];
+    // The current name may be empty or only partly typed; later annotations have full names.
+    if (/^[A-Za-z_][A-Za-z_0-9]*$/.test(tokens[index]?.value || '') && (tokens[index].start === at.end || index - 1 !== marker)) index++;
+    if (tokens[index]?.value === '(') {
+      let depth = 0;
+      do {
+        const value = tokens[index++].value;
+        if (value === '(') depth++;
+        if (value === ')') depth--;
+      } while (depth && index < tokens.length);
+      if (depth) return [];
+    }
+  } while (tokens[index]?.value === '@');
+  const next = tokens[index]?.value;
+  if (owner) {
+    if (next === 'id') return owner === 'entity' ? [['Id']] : [];
+    if (next && next !== '}' && !['attr', 'static', 'config', 'snapshot', 'scd'].includes(next)) return [];
+    if (owner === 'value') return !next || ['}', 'attr', 'static'].includes(next) ? [['ValueAttr', 'static']] : [];
+    if (next && next !== '}') return [['EntityAttr', next]];
+    return owner === 'entity' ? [['Id'], ['EntityAttr']] : [['EntityAttr']];
+  }
+  const kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type: 'Type', decorator: 'Decorator', final: 'Entity' }[next];
+  return kind ? [[kind]] : next ? [] : ['Entity', 'Value', 'Decodes', 'Type', 'Decorator'].map(kind => [kind]);
+}
+
 function uriKey(uri) {
   if (!uri.startsWith('file:')) return uri;
   const file = path.resolve(fileURLToPath(uri));
@@ -118,12 +162,14 @@ class Service {
   tokenAt(doc, pos) {
     return doc.tokens.find(t => t.range.start.line === pos.line && t.range.start.character <= pos.character && pos.character < t.range.end.character);
   }
-  completionScope(doc, start, end) {
-    const text = doc.text.slice(0, start) + doc.text.slice(start, end).replace(/[^\r\n]/g, ' ') + doc.text.slice(end);
+  completionScope(doc, start, end, decoratorName = false) {
+    const replacement = decoratorName ? '@completion' : doc.text.slice(start, end).replace(/[^\r\n]/g, ' ');
+    const text = doc.text.slice(0, start) + replacement + doc.text.slice(end);
     let recovered = parse(text, doc.uri);
     if (recovered.errors.length) {
       const last = doc.declarations.at(-1);
-      recovered = parse(last ? doc.text.slice(0, last.end) : '', doc.uri);
+      const preamble = doc.pieces.filter(p => ['namespace', 'from'].includes(p.tokens[0].value)).at(-1);
+      recovered = parse(doc.text.slice(0, last?.end || preamble?.tokens.at(-1).end || 0), doc.uri);
     }
     Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
     const root = rootFor(doc.uri);
@@ -184,8 +230,16 @@ class Service {
       }
       const decorator = /@[a-z_0-9]*$/.exec(before);
       if (decorator) {
-        const scope = doc.errors.length ? this.completionScope(doc, decorator.index, offset) : doc.scope;
-        return { isIncomplete: false, items: [...scope.values()].filter(d => d.kind === 'decorator').map(d => ({ label: d.name.value, kind: 3, detail: describe(d) })) };
+        const sites = decoratorSites(doc, decorator.index);
+        if (!sites.length) return { isIncomplete: false, items: [] };
+        const scope = doc.errors.length ? this.completionScope(doc, decorator.index, offset, true) : doc.scope;
+        const symbols = new Map([...scope.values()].map(d => [d.key, d]));
+        const applicable = [...scope.values()].filter(d => {
+          if (d.kind !== 'decorator') return false;
+          const contract = targetContract(d, symbols);
+          return sites.some(([kind, mode]) => allowsTarget(contract, kind, mode));
+        });
+        return { isIncomplete: false, items: applicable.map(d => ({ label: d.name.value, kind: 3, detail: describe(d) })) };
       }
       const selfPath = /\bself(?:\.[a-zA-Z_][a-zA-Z_0-9]*::value)*\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
       const codePath = /\b([A-Z][a-zA-Z_0-9]*)\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));

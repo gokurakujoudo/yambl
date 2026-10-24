@@ -106,22 +106,31 @@ function bindCall(call, node, issue, symbols, values = null) {
   return JSON.stringify([declaration.key, bound]);
 }
 
-function checkTarget(call, node, declaration, issue, symbols) {
-  const definition = node.doc.scope.get(call.name);
+function targetContract(definition, symbols) {
   const targets = definition.metadata.find(a => a.name === 'targets');
-  if (!targets) return;
+  if (!targets) return null;
   const values = new Map(); let invalid = false;
   bindCall(targets, definition, () => { invalid = true; }, symbols, values);
-  if (invalid) return;
+  return invalid ? null : values;
+}
+
+function allowsTarget(contract, kind, mode) {
+  if (!contract || !(contract.get('targets')?.exact || '').split('+').includes(kind)) return false;
+  if (!['EntityAttr', 'ValueAttr'].includes(kind)) return true;
+  const categories = (contract.get('categories')?.exact || '').split('+').filter(Boolean);
+  return mode ? categories.includes(mode[0].toUpperCase() + mode.slice(1)) : categories.length > 0;
+}
+
+function checkTarget(call, node, declaration, issue, symbols) {
+  const contract = targetContract(node.doc.scope.get(call.name), symbols);
+  if (!contract) return;
   let mode = node.mode;
   let kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type_alias: 'Type', decorator: 'Decorator' }[node.kind];
   if (!node.kind) {
     kind = mode === 'id' ? 'Id' : declaration.kind === 'value' ? 'ValueAttr' : 'EntityAttr';
     if (kind === 'ValueAttr') mode = 'static';
   }
-  let allowed = (values.get('targets')?.exact || '').split('+').includes(kind);
-  if (['EntityAttr', 'ValueAttr'].includes(kind)) allowed &&= (values.get('categories')?.exact || '').split('+').includes(mode[0].toUpperCase() + mode.slice(1));
-  if (!allowed) issue(node.doc, call.token, `decorator ${call.name} does not allow this target`);
+  if (!allowsTarget(contract, kind, mode)) issue(node.doc, call.token, `decorator ${call.name} does not allow this target`);
 }
 
 function checkDecorators(documents, issue, symbols) {
@@ -152,4 +161,4 @@ function checkDecorators(documents, issue, symbols) {
   }
 }
 
-module.exports = { capture, bindCall, checkDecorators };
+module.exports = { capture, bindCall, checkDecorators, targetContract, allowsTarget };

@@ -88,3 +88,93 @@ test('explicit target contracts provide diagnostics, completion, hover and navig
     for (const label of labels) assert.ok(result.items.some(i => i.label === label), source + ': ' + label);
   }
 });
+
+test('decorator completion filters all definition kinds and attribute categories', () => {
+  const service = new Service(() => {}), uri = 'untitled:target-filter';
+  const prefix = [
+    '@targets(DecoratorTargets.All) decorator @anywhere()',
+    '@targets(DecoratorTargets.None) decorator @nowhere()',
+    '@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Config + AttrCats.Static) decorator @setting()',
+    '@targets(DecoratorTargets.ValueAttr, categories=AttrCats.Static) decorator @value_field()',
+    '@targets(DecoratorTargets.EntityAttr, categories=AttrCats.None) decorator @no_category()',
+    '@targets(DecoratorTargets.Id, categories=AttrCats.None) decorator @identity()',
+    '@targets(DecoratorTargets.Entity + DecoratorTargets.Type) decorator @model()',
+    '@targets(DecoratorTargets.All - DecoratorTargets.EntityAttr - DecoratorTargets.ValueAttr) decorator @definition()',
+    'decorator @missing_scope()',
+    '@targets(AttrCats.All) decorator @bad_scope()',
+  ].join('\n') + '\n';
+  const common = ['anywhere', 'description', 'title'];
+  const examples = [
+    ['@| entity A {}', [...common, 'definition', 'model']],
+    ['@| final entity A {}', [...common, 'definition', 'model']],
+    ['@| value item {}', [...common, 'definition']],
+    ['@| decodes Codes {}', [...common, 'definition', 'flags']],
+    ['@| type label = string', [...common, 'definition', 'model']],
+    ['@| @targets(DecoratorTargets.None) decorator @other()', [...common, 'allow_multiple', 'definition', 'targets']],
+    ['entity A { @| id key: string }', [...common, 'definition', 'identity']],
+    ['entity A { @| attr x: string }', [...common, 'dimension', 'overload', 'override']],
+    ['entity A { @| static attr x: string }', [...common, 'overload', 'override', 'setting']],
+    ['entity A { @| config attr x: string }', [...common, 'overload', 'override', 'setting']],
+    ['entity A { @| snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
+    ['entity A { @| scd attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
+    ['entity A {} extend A { @| snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
+    ['value item { @| attr x: string }', [...common, 'value_field']],
+    ['value item { @| static attr x: string }', [...common, 'value_field']],
+    ['@|', [...common, 'allow_multiple', 'definition', 'flags', 'model', 'targets']],
+    ['entity A { @|', [...common, 'definition', 'dimension', 'identity', 'overload', 'override', 'setting', 'temporal']],
+    ['entity A {} extend A { @| }', [...common, 'dimension', 'overload', 'override', 'setting', 'temporal']],
+    ['value item { @|', [...common, 'value_field']],
+    ['entity A { @t| # misleading decodes {}\n @title(\'@flags }\') snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
+    ['entity A { @tem|poral(day: date) snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
+    ['entity A { @|(day: date) snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
+    ['@| extend A {} entity A {}', []],
+    ['decodes Codes { @| - 1 One: \'One\' }', []],
+    ['decorator @|', []],
+    ['decorator @other(@|)', []],
+    ['type t<a: @|> = a', []],
+    ["@title('text @|') entity A {}", []],
+    ['# @|\nentity A {}', []],
+    ['value item { @| snapshot attr x: string }', []],
+    ['entity A {} extend A { @| id key: string }', []],
+  ];
+  for (const [sample, expected] of examples) {
+    const marked = prefix + sample, offset = marked.indexOf('|'), text = marked.replace('|', '');
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const position = require('../language/syntax.cjs').position(text, offset);
+    const result = service.feature('textDocument/completion', { textDocument: { uri }, position });
+    assert.deepEqual(result.items.map(item => item.label).sort(), [...expected].sort(), sample);
+  }
+});
+
+test('target-filtered completion retains imports in unfinished bodies and reacts to unsaved changes', () => {
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const { pathToFileURL } = require('node:url');
+  const { position } = require('../language/syntax.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-target-completion-'));
+  try {
+    fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: 'test'");
+    const definition = 'namespace meta @targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot) decorator @observed()';
+    fs.writeFileSync(path.join(root, 'meta.yambl'), definition);
+    fs.writeFileSync(path.join(root, 'consumer.yambl'), 'namespace app from meta import observed entity A {}');
+    const uri = pathToFileURL(path.join(root, 'consumer.yambl')).href;
+    const metaUri = pathToFileURL(path.join(root, 'meta.yambl')).href;
+    const service = new Service(() => {});
+    const complete = sample => {
+      const offset = sample.indexOf('|'), text = sample.replace('|', '');
+      service.open.set(uri, { text, version: 1 }); service.refresh();
+      return service.feature('textDocument/completion', { textDocument: { uri }, position: position(text, offset) }).items.map(i => i.label);
+    };
+    const prefix = 'namespace app from meta import observed ';
+    assert.ok(complete(prefix + 'entity A { @|').includes('observed'));
+    assert.ok(complete(prefix + 'entity A { @| snapshot attr x: string }').includes('observed'));
+    assert.ok(!complete(prefix + 'entity A { @| static attr x: string }').includes('observed'));
+    assert.ok(!complete('namespace app entity A { @| snapshot attr x: string }').includes('observed'));
+    service.open.set(metaUri, { text: definition.replace('AttrCats.Snapshot', 'AttrCats.Static'), version: 2 });
+    assert.ok(!complete(prefix + 'entity A { @| snapshot attr x: string }').includes('observed'));
+    assert.ok(complete(prefix + 'entity A { @| static attr x: string }').includes('observed'));
+    service.open.set(metaUri, { text: 'namespace meta decorator @observed()', version: 3 });
+    assert.ok(!complete(prefix + 'entity A { @|').includes('observed'));
+    const forward = 'namespace app entity A { @| snapshot attr x: string } @targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot) decorator @future()';
+    assert.ok(complete(forward).includes('future'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

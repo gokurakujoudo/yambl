@@ -122,8 +122,13 @@ Code references navigate to entries; generated members navigate to the dictionar
 The language service resolves `decorator @name(...)` declarations from the current
 namespace, imports and bundled built-ins. It checks positional and named values,
 caller-defined key/type pairs, defaults, repetition and captured `self` constraints.
-Completion after `@` lists visible decorators; inside a call it offers ordinary
-parameter names with `=`. Hovers show signatures, defaults, explicit `@targets` scopes and `@allow_multiple`.
+Completion after `@` filters visible decorators by their declared `@targets` and
+the following definition or attribute category. Before that definition is written,
+it offers candidates for the kinds still possible at the current nesting level.
+Value attributes use Static; extend bodies use entity attributes. Comments, strings,
+dictionary entries and formal parameters do not offer decorator names. Missing or
+invalid target contracts are omitted. Imports and unsaved scope changes are respected.
+Inside a call, completion offers ordinary parameter names with `=`. Hovers show signatures, defaults, explicit `@targets` scopes and `@allow_multiple`.
 Every decorator must declare `@targets`; diagnostics check its target kinds and
 attribute categories from the language sources. Target codes, generated All/None
 and named arguments complete and navigate to their definitions.
