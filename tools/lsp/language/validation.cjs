@@ -1,4 +1,5 @@
 'use strict';
+const { checkDecorators } = require('./decorators.cjs');
 const { isFlags, codeEntries, checkDecodes } = require('./decodes.cjs');
 
 const { values, generics, entities, structures, stringValue } = require('./syntax.cjs');
@@ -21,7 +22,7 @@ function validate(documents) {
     if (doc.errors.length) continue;
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
       const name = decl.name.value; decl.key = key(doc, namespace(doc), name); decl.ownFields = new Map();
-      if (['value', 'type_alias'].includes(decl.kind) ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, ['value', 'type_alias'].includes(decl.kind) ? 'value names must use snake_case' : 'declaration names must use PascalCase');
+      if (['value', 'type_alias', 'decorator'].includes(decl.kind) ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, ['value', 'type_alias', 'decorator'].includes(decl.kind) ? (decl.kind === 'decorator' ? 'decorator names must use snake_case' : 'value names must use snake_case') : 'declaration names must use PascalCase');
       const modelDefinition = namespace(doc) === 'builtins' && builtinModels.has(name);
       if ((!modelDefinition && reserved.includes(name)) || symbols.has(decl.key)) issue(doc, decl.token, `duplicate or reserved declaration: ${name}`);
       symbols.set(decl.key, decl); bind(doc, decl.name, decl);
@@ -45,17 +46,8 @@ function validate(documents) {
   function checkType(doc, node, owner, allowExact = false) {
     return new Resolver(doc, issue, symbols, owner, allowExact).resolve(node).kind;
   }
-  function metadata(doc, items) {
-    const seen = new Set();
-    for (const item of items.filter(a => ['title', 'description'].includes(a.name))) {
-      if (seen.has(item.name)) issue(doc, item.token, `duplicate metadata: ${item.name}`);
-      seen.add(item.name);
-    }
-  }
   for (const doc of documents.filter(d => !d.errors.length)) {
     for (const decl of doc.declarations) {
-      metadata(doc, decl.metadata);
-      if (decl.kind !== 'decodes') for (const marker of decl.metadata.filter(a => a.name === 'flags')) issue(doc, marker.token, 'flags requires a Decodes declaration');
       if (decl.kind === 'decodes') {
         checkDecodes(decl, issue);
         for (const entry of codeEntries(decl).filter(e => !e.generated)) bind(doc, entry.name, entry);
@@ -82,37 +74,11 @@ function validate(documents) {
         }
         if (!snake(name)) issue(doc, field.token, 'field names must use snake_case');
         if (decl.kind === 'extend' && field.mode === 'id') issue(doc, field.token, 'extend may add attributes, not id fields');
-        pendingTypes.push([doc, field.type, target, field.metadata.some(a => ['overload', 'override'].includes(a.name))]); metadata(doc, field.metadata);
+        pendingTypes.push([doc, field.type, target, field.metadata.some(a => ['overload', 'override'].includes(a.name))]);
         const markers = field.metadata.filter(a => ['overload', 'override'].includes(a.name));
         if (markers.length > 1) issue(doc, markers.at(-1).token, 'only one overload or override marker is allowed');
         if (markers.length && field.mode === 'id') issue(doc, markers[0].token, 'field markers require an attr');
-        const temporal = field.metadata.filter(a => a.name === 'temporal');
-        for (const item of temporal) {
-          const d = item.dimensions[0];
-          if (!['snapshot', 'scd'].includes(field.mode) || item.dimensions.length !== 1 || d.token.value !== 'as_of_date' ||
-            d.type.name !== 'date' || d.type.args || d.type.params) issue(doc, item.token, 'supported annotation is @temporal(as_of_date: date) on snapshot or scd attr');
-        }
-        if (temporal.length > 1) issue(doc, field.metadata[0].token, 'duplicate temporal annotation');
-        const dimensions = new Set(temporal.flatMap(a => a.dimensions.map(d => d.token.value)));
-        for (const item of field.metadata.filter(a => a.name === 'dimension')) {
-          if (!['attr', 'snapshot', 'scd'].includes(field.mode)) issue(doc, item.token, 'dimension requires attr, snapshot or scd');
-          if (![1, 2].includes(item.dimensions.length)) issue(doc, item.token, 'dimension requires one or two parameters');
-          for (const [i, dimension] of item.dimensions.entries()) {
-            const name = dimension.token.value;
-            if (!snake(name)) issue(doc, dimension.token, 'dimension names must use snake_case');
-            if (dimensions.has(name)) issue(doc, dimension.token, `duplicate dimension: ${name}`);
-            dimensions.add(name); pendingTypes.push([doc, dimension.type, target]);
-            pendingChecks.push(() => {
-              const resolved = new Resolver(doc, () => {}, symbols, target).resolve(dimension.type);
-              if (i === 0 && !['string', 'code'].includes(resolved.name)) issue(doc, dimension.token, 'dimension value must be string or code');
-              if (i === 1 && (resolved.name !== 'Hierarchy' || resolved.kind !== 'reference')) issue(doc, dimension.token, 'dimension selector must be Hierarchy');
-            });
-          }
-        }
-        if (decl.kind === 'value') {
-          if (!['attr', 'static'].includes(field.mode)) issue(doc, field.token, 'value fields must be attr or static attr');
-          for (const item of field.metadata.filter(a => !['title', 'description'].includes(a.name))) issue(doc, item.token, 'value fields allow only title and description annotations');
-        }
+        if (decl.kind === 'value' && !['attr', 'static'].includes(field.mode)) issue(doc, field.token, 'value fields must be attr or static attr');
         if (field.default) {
           if (field.mode !== 'config') issue(doc, field.defaultToken, 'defaults are currently supported only on config attr');
           pendingChecks.push(() => {
@@ -140,6 +106,7 @@ function validate(documents) {
     }
   }
   relationships(symbols, issue);
+  checkDecorators(documents, issue, symbols);
   checkAliases(documents, issue, symbols);
   for (const check of pendingChecks) check();
   for (const args of pendingTypes) {
@@ -170,6 +137,8 @@ function formatType(node) {
 }
 
 function describe(target) {
+  if (target.kind === 'decorator_parameter') return `${target.pair ? '*' : ''}${target.name.value}${target.optional ? '?' : ''}: ${formatType(target.type)}${target.default ? ' = ' + formatType(target.default) : ''}`;
+  if (target.kind === 'decorator') return `${target.metadata.some(a => a.name === 'allow_multiple') ? '@allow_multiple\n' : ''}decorator @${target.name.value}(${target.parameters.map(describe).join(', ')})`;
   if (target.kind === 'code') return `code ${target.name.value}${target.generated ? ' = ' + (target.name.value === 'None' ? '0' : 'all declared flags') + ' (generated)' : ': ' + stringValue(target.value.value) + ' (' + target.order.value + ')'}`;
   const details = ['title', 'description'].flatMap(name => (target.metadata || []).filter(a => a.name === name && a.value).map(a => `${name}: ${stringValue(a.value.value)}`));
   const mode = ['snapshot', 'scd', 'config', 'static'].includes(target.mode) ? target.mode + ' attr' : target.mode;

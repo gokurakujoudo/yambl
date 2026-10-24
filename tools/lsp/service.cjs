@@ -54,7 +54,9 @@ const help = {
   as: 'Bind a mapping key for its value type expression.',
   NOT_DEFINED: 'The requested subtype attribute does not apply to the instance’s actual type.',
   title: 'Short display title.', description: 'Descriptive metadata.',
-  temporal: 'Temporal parameter: as_of_date: date.', dimension: 'Independent data dimension with an optional Hierarchy selector.',
+  temporal: 'One caller-named date parameter on snapshot or scd attr.', dimension: 'Independent data dimension with an optional Hierarchy selector.',
+  decorator: 'Declare typed metadata with value parameters and caller-defined key/type pairs.',
+  allow_multiple: 'Allow repeated uses of the decorated decorator on one definition.',
 };
 
 class Service {
@@ -115,6 +117,19 @@ class Service {
   tokenAt(doc, pos) {
     return doc.tokens.find(t => t.range.start.line === pos.line && t.range.start.character <= pos.character && pos.character < t.range.end.character);
   }
+  completionScope(doc, start, end) {
+    const text = doc.text.slice(0, start) + doc.text.slice(start, end).replace(/[^\r\n]/g, ' ') + doc.text.slice(end);
+    let recovered = parse(text, doc.uri);
+    if (recovered.errors.length) {
+      const last = doc.declarations.at(-1);
+      recovered = parse(last ? doc.text.slice(0, last.end) : '', doc.uri);
+    }
+    Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
+    const root = rootFor(doc.uri);
+    const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+    validate([...siblings, recovered]);
+    return recovered.scope;
+  }
   references(target, includeDeclaration) {
     const locations = [];
     if (!target) return locations;
@@ -133,6 +148,7 @@ class Service {
     if (method === 'textDocument/definition') {
       const targets = token && doc.markerTargets.get(token.start);
       if (targets) return targets.map(field => ({ uri: field.doc.uri, range: field.name.range }));
+      if (target?.kind === 'decorator' && ['override', 'overload'].includes(token.value)) return null;
       return target ? { uri: target.doc.uri, range: target.name.range } : null;
     }
     if (method === 'textDocument/references') return this.references(target, params.context?.includeDeclaration === true);
@@ -150,12 +166,26 @@ class Service {
       return { data };
     }
     if (method === 'textDocument/hover') {
-      const value = target ? describe(target) : token && (help[token.value] || (values.includes(token.value) ? `Built-in value type: ${token.value}` : null));
+      const value = target ? describe(target) + (target.kind === 'decorator' && help[token.value] ? '\n\n' + help[token.value] : '') : token && (help[token.value] || (values.includes(token.value) ? `Built-in value type: ${token.value}` : null));
       return value ? { contents: { kind: 'plaintext', value }, range: token.range } : null;
     }
     if (method === 'textDocument/completion') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
-      if (/::[a-z]*$/.test(doc.text.slice(0, offset))) return { isIncomplete: false, items: ['type', 'value'].map(label => ({ label, kind: 10, detail: help.self })) };
+      if (/::[a-z]*$/.test(doc.text.slice(0, offset))) return { isIncomplete: false, items: ['type', 'value', 'entity'].map(label => ({ label, kind: 10, detail: help.self })) };
+      const before = doc.text.slice(0, offset);
+      const call = /@([a-z][a-z0-9_]*)\(([^@{}()]*)$/.exec(before);
+      if (call && !/\bdecorator\s*$/.test(before.slice(0, call.index)) && /(?:^|,)\s*[a-z_0-9]*$/.test(call[2])) {
+        const close = doc.text.indexOf(')', offset);
+        const scope = doc.errors.length ? this.completionScope(doc, call.index, close < 0 ? offset : close + 1) : doc.scope;
+        const declaration = scope.get(call[1]);
+        const used = new Set([...call[2].matchAll(/\b([a-z][a-z0-9_]*)\s*=/g)].map(m => m[1]));
+        return { isIncomplete: false, items: declaration?.kind === 'decorator' ? declaration.parameters.filter(p => !p.pair && !used.has(p.name.value)).map(p => ({ label: p.name.value, kind: 5, insertText: p.name.value + '=', detail: describe(p) })) : [] };
+      }
+      const decorator = /@[a-z_0-9]*$/.exec(before);
+      if (decorator) {
+        const scope = doc.errors.length ? this.completionScope(doc, decorator.index, offset) : doc.scope;
+        return { isIncomplete: false, items: [...scope.values()].filter(d => d.kind === 'decorator').map(d => ({ label: d.name.value, kind: 3, detail: describe(d) })) };
+      }
       const selfPath = /\bself(?:\.[a-zA-Z_][a-zA-Z_0-9]*::value)*\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
       const codePath = /\b([A-Z][a-zA-Z_0-9]*)\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
       if (selfPath || codePath) {

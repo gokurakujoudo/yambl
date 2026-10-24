@@ -43,6 +43,14 @@ async function main() {
   }
 
   expectScope('@flags', '@flags', 'entity.name.function.yambl');
+  expectScope('decorator @tag(text: string)', 'decorator', 'keyword.declaration.yambl');
+  expectScope('decorator @tag(text: string)', '@tag', 'entity.name.function.yambl');
+  expectScope('@allow_multiple', '@allow_multiple', 'entity.name.function.yambl');
+  expectScope('decorator @tag(*source?: string)', '*', 'keyword.operator.yambl');
+  expectScope('decorator @tag(*source?: string)', '?', 'keyword.operator.yambl');
+  expectScope('decorator @tag(*source?: string)', 'source', 'variable.other.property.yambl');
+  expectScope("@tag(text='Name')", 'text', 'variable.parameter.yambl');
+  expectScope('type<self::entity>', 'entity', 'variable.language.yambl');
   expectScope("    - 0b00001 Attr: 'Attribute'", '0b00001', 'constant.numeric.yambl');
   expectScope("    - 0b00001 Attr: 'Attribute'", 'Attr', 'constant.other.yambl');
   expectScope('attrs<AttrCats.Attr+AttrCats.Config, Entity>', '+', 'keyword.operator.bitwise.yambl');

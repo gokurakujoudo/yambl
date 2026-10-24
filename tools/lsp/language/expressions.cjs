@@ -89,7 +89,7 @@ class Resolver {
           this.doc.valueTypeTokens.set(node.token.start, node.token);
           result = term(type(name, name === 'string' ? 'string' : 'value', { params: this.parameters(node) }));
         } else if (name === 'Entity') { if (params) this.issue(node, 'invalid parameters for Entity'); result = term(entity); }
-        else if (symbol) {
+        else if (symbol && symbol.kind !== 'decorator') {
           if (params) this.issue(node, `invalid parameters for ${name}; do not mix positional and named parameters`);
           result = symbol.kind === 'decodes' ? term(type('Decodes', 'reference', { key: this.doc.scope.get('Decodes').key, exact: symbol.key }), 'value', { path: name, dictionary: symbol }) : term(type(name, symbol.kind === 'entity' ? 'reference' : 'value', { key: symbol.key }));
         } else { this.issue(node, `unknown type: ${name}`); result = term(unknown); }
@@ -140,6 +140,12 @@ class Resolver {
     const operator = access.operator.value, member = access.token.value, path = value.path + operator + member;
     const site = { token: access.operator };
     if (operator === '::') {
+      if (value.sort === 'field' && member === 'entity') {
+        const owner = value.source?.owner;
+        if (owner?.kind !== 'entity') { this.issue(site, 'field description has no owning entity'); return term(unknown); }
+        this.bind(access.token, owner);
+        return term(type(owner.name.value, 'reference', { key: owner.key }));
+      }
       if (value.sort !== 'field' || !['type', 'value'].includes(member)) { this.issue(site, ':: requires a field description and type or value'); return term(unknown); }
       if (member === 'value' && !value.instance) { this.issue(site, 'field value requires an instance origin'); return term(unknown); }
       if (!value.source) return term(type('dependent', 'value', { args: value.type.members || [], dependency: value.path + '::type' }));

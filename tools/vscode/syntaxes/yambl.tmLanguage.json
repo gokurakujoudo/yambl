@@ -44,7 +44,7 @@
       }
     },
     {
-      "match": "(::)(type|value)\\b",
+      "match": "(::)(type|value|entity)\\b",
       "captures": {
         "1": {
           "name": "punctuation.accessor.yambl"
@@ -152,7 +152,7 @@
     },
     {
       "name": "keyword.declaration.yambl",
-      "match": "\\b(?:value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|final|self|as|attr)\\b"
+      "match": "\\b(?:decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|final|self|as|attr)\\b"
     },
     {
       "name": "keyword.control.yambl",
@@ -172,7 +172,7 @@
     },
     {
       "name": "variable.other.property.yambl",
-      "match": "\\b[a-z][a-z0-9_]*(?=\\s*:(?!:))"
+      "match": "\\b[a-z][a-z0-9_]*(?=\\??\\s*:(?!:))"
     },
     {
       "name": "constant.language.yambl",
@@ -197,6 +197,14 @@
     {
       "name": "punctuation.section.yambl",
       "match": "[{}\\[\\]()<>]"
+    },
+    {
+      "name": "variable.parameter.yambl",
+      "match": "\\b[a-z][a-z0-9_]*(?=\\s*=)"
+    },
+    {
+      "name": "keyword.operator.yambl",
+      "match": "[?*]"
     },
     {
       "name": "punctuation.separator.yambl",

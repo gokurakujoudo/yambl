@@ -118,7 +118,19 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     const zeroHover = await vscode.commands.executeCommand('vscode.executeHoverProvider', flagsUri, flagsDoc.positionAt(flagsText.lastIndexOf('None')));
     assert.match(zeroHover[0].contents[0].value.replaceAll('&nbsp;', ' '), /0 \(generated\)/);
     assert.deepEqual(vscode.languages.getDiagnostics(flagsUri).map(d => d.message), []);
-    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None'] }));
+    const decoratorText = "namespace metadata @allow_multiple decorator @note(text: string = 'Note') @note(text='Review') entity Annotated {}";
+    const decoratorUri = vscode.Uri.file(path.join(root, 'decorators.yambl'));
+    fs.writeFileSync(decoratorUri.fsPath, decoratorText);
+    const decoratorDoc = await vscode.workspace.openTextDocument(decoratorUri);
+    await vscode.window.showTextDocument(decoratorDoc);
+    const parameterTargets = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', decoratorUri, decoratorDoc.positionAt(decoratorText.indexOf("text='Review'")));
+    assert.equal(parameterTargets[0].range.start.character, decoratorText.indexOf('text: string'));
+    const decoratorHover = await vscode.commands.executeCommand('vscode.executeHoverProvider', decoratorUri, decoratorDoc.positionAt(decoratorText.lastIndexOf('@note') + 1));
+    assert.match(decoratorHover[0].contents[0].value.replaceAll('&nbsp;', ' '), /@allow_multiple/);
+    const parameterCompletions = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', decoratorUri, decoratorDoc.positionAt(decoratorText.indexOf("text='Review'")));
+    assert.ok(parameterCompletions.items.some(item => item.label === 'text'));
+    assert.deepEqual(vscode.languages.getDiagnostics(decoratorUri).map(d => d.message), []);
+    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None', 'decorator signatures and named parameter navigation/completion'] }));
   } catch (error) {
     fs.writeFileSync(output, JSON.stringify({ ok: false, error: error.stack })); throw error;
   }

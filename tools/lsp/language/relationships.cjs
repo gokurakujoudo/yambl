@@ -7,11 +7,8 @@ function typeSignature(node, doc, owner, symbols) {
   return canonical(new Resolver(doc, () => {}, symbols, owner, true).resolve(node));
 }
 function signature(field, symbols = new Map(), includeType = true) {
-  const annotations = [];
-  for (const item of field.metadata) {
-    if (['title', 'description'].includes(item.name)) annotations.push([item.name, stringValue(item.value.value)]);
-    if (['temporal', 'dimension'].includes(item.name)) annotations.push([item.name, item.dimensions.map(d => [d.token.value, typeSignature(d.type, field.doc, field.owner, symbols)])]);
-  }
+  const { bindCall } = require('./decorators.cjs');
+  const annotations = field.metadata.filter(a => !['override', 'overload'].includes(a.name)).map(a => bindCall(a, field, () => {}, symbols));
   annotations.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   return JSON.stringify([field.mode, includeType ? typeSignature(field.type, field.doc, field.owner, symbols) : '', annotations]);
 }

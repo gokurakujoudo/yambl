@@ -116,3 +116,14 @@ The packaged lang tree includes language-defined AttrCats and field_mapping.
 flags and `-` removes them, left to right; repeated additions or removals have no
 further effect. Dictionary member completion includes both generated codes.
 Code references navigate to entries; generated members navigate to the dictionary.
+
+## Decorators
+
+The language service resolves `decorator @name(...)` declarations from the current
+namespace, imports and bundled built-ins. It checks positional and named values,
+caller-defined key/type pairs, defaults, repetition and captured `self` constraints.
+Completion after `@` lists visible decorators; inside a call it offers ordinary
+parameter names with `=`. Hovers show signatures, defaults and `@allow_multiple`.
+Decorator calls navigate to declarations and named arguments to formal parameters.
+Override and overload calls retain their field-relationship navigation.
+`::entity` selects a concrete field descriptor's declaring entity.

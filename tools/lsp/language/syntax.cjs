@@ -2,8 +2,8 @@
 
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
-  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as'];
-const annotations = ['title', 'description', 'temporal', 'dimension', 'overload', 'override', 'flags'];
+  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as', 'decorator'];
+const annotations = ['title', 'description', 'temporal', 'dimension', 'overload', 'override', 'flags', 'allow_multiple'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id'];
 const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
 const entities = [];
@@ -32,7 +32,7 @@ function parse(text, uri = '') {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, ' ') + masked.slice(end);
   }
   let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|[{}\[\]()<>,:.=@+-]/y;
+  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|[{}\[\]()<>,:.=@+*?-]/y;
   while (offset < text.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(masked);
@@ -101,21 +101,26 @@ function parse(text, uri = '') {
   function annotation(indent) {
     const start = index;
     const token = take('@'); const kind = name();
-    if (!annotations.includes(kind.value)) throw kind;
-    if (['overload', 'override', 'flags'].includes(kind.value)) { piece(start, indent); return { token, markerToken: kind, name: kind.value, dimensions: [] }; }
-    take('(');
-    const node = { token, name: kind.value, dimensions: [] };
-    if (['title', 'description'].includes(kind.value)) {
-      if (!peek().value.startsWith("'")) fail();
-      node.value = take();
-    } else {
-      do {
-        if (node.dimensions.length) take(',');
-        const dimension = name(); take(':');
-        node.dimensions.push({ token: dimension, type: type() });
-      } while (is(','));
+    const node = { token, markerToken: kind, name: kind.value, arguments: [], dimensions: [] };
+    if (is('(')) {
+      take();
+      while (!is(')')) {
+        if (node.arguments.length) take(',');
+        const first = peek();
+        let mode = 'positional', key = null;
+        if (['=', ':'].includes(doc.tokens[index + 1]?.value)) {
+          key = name(); mode = take().value === '=' ? 'keyword' : 'pair';
+        }
+        const expression = type();
+        const argument = { token: first, mode, key, type: expression };
+        node.arguments.push(argument);
+        if (mode === 'pair') node.dimensions.push({ token: key, type: expression });
+        if (!is(',')) break;
+      }
+      take(')');
     }
-    take(')'); piece(start, indent); return node;
+    node.end = doc.tokens[index - 1].end;
+    piece(start, indent); return node;
   }
   try {
     if (is('namespace')) {
@@ -129,11 +134,26 @@ function parse(text, uri = '') {
       const metadata = [];
       while (is('@')) {
         const item = annotation(0);
-        if (!item.value && item.name !== 'flags') throw item.token;
         metadata.push(item);
       }
+      if (is('decorator')) {
+        const start = index, token = take(); take('@'); const decoratorName = name(), parameters = [];
+        take('(');
+        while (!is(')')) {
+          if (parameters.length) take(',');
+          const parameterToken = peek(), pair = is('*'); if (pair) take();
+          const parameterName = name(), optional = is('?'); if (optional) take();
+          take(':'); const constraint = type();
+          let defaultValue = null; if (is('=')) { take(); defaultValue = type(); }
+          parameters.push({ token: parameterToken, name: parameterName, type: constraint, pair, optional, default: defaultValue });
+          if (!is(',')) break;
+        }
+        take(')');
+        const declaration = { kind: 'decorator', token, name: decoratorName, parameters, metadata, fields: [], entries: [], doc, end: doc.tokens[index - 1].end };
+        for (const parameter of parameters) { parameter.kind = 'decorator_parameter'; parameter.doc = doc; parameter.owner = declaration; }
+        doc.declarations.push(declaration); piece(start, 0); continue;
+      }
       if (is('type')) {
-        if (metadata.length) fail();
         const start = index, token = take(), aliasName = name(), parameters = [];
         if (is('<')) {
           take();
@@ -163,7 +183,6 @@ function parse(text, uri = '') {
         } else {
           const metadata = [];
           while (is('@')) metadata.push(annotation(1));
-          if (metadata.some(a => a.name === 'flags')) fail();
           const start = index; const token = take(); const mode = token.value;
           if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static'].includes(mode)) throw token;
           if (['snapshot', 'scd', 'config', 'static'].includes(mode)) take('attr');
@@ -190,11 +209,12 @@ function parse(text, uri = '') {
 function format(doc) {
   if (doc.errors.length) return null;
   const pieces = doc.pieces.map(piece => {
-    let text = '', previous = '';
+    let text = '', previous = '', priorEquals = false;
+    const keywordEquals = new Set(piece.tokens.filter((t, i) => t.value === '=' && piece.tokens[0].value === '@' && /^[A-Za-z_]/.test(piece.tokens[i - 1]?.value)).map(t => t.start));
     for (const token of piece.tokens) {
       const value = token.value;
-      const space = text && !['.', '::', ':', ',', ')', '>', ']', '(', '[', '<'].includes(value) && !['.', '::', '@', '(', '<', '['].includes(previous);
-      text += (space ? ' ' : '') + value; previous = value;
+      const space = !keywordEquals.has(token.start) && !priorEquals && text && !['?', '.', '::', ':', ',', ')', '>', ']', '(', '[', '<'].includes(value) && !['*', '.', '::', '@', '(', '<', '['].includes(previous);
+      text += (space ? ' ' : '') + value; previous = value; priorEquals = keywordEquals.has(token.start);
     }
     return { start: piece.tokens[0].start, end: piece.tokens.at(-1).end, text, indent: piece.indent };
   });

@@ -223,7 +223,7 @@ YAMBL 在此处仅描述模型，不校验业务数据的完整性或其他数�
 例如，模型不要求同一日期的持仓和净资产同时存在，也不检查两者的数据一致性。
 语言的语法检查与业务数据质量校验是不同的职责。
 
-时间参数的其他形式以及通用注解机制仍待确定。
+时间参数为单个 date pair，参数名由调用者定义；通用声明与调用见 [Decorator](decorators.md)。
 
 ## 扩展、继承与属性模式
 
@@ -330,7 +330,7 @@ value 名称为 snake_case，天然 final，不能继承、被继承或 extend�
 final value。字段只允许 attr 或等价的 static attr，天然 static，无 ID。
 字段可以是非集合值（含嵌套 value）或实体引用；引用保存目标实体 ID。
 禁止 collection、values、mapping、field_mapping 字段及直接或间接值嵌套循环。
-实体引用不形成值嵌套循环。只允许 title、description 注解；禁止默认值和字段关系标记。
+实体引用不形成值嵌套循环。允许 title、description 和自定义 decorator；禁止默认值和字段关系标记。
 同一值类型按所有字段判等，引用字段比较引用 ID；除明确定义外不支持大小比较。
 这些是值语义约定，当前工具只检查声明，不执行值比较。
 
@@ -341,3 +341,10 @@ final value。字段只允许 attr 或等价的 static attr，天然 static，�
 正文为不透明 Markdown，不参与名称解析、不绑定后续声明、不产生语言补全和导航。
 格式化保留正文的缩进、尾随空格及连续空行，仅将 CRLF 统一为 LF。
 文本块不会改变其后语言诊断的位置。
+
+## Decorator 声明
+
+`decorator @name(...)` 定义有类型的元信息；参数绑定、`*` pair、默认值、
+`self::entity` 和 `@allow_multiple` 见 [Decorator 规则](decorators.md)。
+`@title(text='Name')` 与 `@title('Name')` 等价。
+`@temporal` 的 date 参数由调用者命名，不限于 `as_of_date`。

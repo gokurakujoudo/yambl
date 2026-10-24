@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parse, format, range } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
-const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json')];
+const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json')];
 
 test('flags union selects categories, normalizes exact values and rejects invalid masks', () => {
   const { Resolver, equal } = require('../language/expressions.cjs');

@@ -19,7 +19,7 @@ try {
         ) | Out-Null
     }
     $lspRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../lsp'))
-    foreach ($relative in @('server.cjs', 'service.cjs', 'repository.cjs', 'protocol.cjs', 'language/syntax.cjs', 'language/validation.cjs', 'language/relationships.cjs', 'language/expressions.cjs', 'language/decodes.cjs', 'README.md')) {
+    foreach ($relative in @('server.cjs', 'service.cjs', 'repository.cjs', 'protocol.cjs', 'language/syntax.cjs', 'language/validation.cjs', 'language/relationships.cjs', 'language/expressions.cjs', 'language/decodes.cjs', 'language/decorators.cjs', 'README.md')) {
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
             $archive, (Join-Path $lspRoot $relative), "extension/lsp/$relative"
         ) | Out-Null

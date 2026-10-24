@@ -272,7 +272,7 @@ test('built-in model repository checks its own declarations exactly once', () =>
   const uri = pathToFileURL(path.join(modelRoot, 'models/hierarchy.yambl')).href;
   const service = new Service(() => {});
   service.open.set(uri, { version: 1, text: fs.readFileSync(new URL(uri), 'utf8') }); service.refresh();
-  assert.equal(service.documents.size, 5);
+  assert.equal(service.documents.size, 6);
   assert.ok([...service.documents.values()].every(doc => doc.diagnostics.length === 0));
 });
 
@@ -310,7 +310,7 @@ entity Selection {
     assert.deepEqual(feature('completion', 4, col).items.map(i => i.label), ['amount']);
   }
   const col = text.split('\n')[4].indexOf('::type') + 2;
-  assert.deepEqual(feature('completion', 4, col).items.map(i => i.label), ['type', 'value']);
+  assert.deepEqual(feature('completion', 4, col).items.map(i => i.label), ['type', 'value', 'entity']);
 });
 
 test('builtins authoring works outside the extension resource directory', t => {
@@ -322,7 +322,7 @@ test('builtins authoring works outside the extension resource directory', t => {
   const service = new Service(() => {});
   const text = fs.readFileSync(new URL(uri), 'utf8');
   service.open.set(uri, { version: 1, text }); service.refresh();
-  assert.equal(service.documents.size, 5);
+  assert.equal(service.documents.size, 6);
   assert.ok([...service.documents.values()].every(d => !d.diagnostics.length));
   const doc = service.document(uri), field = doc.declarations[0].fields[1];
   const params = { textDocument: { uri }, position: field.type.args[0].token.range.start };

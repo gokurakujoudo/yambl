@@ -1,0 +1,226 @@
+[
+  [
+    "decorator @tag(text: string['[A-Z]+'] = 'ABC', amount: decimal[18, 4] = 2, rate: float = 1.2, count: integer = 1, active: bool = true, key: snowflake_id = 123) @tag entity A {}"
+  ],
+  [
+    "decorator @tag(text: string) @tag('hello') entity A {}"
+  ],
+  [
+    "decorator @tag(text: string = 'hello', rank: integer) @tag(rank=2) entity A {}"
+  ],
+  [
+    "decorator @tag(text: string, rank: integer) @tag(rank=2, text='hello') entity A {}"
+  ],
+  [
+    "decorator @tag(text: string, rank: integer) @tag('hello', rank=2) entity A {}"
+  ],
+  [
+    "decorator @tag(*source: string, *selector?: Hierarchy) @tag(source: code<'External'>) entity A {}"
+  ],
+  [
+    "decorator @tag(*source: string, *selector?: Hierarchy) @tag(source: string, fallback: Hierarchy) entity A {}"
+  ],
+  [
+    "decorator @tag() @tag entity A {} @tag() value item { @tag attr item: string }"
+  ],
+  [
+    "@title(text='Tag') @description('Metadata') @allow_multiple decorator @tag(text: string) @tag('a') @tag('a') entity A {}"
+  ],
+  [
+    "decorator @tag() @tag decorator @other() @other type label = string"
+  ],
+  [
+    "@flags() decodes Codes {}"
+  ],
+  [
+    "entity A { @temporal(effective_date: date) snapshot attr x: string }"
+  ],
+  [
+    "decorator @proxy(target: type<self::entity>) entity Security {} entity Holding { @proxy(Holding) attr security: Security }"
+  ],
+  [
+    "decorator @proxy(target: type<self::entity>) entity Holding {} entity Child inherits Holding {} extend Holding { @proxy(Child) attr x: string }"
+  ],
+  [
+    "decorator @proxy(target: type<self>) @proxy(Child) entity Holding {} entity Child inherits Holding {}"
+  ],
+  [
+    "decorator @tag(text: self::type) entity A { @tag('hello') attr name: string }"
+  ],
+  [
+    "decorator @tag(text: self::type = 'hello') entity A { @tag attr name: string }"
+  ],
+  [
+    "decorator @tag(target: type<Entity> = self::entity) entity A { @tag attr name: string }"
+  ],
+  [
+    "entity Security { id key: string['[A-Z]+'] } decorator @tag(target: Security) @tag('ABC') entity A {}"
+  ],
+  [
+    "entity Security { id key: snowflake_id } entity Bond inherits Security {} decorator @tag(target: Bond = '123') @tag entity A {}"
+  ],
+  [
+    "decodes Codes { - 1 One: 'One' } decorator @tag(dict: Decodes, code: code<Codes>, target: type<Entity>) @tag(Codes, Codes.One, A) entity A {}"
+  ],
+  [
+    "decorator @tag(flags: code<AttrCats> = AttrCats.All - AttrCats.Attr) @tag(AttrCats.Config + AttrCats.Static) entity A {}"
+  ],
+  [
+    "decorator @tag(text: string = 'x') entity A { @tag attr x: string } entity B inherits A { @override @tag(text='x') attr x: string }"
+  ],
+  [
+    "@allow_multiple decorator @tag(text: string) entity A {} entity B inherits A { @overload @tag('a') @tag('b') attr x: string } entity C inherits A { @tag('b') @overload @tag('a') attr x: string }"
+  ],
+  [
+    "decorator @tag() @tag decodes Codes {} @tag value item { @tag attr x: string } @tag type label = string entity A { @tag id key: string }"
+  ],
+  [
+    "namespace meta type text = string decorator @tag(label: text = 'x')",
+    "namespace app from meta import tag @tag entity A {}"
+  ],
+  [
+    "namespace meta decorator @tag(target: type<self::entity>)",
+    "namespace app from meta import tag entity A { @tag(A) attr x: string }"
+  ],
+  [
+    "@tag entity A {} decorator @tag()"
+  ],
+  [
+    "entity A { @dimension(source: Hierarchy) attr x: string }"
+  ],
+  [
+    "entity A { @dimension(source: Missing) attr x: string }"
+  ],
+  [
+    "entity A { @dimension() attr x: string }"
+  ],
+  [
+    "namespace builtins @allow_multiple @allow_multiple decorator @allow_multiple()"
+  ],
+  [
+    "decorator @Bad()"
+  ],
+  [
+    "decorator @tag(Bad: string)"
+  ],
+  [
+    "decorator @tag(a: string, a: string)"
+  ],
+  [
+    "decorator @tag(*a: string, b: string)"
+  ],
+  [
+    "decorator @tag(*a?: string, *b: string)"
+  ],
+  [
+    "decorator @tag(a?: string)"
+  ],
+  [
+    "decorator @tag(*a: string = 'x')"
+  ],
+  [
+    "decorator @tag(a: values<string>)"
+  ],
+  [
+    "decorator @tag(a: integer = 'x')"
+  ],
+  [
+    "decorator @tag(a: Missing)"
+  ],
+  [
+    "@missing entity A {}"
+  ],
+  [
+    "type tag = string @tag entity A {}"
+  ],
+  [
+    "decorator @tag() entity A { attr x: tag }"
+  ],
+  [
+    "decorator @tag(a: string) @tag entity A {}"
+  ],
+  [
+    "decorator @tag(a: string) @tag(a='x', 'y') entity A {}"
+  ],
+  [
+    "decorator @tag(a: string) @tag('x', a='y') entity A {}"
+  ],
+  [
+    "decorator @tag(a: string) @tag(unknown='x') entity A {}"
+  ],
+  [
+    "decorator @tag() @tag('x') entity A {}"
+  ],
+  [
+    "decorator @tag() @tag(x: string) entity A {}"
+  ],
+  [
+    "decorator @tag(a: string, *p: string) @tag(x: string, a='x') entity A {}"
+  ],
+  [
+    "decorator @tag(*p: string) @tag(Bad: string) entity A {}"
+  ],
+  [
+    "decorator @tag(*p: string, *q: string) @tag(x: string, x: string) entity A {}"
+  ],
+  [
+    "decorator @tag(*p: string) @tag(x: integer) entity A {}"
+  ],
+  [
+    "decorator @tag(*p: string) @tag(x: values<string>) entity A {}"
+  ],
+  [
+    "decorator @tag(a: integer) @tag(string) entity A {}"
+  ],
+  [
+    "decorator @tag(a: self::type) entity A { @tag attr x: values<string> }"
+  ],
+  [
+    "decorator @tag() @tag @tag entity A {}"
+  ],
+  [
+    "@allow_multiple entity A {}"
+  ],
+  [
+    "@allow_multiple @allow_multiple decorator @tag()"
+  ],
+  [
+    "@flags type label = string"
+  ],
+  [
+    "entity A { @flags attr x: string }"
+  ],
+  [
+    "@override entity A {}"
+  ],
+  [
+    "decorator @tag(a: type<self::entity>) @tag(A) entity A {}"
+  ],
+  [
+    "decorator @tag(a: type<self::entity>) value item { @tag(A) attr x: string } entity A {}"
+  ],
+  [
+    "decorator @tag(a: type<self::entity>) entity A { @tag(B) attr x: string } entity B {}"
+  ],
+  [
+    "decorator @tag(a: self::value) entity A { @tag attr x: string }"
+  ],
+  [
+    "entity A {} decorator @tag(a: A) @tag('id') entity B {}"
+  ],
+  [
+    "entity A { id one: string id two: string } decorator @tag(a: A) @tag('id') entity B {}"
+  ],
+  [
+    "entity A { id key: integer } decorator @tag(a: A) @tag('id') entity B {}"
+  ],
+  [
+    "decorator @tag(a: string) entity A { @tag('x') attr x: string } entity B inherits A { @override @tag('y') attr x: string }"
+  ],
+  [
+    "@allow_multiple decorator @tag() entity A { @tag @tag attr x: string } entity B inherits A { @override @tag attr x: string }"
+  ],
+  [
+    "decorator @tag() @tag extend A {} entity A {}"
+  ]
+]
