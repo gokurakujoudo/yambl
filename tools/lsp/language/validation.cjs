@@ -20,7 +20,8 @@ function validate(documents) {
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
       const name = decl.name.value; decl.key = key(doc, namespace(doc), name); decl.ownFields = new Map();
       if (decl.kind === 'value' ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, decl.kind === 'value' ? 'value names must use snake_case' : 'declaration names must use PascalCase');
-      if ((!doc.builtin && reserved.includes(name)) || symbols.has(decl.key)) issue(doc, decl.token, `duplicate or reserved declaration: ${name}`);
+      const modelDefinition = namespace(doc) === 'builtins' && builtinModels.has(name);
+      if ((!modelDefinition && reserved.includes(name)) || symbols.has(decl.key)) issue(doc, decl.token, `duplicate or reserved declaration: ${name}`);
       symbols.set(decl.key, decl); bind(doc, decl.name, decl);
     }
   }

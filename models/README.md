@@ -1,6 +1,6 @@
 # 内置数据模型仓库
 
-本目录由 `yambl-root.lclcfg` 定义为内置仓库，prefix 为空，文件不声明 namespace。
+本目录由 `yambl-root.lclcfg` 定义为内置仓库，prefix 为空，文件声明 `namespace builtins`。
 模型声明对所有用户仓库可见，无需导入。说明与定义保存在同一个文件中：
 
 - [Decodes](decodes.yambl)：字典实体及 decodes_entry 值条目。

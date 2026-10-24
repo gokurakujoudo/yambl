@@ -82,7 +82,7 @@ class Service {
         if (belongs) texts.set(uriKey(openUri), { uri: openUri, text: item.text });
       }
       const docs = [...texts.values()].map(item => Object.assign(parse(item.text, item.uri), { prefix, repository: !builtin && root ? uriKey(pathToFileURL(root).href) : '', builtin }));
-      for (const doc of docs) if (builtin && doc.namespace) doc.errors.push({ range: range(doc.text, 0, 0), severity: 1, message: 'built-in models cannot declare a namespace', source: 'yambl' });
+      for (const doc of docs) if (builtin && doc.namespace !== 'builtins') doc.errors.push({ range: range(doc.text, 0, 0), severity: 1, message: 'built-in models must declare namespace builtins', source: 'yambl' });
       validate(docs);
       if (readError?.uri) {
         const errorDoc = parse('', readError.uri);

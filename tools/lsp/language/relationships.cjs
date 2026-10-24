@@ -88,7 +88,7 @@ const modelRoot = fs.existsSync(packagedRoot) ? packagedRoot : path.join(__dirna
 const builtinDocuments = fs.readdirSync(modelRoot).filter(name => name.endsWith('.yambl')).sort().map(name => {
   const filename = path.join(modelRoot, name);
   const doc = parse(fs.readFileSync(filename, 'utf8'), pathToFileURL(filename).href);
-  if (doc.errors.length || doc.namespace) throw new Error(`Invalid built-in model: ${filename}`);
+  if (doc.errors.length || doc.namespace !== 'builtins') throw new Error(`Invalid built-in model: ${filename}`);
   doc.builtin = true;
   return doc;
 });

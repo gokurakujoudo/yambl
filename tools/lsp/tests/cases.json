@@ -103,5 +103,9 @@
   ["entity A { attr h: Hierarchy attr e: values<hierarchy_entry> attr d: values<decodes_entry> }"],
   ["value a {} entity A { attr x: collection<a> attr y: type<a> attr z: field_mapping<static, a> }"],
   ["entity Base {} entity A inherits Base { @overload @dimension(x: string, a: Hierarchy) @dimension(y: string, b: Hierarchy) attr z: string } entity B inherits Base { @overload @dimension(x: string, b: Hierarchy) @dimension(y: string, a: Hierarchy) attr z: string }"],
-  ["entity A { @dimensions(x: string) attr x: string }"]
+  ["entity A { @dimensions(x: string) attr x: string }"],
+  ["namespace builtins final entity Hierarchy {}", "namespace builtins final entity Hierarchy {}"],
+  ["namespace builtins value string {} entity Entity {}"],
+  ["namespace fmc.builtins final entity Hierarchy {}"],
+  ["namespace builtins entity Private {}", "namespace business entity A { attr x: Private attr h: Hierarchy }"]
 ]

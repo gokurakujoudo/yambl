@@ -234,3 +234,32 @@ test('literal configuration grammar rejects expressions and missing prefixes', (
     assert.throws(() => readPrefix('root.lclcfg', text), /prefix/);
   }
 });
+
+test('builtins authoring works outside the extension resource directory', t => {
+  const { modelRoot } = require('../language/relationships.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-builtins-checkout-'));
+  t.after(() => fs.rmSync(root, { recursive: true }));
+  for (const name of fs.readdirSync(modelRoot).filter(n => /\.(yambl|lclcfg)$/.test(n))) {
+    fs.copyFileSync(path.join(modelRoot, name), path.join(root, name));
+  }
+  const uri = pathToFileURL(path.join(root, 'hierarchy.yambl')).href;
+  const service = new Service(() => {});
+  const text = fs.readFileSync(new URL(uri), 'utf8');
+  service.open.set(uri, { version: 1, text }); service.refresh();
+  assert.equal(service.documents.size, 3);
+  assert.ok([...service.documents.values()].every(d => !d.diagnostics.length));
+  const doc = service.document(uri), field = doc.declarations[0].fields[1];
+  const params = { textDocument: { uri }, position: field.type.args[0].token.range.start };
+  assert.equal(service.feature('textDocument/definition', params).uri, uri);
+  assert.ok(service.feature('textDocument/hover', params).contents.value.includes('value hierarchy_entry'));
+  assert.equal(service.references(doc.declarations[1], false).length, 1);
+  const duplicate = path.join(root, 'duplicate.yambl');
+  fs.writeFileSync(duplicate, 'namespace builtins final entity Hierarchy {}'); service.refresh();
+  assert.ok([...service.documents.values()].some(d => d.diagnostics.some(x => /duplicate or reserved declaration: Hierarchy/.test(x.message))));
+  fs.unlinkSync(duplicate);
+  service.open.set(uri, { version: 2, text: text.replace('namespace builtins', 'namespace business') }); service.refresh();
+  assert.ok(service.document(uri).diagnostics.some(d => /duplicate or reserved declaration: Hierarchy/.test(d.message)));
+  service.open.set(uri, { version: 3, text });
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: 'fmc'"); service.refresh();
+  assert.ok(service.document(uri).diagnostics.some(d => /duplicate or reserved declaration: Hierarchy/.test(d.message)));
+});
