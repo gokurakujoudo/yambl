@@ -222,7 +222,10 @@ EMPTY 和 NOT_APPLICABLE 不回退。不执行 ConfigGroup、Hierarchy、价格�
 已有字段缓存仍可使用。仓库更新后须重新打开。不支持会话中原地改写。
 重复 JSON key、非标准数值、未知列、重复主键、错误状态及载荷组合均拒绝，诊断带文件和行号。
 
-`schema-relations.mmd` 展示全部表：实线为实际外键，虚线为逻辑引用，同时嵌入 `schema.md`。
+`schema-relations.puml` 使用 PlantUML 展示全部表及字段，包含 SQL 类型、可空性和主键列顺序。
+连线连接具体字段：实线为实际外键，虚线为逻辑归属或实体引用；复合外键的各列使用同一分组标签。
+引用标签保留逻辑字段身份，以及共享载荷列使用的字段判别条件。相同 PlantUML 源码嵌入
+`schema.md`，图形显示需要 PlantUML 渲染器。图、DDL 和文档均来自同一份结构化存储模型。
 `python-schema.md` 列出实体、属性、记录类、方法、后端入口和缓存约定，使用相同元信息。
 SQL、JSONL、manifest、文档及关系图共用存储模型。
 
