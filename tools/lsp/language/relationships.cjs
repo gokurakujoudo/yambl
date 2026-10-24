@@ -1,6 +1,6 @@
 'use strict';
 
-const { entities, structures, stringValue, parse } = require('./syntax.cjs');
+const { entities, structures, stringValue, parse, modelRoot } = require('./syntax.cjs');
 
 const { Resolver, canonical, equal, accepts, commonType } = require('./expressions.cjs');
 function typeSignature(node, doc, owner, symbols) {
@@ -74,8 +74,6 @@ function relationships(symbols, issue) {
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const packagedRoot = path.join(__dirname, '../lang');
-const modelRoot = fs.existsSync(packagedRoot) ? packagedRoot : path.join(__dirname, '../../../lang');
 function modelFiles(root) {
   return fs.readdirSync(root, { withFileTypes: true }).flatMap(entry => {
     const file = path.join(root, entry.name);

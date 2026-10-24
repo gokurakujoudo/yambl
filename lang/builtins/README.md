@@ -39,7 +39,9 @@
 - 尚未定义的其他值类型转换。
 - 内置关键字与保留字清单。
 
-[内置常量](constants.md)定义不适用于实例实际类型的字段读取结果 `NOT_DEFINED`。
+[内置常量](constants.md)定义 `NOT_DEFINED`、`NOT_APPLICABLE`、`EMPTY`、`NO_ENTRY`、
+`NO_DATA`、`ENTITY_NOT_FOUND`、`ERROR` 七种非正常结果；名称和说明在
+[result-constants.json](result-constants.json) 中维护。
 [语法说明](../syntex/syntax.md)记录了 `entity`、`extend`、`inherits`、`id`、
 `snapshot`、`scd`、`config`、`attr`、元信息和维度注解，以及 `namespace` 写法。
 通用注解声明、调用和重复规则见 [Decorator](../syntex/decorators.md)，

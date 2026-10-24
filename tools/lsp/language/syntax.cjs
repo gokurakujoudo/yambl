@@ -1,5 +1,11 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
+const packagedRoot = path.join(__dirname, '../lang');
+const modelRoot = fs.existsSync(packagedRoot) ? packagedRoot : path.join(__dirname, '../../../lang');
+const resultConstants = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtins/result-constants.json'), 'utf8'));
+
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
   'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as', 'decorator'];
@@ -8,7 +14,7 @@ const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'dateti
 const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
 const entities = [];
 const structures = [];
-const constants = ['NOT_DEFINED', 'true', 'false'];
+const constants = [...Object.keys(resultConstants), 'true', 'false'];
 
 function position(text, offset) {
   const lines = text.slice(0, offset).split('\n');
@@ -237,4 +243,4 @@ function format(doc) {
   return lines.join('\n').trimEnd() + '\n';
 }
 
-module.exports = { parse, format, position, range, stringValue, keywords, annotations, values, generics, entities, structures, constants };
+module.exports = { parse, format, position, range, stringValue, keywords, annotations, values, generics, entities, structures, constants, resultConstants, modelRoot };

@@ -25,7 +25,7 @@ try {
         ) | Out-Null
     }
     $modelsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../lang'))
-    foreach ($model in Get-ChildItem -LiteralPath $modelsRoot -File -Recurse | Where-Object { $_.Extension -in '.yambl', '.lclcfg' }) {
+    foreach ($model in Get-ChildItem -LiteralPath $modelsRoot -File -Recurse | Where-Object { $_.Extension -in '.yambl', '.lclcfg', '.json' }) {
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $model.FullName, "extension/lsp/lang/$([IO.Path]::GetRelativePath($modelsRoot, $model.FullName).Replace('\', '/'))") | Out-Null
     }
     $documents = @{

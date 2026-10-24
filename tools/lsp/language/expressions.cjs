@@ -1,6 +1,6 @@
 'use strict';
 
-const { values, generics, stringValue } = require('./syntax.cjs');
+const { values, generics, stringValue, resultConstants } = require('./syntax.cjs');
 const { isFlags, codeEntries } = require('./decodes.cjs');
 const type = (name, kind = 'value', options = {}) => ({ name, kind, args: [], key: null, params: [], exact: null, dependency: '', ...options });
 const unknown = type('?', 'unknown');
@@ -64,6 +64,10 @@ class Resolver {
   evaluate(node, allowBinding = false) {
     if (node.binding && !allowBinding) this.issue(node, 'as binding is only allowed on a mapping key');
     const { name, args, params } = node;
+    if (!node.quoted && Object.hasOwn(resultConstants, name)) {
+      this.issue(node, `result constant ${name} cannot be used in model expressions`);
+      return term(unknown);
+    }
     if ((args || params) && (name === 'self' || node.quoted || node.literal)) this.issue(node, 'a value expression does not accept type arguments');
     let result;
     if (this.bindings.has(name)) {
@@ -226,7 +230,7 @@ class Resolver {
   code(node, argument) {
     if (!argument.args && !argument.params && !(argument.accesses || []).length && !(argument.operations || []).length && !argument.literal && !this.bindings.has(argument.name)) {
       const name = argument.name, symbol = this.doc.scope.get(name);
-      if ((symbol && symbol.kind !== 'decodes') || (!symbol && [...values, ...generics, 'Entity'].includes(name))) this.issue(node, 'code requires a Decodes instance identifier');
+      if ((symbol && symbol.kind !== 'decodes') || (!symbol && [...values, ...generics, ...Object.keys(resultConstants), 'Entity'].includes(name))) this.issue(node, 'code requires a Decodes instance identifier');
       else if (!symbol) this.issue(argument.quoted ? node : argument, `undefined Decodes: ${name}`, Boolean(argument.quoted));
       this.doc.valueTypeTokens.set(argument.token.start, argument.token); this.bind(argument.token, symbol);
       return type('code', 'value', { args: [type(name, 'value', { key: symbol?.key || [this.doc.repository || '', [this.doc.prefix, this.doc.namespace].filter(Boolean).join('.'), name].join('\0') })] });

@@ -133,6 +133,19 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     const parameterCompletions = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', decoratorUri, decoratorDoc.positionAt(decoratorText.indexOf("text='Review'")));
     assert.ok(parameterCompletions.items.some(item => item.label === 'text'));
     assert.deepEqual(vscode.languages.getDiagnostics(decoratorUri).map(d => d.message), []);
+    const constantNames = ['NOT_DEFINED', 'NOT_APPLICABLE', 'EMPTY', 'NO_ENTRY', 'NO_DATA', 'ENTITY_NOT_FOUND', 'ERROR'];
+    const constantsUri = vscode.Uri.file(path.join(root, 'result-constants.yambl'));
+    const constantsText = 'namespace results entity Result {\n' + constantNames.map((name, i) => `    attr result_${i}: ${name}`).join('\n') + '\n}\n';
+    fs.writeFileSync(constantsUri.fsPath, constantsText);
+    const constantsDoc = await vscode.workspace.openTextDocument(constantsUri);
+    await vscode.window.showTextDocument(constantsDoc);
+    const constantsCompletion = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', constantsUri, constantsDoc.positionAt(constantsText.indexOf('NOT_DEFINED')));
+    for (const name of constantNames) {
+      assert.equal(constantsCompletion.items.find(item => item.label === name).kind, vscode.CompletionItemKind.Constant);
+      const hover = await vscode.commands.executeCommand('vscode.executeHoverProvider', constantsUri, constantsDoc.positionAt(constantsText.indexOf(name)));
+      assert.ok(hover[0].contents[0].value.includes(new vscode.MarkdownString().appendText('Result constant').value));
+    }
+    assert.deepEqual(vscode.languages.getDiagnostics(constantsUri).map(d => d.message).sort(), constantNames.map(name => `result constant ${name} cannot be used in model expressions`).sort());
     const filteredUri = vscode.Uri.file(path.join(root, 'filtered-decorators.yambl'));
     const filteredText = "namespace filtered entity Item { @title('Price') @dimension(source: string) @description snapshot attr price: decimal @title static attr currency: string }";
     fs.writeFileSync(filteredUri.fsPath, filteredText);

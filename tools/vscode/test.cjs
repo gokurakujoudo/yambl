@@ -92,6 +92,12 @@ async function main() {
   }
   for (const annotation of vocabulary.annotations) expectScope(`@${annotation}('x')`, '@' + annotation, 'entity.name.function.yambl');
   for (const constant of vocabulary.constants) expectScope(constant, constant, 'constant.language.yambl');
+  for (const constant of Object.keys(vocabulary.resultConstants)) {
+    expectScope(`@title(${constant})`, constant, 'constant.language.yambl');
+    expectScope(`@title('${constant}')`, constant, 'string.quoted.single.yambl');
+    expectScope(`# ${constant}`, constant, 'comment.line.number-sign.yambl');
+  }
+  expectScope('Codes.ERROR', 'ERROR', 'constant.other.yambl');
   for (const type of [...vocabulary.values, ...vocabulary.generics]) {
     expectScope(`attr field: ${type}${vocabulary.generics.includes(type) ? '<Thing>' : ''}`, type, 'support.type.yambl');
   }

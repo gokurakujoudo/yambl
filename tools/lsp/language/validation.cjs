@@ -2,10 +2,10 @@
 const { checkDecorators } = require('./decorators.cjs');
 const { isFlags, codeEntries, checkDecodes } = require('./decodes.cjs');
 
-const { values, generics, entities, structures, stringValue } = require('./syntax.cjs');
+const { values, generics, entities, structures, stringValue, resultConstants } = require('./syntax.cjs');
 const { relationships, builtinModels } = require('./relationships.cjs');
 const { Resolver, checkAliases } = require('./expressions.cjs');
-const reserved = [...values, ...generics, ...entities, ...structures, ...builtinModels.keys(), 'Entity'];
+const reserved = [...values, ...generics, ...entities, ...structures, ...builtinModels.keys(), ...Object.keys(resultConstants), 'Entity'];
 const namespace = doc => [doc.prefix, doc.namespace].filter(Boolean).join('.');
 const key = (doc, ns, name) => [doc.repository || '', ns, name].join('\0');
 const snake = name => /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name);

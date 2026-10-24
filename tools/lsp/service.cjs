@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
-const { parse, format, range, position, keywords, annotations, values, generics, entities, structures, constants } = require('./language/syntax.cjs');
+const { parse, format, range, position, keywords, annotations, values, generics, entities, structures, constants, resultConstants } = require('./language/syntax.cjs');
 const { validate, describe } = require('./language/validation.cjs');
 
 const { sources, readPrefix, rootName, configError } = require('./repository.cjs');
@@ -113,7 +113,7 @@ const help = {
   alias: 'Same value as an instance-rooted field expression.',
   exact: 'Singleton constraint permitted on override and overload fields.',
   as: 'Bind a mapping key for its value type expression.',
-  NOT_DEFINED: 'The requested subtype attribute does not apply to the instance’s actual type.',
+  ...Object.fromEntries(Object.entries(resultConstants).map(([name, meaning]) => [name, `${meaning}\n\nResult constant. Explicit assignment, fallback and operation propagation rules are not defined.`])),
   title: 'Short display title.', description: 'Descriptive metadata.',
   temporal: 'One caller-named date parameter on snapshot or scd attr.', dimension: 'Independent data dimension with an optional Hierarchy selector.',
   decorator: 'Declare typed metadata with value parameters and caller-defined key/type pairs.',
@@ -288,7 +288,7 @@ class Service {
         }
         return { isIncomplete: false, items: [...(owner?.effective || [])].map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
       }
-      const items = [...keywords, ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: 14, detail: help[label] || 'YAMBL built-in' }));
+      const items = [...keywords, ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: constants.includes(label) ? 21 : 14, detail: help[label] || 'YAMBL built-in' }));
       for (const [label, decl] of doc.scope) items.push({ label, kind: decl.kind === 'entity' ? 7 : 20, detail: describe(decl) });
       return { isIncomplete: false, items };
     }

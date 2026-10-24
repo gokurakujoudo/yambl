@@ -12,7 +12,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.10.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.11.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -25,6 +25,9 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 - Problems 面板中的实时语法、类型及引用诊断；未定义的裸字典名称报错，带引号的外部字典不提示。
 - Format Document 格式化当前文档；存在语法错误时不提供修改。
 - 输入补全，包括关键字、注解、内置类型和当前文件可见的声明。
+- 七个非正常值常量 `NOT_DEFINED`、`NOT_APPLICABLE`、`EMPTY`、`NO_ENTRY`、`NO_DATA`、
+  `ENTITY_NOT_FOUND`、`ERROR` 提供高亮、常量补全和含义悬停。显式赋值、回退及运算
+  传播规则尚未定义，不能用作模型表达式或 config 默认值。
 - `@flags`、二进制掩码和 `+`、`-` 支持高亮；字典点号后补全 PascalCase code，包括
   flags 自动生成的 `None`、`All`。组合中每一项可跳转到条目；生成项跳转所属字典声明。
 - 属性悬停显示完整类型（含泛型与参数）、存在的 title 和 description。

@@ -16,6 +16,18 @@ cases.push(require('../service.cjs').sources(modelRoot).map(file => fs.readFileS
 const python = process.argv[2] || path.join(workspace, 'yambl-compiler/venv/Scripts/python.exe');
 const grammar = fs.readFileSync(path.join(workspace, 'yambl-compiler/src/yambl_compiler/syntax/grammar.lark'), 'utf8');
 const vocabulary = require('../language/syntax.cjs');
+for (const name of ['NOT_DEFINED', 'NOT_APPLICABLE', 'EMPTY', 'NO_ENTRY', 'NO_DATA', 'ENTITY_NOT_FOUND', 'ERROR']) {
+  for (const text of [
+    `entity A { attr x: ${name} }`, `type label = ${name}`, `@title(${name}) entity A {}`,
+    `entity A { attr x: exact<${name}> }`, `entity A { attr x: ${name} + AttrCats.Attr }`,
+    `@targets(DecoratorTargets.All) decorator @note(text: string = ${name})`,
+    `entity ${name} {}`, `namespace builtins entity ${name} {}`,
+    `entity A { config attr x: string = ${name} }`,
+    `entity A { attr x: code<${name}> }`, `entity A { attr x: code<'${name}'> }`,
+    `@title('${name}') entity A { config attr x: string = '${name}' }`,
+  ]) cases.push([text]);
+}
+cases.push(["decodes Codes { - 1 ERROR: 'Error' } @title(Codes.ERROR) entity Empty {}"]);
 for (const line of grammar.split('\n')) {
   const match = /^[A-Z]+: \/(.+)\\b\//.exec(line);
   if (!match) continue;

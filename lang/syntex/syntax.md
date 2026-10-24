@@ -286,7 +286,9 @@ entity Bond inherits Security {
 显式 source 优先；没有 source 时可给 price_dimension 引用，按 Hierarchy 的
 ordering 升序查找存在的数据。该参数不生成实体属性或字段映射候选。
 其他维度须先固定；多个 Hierarchy 同时参与的组合取数规则暂未定义。
-取数执行器、跨日回退、空值及全部缺失的结果表示均未实现。
+取数执行器及跨日回退均未实现。空值、记录缺失和没有满足要求的数据分别由
+`EMPTY`、`NO_ENTRY`、`NO_DATA` 表达，完整清单见[非正常值常量](../builtins/constants.md)。
+回退及运算传播规则尚未定义。
 旧拼写 `@dimensions` 不再接受。
 
 `config attr name: Type = literal` 可声明默认值，也可省略 `= literal`。

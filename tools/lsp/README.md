@@ -10,6 +10,13 @@ the server with VS Code's own Node runtime. Users do not need Python, a separate
 Node installation, npm packages, another extension, or a network connection.
 There are no runtime downloads or external service calls.
 
+The seven result constants `NOT_DEFINED`, `NOT_APPLICABLE`, `EMPTY`, `NO_ENTRY`,
+`NO_DATA`, `ENTITY_NOT_FOUND`, and `ERROR` share their definitions with Python in
+`lang/builtins/result-constants.json`. Completion identifies them as constants;
+hover explains each result. Their declaration names are reserved, and using them
+in model expressions produces diagnostics. Explicit assignment, fallback,
+comparison, and operation propagation rules are not defined.
+
 ## Model checking
 
 The server reads the nearest `yambl-root.lclcfg` as a root marker and checks YAMBL

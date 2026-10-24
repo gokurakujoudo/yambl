@@ -176,7 +176,7 @@
     },
     {
       "name": "constant.language.yambl",
-      "match": "\\b(?:NOT_DEFINED|true|false)\\b"
+      "match": "\\b(?:NOT_DEFINED|NOT_APPLICABLE|EMPTY|NO_ENTRY|NO_DATA|ENTITY_NOT_FOUND|ERROR|true|false)\\b"
     },
     {
       "name": "entity.name.type.yambl",
