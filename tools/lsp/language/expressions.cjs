@@ -221,7 +221,7 @@ class Resolver {
     if (!argument.args && !argument.params && !(argument.accesses || []).length && !(argument.operations || []).length && !argument.literal && !this.bindings.has(argument.name)) {
       const name = argument.name, symbol = this.doc.scope.get(name);
       if ((symbol && symbol.kind !== 'decodes') || (!symbol && [...values, ...generics, 'Entity'].includes(name))) this.issue(node, 'code requires a Decodes instance identifier');
-      else if (!symbol) this.issue(node, `undefined Decodes: ${name}`, true);
+      else if (!symbol) this.issue(argument.quoted ? node : argument, `undefined Decodes: ${name}`, Boolean(argument.quoted));
       this.doc.valueTypeTokens.set(argument.token.start, argument.token); this.bind(argument.token, symbol);
       return type('code', 'value', { args: [type(name, 'value', { key: symbol?.key || [this.doc.repository || '', [this.doc.prefix, this.doc.namespace].filter(Boolean).join('.'), name].join('\0') })] });
     }

@@ -12,7 +12,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.5.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.6.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -22,7 +22,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 安装后执行 `Developer: Reload Window`，打开 `.yambl` 文件即可启动语言服务。
 在 VS Code 中可以使用：
 
-- Problems 面板中的实时语法、类型及引用诊断；未定义动态 Decodes 不产生 warning。
+- Problems 面板中的实时语法、类型及引用诊断；未定义的裸字典名称报错，带引号的外部字典不提示。
 - Format Document 格式化当前文档；存在语法错误时不提供修改。
 - 输入补全，包括关键字、注解、内置类型和当前文件可见的声明。
 - `@flags`、二进制掩码和 `+`、`-` 支持高亮；字典点号后补全 PascalCase code，包括
@@ -49,8 +49,9 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 `editor.gotoLocation.alternativeDefinitionCommand` 为 `editor.action.referenceSearch.trigger`，
 用户显式覆盖该设置时以用户设置为准。也可直接使用 Find All References。
 
-未定义的动态 Decodes 可由模型外部提供，因此编辑器不提示；CLI 仍逐处输出
-warning。显式导入失败和未知实体类型仍会在编辑器中报错。
+裸名称如 `code<PortfolioGroupTypes>` 必须解析到可见字典，否则报错。
+带引号的动态字典如 `code<'PriceSources'>` 可由模型外部提供，编辑器不提示，
+CLI 仍逐处 warning。显式导入失败和未知实体类型仍会在编辑器中报错。
 
 ## 高亮与语言规则同步
 

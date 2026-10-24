@@ -22,8 +22,9 @@
 [内置集合类型](../builtins/collection-types.md)。
 
 内置值类型原语 `code<decodes_id>` 通过实例名称指定代码字典，支持
-`code<Currencies>` 和 `code<'Currencies'>`。未定义的字典逐处产生 warning，
-不阻止检查通过。具体语义见 [code](../builtins/value-types.md#code)。
+`code<Currencies>` 和 `code<'Currencies'>`。裸名称必须解析到可见字典，否则报错。
+带引号且未定义的字典允许由外部提供，CLI 逐处 warning，LSP 不提示。
+具体语义见 [code](../builtins/value-types.md#code)。
 
 ## 字符串与元信息
 

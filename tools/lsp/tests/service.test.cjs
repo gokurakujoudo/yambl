@@ -120,9 +120,9 @@ test('repository discovery, unsaved dependencies, definitions, hover, symbols an
   const edits = service.feature('textDocument/formatting', params); assert.equal(edits.length, 1);
   assert.ok(edits[0].newText.endsWith('\n'));
   service.open.set(dictionary, { text: 'namespace core decodes OtherKinds {}', version: 2 }); service.refresh();
-  assert.deepEqual(service.document(child).diagnostics, []);
+  assert.deepEqual(service.document(child).diagnostics.map(d => [d.severity, d.message]), [[1, 'undefined Decodes: Kinds']]);
   service.open.delete(dictionary); service.refresh(); assert.equal(service.document(child).diagnostics.length, 0);
-  fs.unlinkSync(new URL(dictionary)); service.refresh(); assert.deepEqual(service.document(child).diagnostics, []);
+  fs.unlinkSync(new URL(dictionary)); service.refresh(); assert.deepEqual(service.document(child).diagnostics.map(d => [d.severity, d.message]), [[1, 'undefined Decodes: Kinds']]);
   service.open.clear(); service.refresh();
   assert.equal(published.at(-1).diagnostics.length, 0); assert.equal(service.documents.size, 0);
 });
@@ -134,6 +134,21 @@ test('dynamic Decodes are silent, while unresolved types and explicit imports st
   service.refresh();
   assert.deepEqual(service.document(uri).diagnostics.map(d => d.message), ['unknown import: absent.Currencies', 'unknown type: Missing']);
   assert.ok(published.at(-1).diagnostics.every(d => d.severity === 1));
+});
+
+test('missing bare dictionary is an error at its name and reacts to unsaved definitions', () => {
+  const uri = 'untitled:fund', service = new Service(() => {});
+  const source = '\n'.repeat(10) + 'entity PortfolioGroup {\n    attr portfolio_group_type: code<PortfolioGroupTypes>\n}\n';
+  const refresh = text => { service.open.set(uri, { text, version: 1 }); service.refresh(); return service.document(uri); };
+  let doc = refresh(source);
+  assert.deepEqual(doc.diagnostics.map(d => [d.severity, d.message, d.range.start.line, d.range.start.character]), [[1, 'undefined Decodes: PortfolioGroupTypes', 11, 36]]);
+  assert.equal(service.feature('textDocument/definition', { textDocument: { uri }, position: doc.diagnostics[0].range.start }), null);
+  assert.deepEqual(refresh(source.replace('code<PortfolioGroupTypes>', "code<'PortfolioGroupTypes'>")).diagnostics, []);
+  doc = refresh(source + 'decodes PortfolioGroupTypes {}\n');
+  assert.deepEqual(doc.diagnostics, []);
+  const definition = service.feature('textDocument/definition', { textDocument: { uri }, position: { line: 11, character: 36 } });
+  assert.equal(definition.range.start.line, 13);
+  assert.deepEqual(refresh(source).diagnostics.map(d => d.severity), [1]);
 });
 
 test('attribute hover includes metadata, modifiers and complete generic/parameter types', () => {

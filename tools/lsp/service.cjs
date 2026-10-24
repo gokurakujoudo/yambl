@@ -97,7 +97,7 @@ class Service {
         this.documents.set(errorDoc.uri, errorDoc);
       }
       for (const doc of docs) {
-        // The CLI still reports these dependencies; dynamic dictionaries are normal in the editor.
+        // Only quoted external dictionaries are silent in the editor; bare names must resolve.
         doc.diagnostics = doc.diagnostics.filter(d => d.code !== 'undefined-decodes');
         if (readError && !readError.uri && this.open.has(doc.uri)) doc.diagnostics.push({ range: range(doc.text, 0, 0), severity: 1, source: 'yambl', message: `Cannot read compilation unit: ${readError.message}` });
         this.documents.set(doc.uri, doc);

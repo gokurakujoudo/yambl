@@ -22,7 +22,7 @@ attr kinds:values<code<'Currencies'>>
 attr currency:code<Currencies>
 attr source:code<'PriceSources'>
 attr price:decimal[precision:18,scale:4]
-attr dynamic:code<Missing>
+attr dynamic:code<'Missing'>
 }
 '@)
 Add-Type -AssemblyName System.IO.Compression.FileSystem

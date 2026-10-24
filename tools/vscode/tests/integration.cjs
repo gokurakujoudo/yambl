@@ -28,7 +28,7 @@ async function run() {
     for (const edit of [...edits].sort((a, b) => doc.offsetAt(b.range.start) - doc.offsetAt(a.range.start))) {
       formatted = formatted.slice(0, doc.offsetAt(edit.range.start)) + edit.newText + formatted.slice(doc.offsetAt(edit.range.end));
     }
-    assert.ok(formatted.includes('attr dynamic: code<Missing>'));
+    assert.ok(formatted.includes("attr dynamic: code<'Missing'>"));
     assert.ok(formatted.endsWith('\n') && !formatted.endsWith('\n\n'));
     const symbols = await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', uri);
     assert.equal(symbols[0].name, 'Child');
@@ -50,7 +50,7 @@ async function run() {
     }
     assert.equal(styled.filter(name => name === 'Currencies').length, 1);
     assert.ok(!styled.includes('PriceSources'));
-    assert.ok(styled.includes('decimal')); assert.ok(styled.includes('Missing'));
+    assert.ok(styled.includes('decimal')); assert.ok(!styled.includes('Missing'));
     const dictionaryUri = vscode.Uri.file(path.join(root, 'decodes.yambl'));
     const dictionary = await vscode.workspace.openTextDocument(dictionaryUri);
     const declarationPosition = dictionary.positionAt(dictionary.getText().indexOf('Currencies'));

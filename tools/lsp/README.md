@@ -27,8 +27,8 @@ open documents in the same compilation unit.
 
 Checks cover namespace imports, types, metadata, configuration literals, dimensions,
 structured values, containment cycles, entity extensions, final restrictions, overload/override contracts, dependent field
-mappings, inherited field conflicts, and inheritance cycles. Undefined
-dynamic Decodes are allowed without editor diagnostics. Missing explicit imports
+mappings, inherited field conflicts, and inheritance cycles. Unresolved bare Decodes
+names are errors. Quoted external dictionaries are allowed without editor diagnostics. Missing explicit imports
 and unknown entity types remain errors. The Python CLI still reports external
 dictionary dependencies as warnings; the editor suppresses only those warnings.
 Extension fields belong to their

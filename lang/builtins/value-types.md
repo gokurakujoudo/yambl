@@ -114,13 +114,15 @@ attr market: code<'TradingMarkets'>
 `code<'Currencies'>` 查找同一字典。名称采用复数。已声明字典按当前文件的
 namespace 和显式导入解析；带引号不会跳过导入规则或搜索所有命名空间。
 
-允许模型引用未声明的 Decodes。编译器逐处输出 `undefined Decodes: 名称`
-warning，包含文件、行、列；仅有此类 warning 时 `check` 仍成功。字典定义可
-由模型外部提供。声明了实体却将它当作 code 字典仍是类型错误；不存在的显式
+裸名称必须解析到已声明、当前文件可见的 Decodes；未定义或未导入时产生
+`undefined Decodes: 名称` error，并使 `check` 失败。带引号的名称若未解析到声明，
+可作为外部动态字典，CLI 逐处输出包含文件、行、列的 warning；仅有 warning 时
+`check` 仍成功。声明了实体却将它当作 code 字典仍是类型错误；不存在的显式
 `from ... import ...` 也仍然报错。内置模型和专用声明语法见
 [Decodes](../models/decodes.yambl)。
 
-上述 warning 是编译器 CLI 的行为。LSP 允许未定义的动态字典而不显示 warning；
+上述 warning 是编译器 CLI 的行为。LSP 对带引号的外部动态字典不显示 warning；
+裸名称未定义时正常显示 error。
 显式导入失败及其他类型错误仍正常显示。字典名称在编辑器中与值类型同色，
 Ctrl+Click 字典声明可查看当前编译单元内的引用列表。
 
