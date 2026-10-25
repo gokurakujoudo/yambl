@@ -5,7 +5,7 @@ const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
 const { parse, format, range, position, keywords, annotations, values, generics, entities, structures, constants, resultConstants } = require('./language/syntax.cjs');
 const { validate, describe } = require('./language/validation.cjs');
-const { typeLabel, methodNames, methodHelp, nodes, defaultLabel } = require('./language/calculation-tools.cjs');
+const { typeLabel, methodNames, methodHelp, nodes, defaultLabel, inputTypeHelp } = require('./language/calculation-tools.cjs');
 
 const { sources, readPrefix, rootName, configError } = require('./repository.cjs');
 const { modelRoot } = require('./language/relationships.cjs');
@@ -256,12 +256,13 @@ class Service {
       return { data };
     }
     if (method === 'textDocument/hover') {
+      const computation = token && doc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= token.start && token.end <= f.end);
+      if (token?.value === 'input' && computation) return { contents: { kind: 'plaintext', value: inputTypeHelp(computation) }, range: token.range };
       const invoked = token && expressionNodes.find(n => ['call', 'recover'].includes(n.kind) && n.operands[0].memberToken?.start === token.start);
       if (invoked) return { contents: { kind: 'plaintext', value: methodHelp(token.value, invoked) || 'Unknown calculation method' }, range: token.range };
       if (token && /\binput\.$/.test(doc.text.slice(0, token.start))) {
-        const field = doc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= token.start && token.end <= f.end);
-        const parameter = field?.inferredInputs?.find(p => p.name === token.value);
-        if (parameter) return { contents: { kind: 'plaintext', value: `input.${parameter.name}: ${typeLabel(parameter.type)}${parameter.default ? ' = ' + defaultLabel(parameter.default) : parameter.required ? ' (required)' : ' (optional)'}\n\nExternal computation input. Bind with name=input.name; defaults apply only when omitted.` }, range: token.range };
+        const parameter = computation?.inferredInputs?.find(p => p.name === token.value);
+        if (parameter) return { contents: { kind: 'plaintext', value: `input.${parameter.name}: ${typeLabel(parameter.type)}${parameter.default ? ' = ' + defaultLabel(parameter.default) : parameter.required ? ' (required)' : ' (optional)'}${parameter.description ? '\n\n' + parameter.description : ''}\n\nExternal computation input. Bind with name=input.name; defaults apply only when omitted.` }, range: token.range };
       }
       const value = target ? describe(target) + (target.kind === 'decorator' && help[token.value] ? '\n\n' + help[token.value] : '') : token && (help[token.value] || (values.includes(token.value) ? `Built-in value type: ${token.value}` : null));
       return value ? { contents: { kind: 'plaintext', value }, range: token.range } : null;

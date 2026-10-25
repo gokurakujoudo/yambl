@@ -45,6 +45,13 @@ function defaultLabel(node) {
   return node.token?.value || node.value;
 }
 
+function inputTypeHelp(field) {
+  const entries = (field.inferredInputs || []).map(p =>
+    `    ${p.name}: ${typeLabel(p.type)}${p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'}` +
+    (p.description ? '\n        ' + p.description : ''));
+  return ['input: {', ...entries, '}', '', 'Inferred inputs for ' + field.name.value + '. Defaults apply only when omitted.'].join('\n');
+}
+
 function nodes(field) {
   const result = [];
   function visit(node) {
@@ -58,4 +65,4 @@ function nodes(field) {
   return result;
 }
 
-module.exports = { typeLabel, methodNames, methodHelp, methods, nodes, defaultLabel };
+module.exports = { typeLabel, methodNames, methodHelp, methods, nodes, defaultLabel, inputTypeHelp };

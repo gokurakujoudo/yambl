@@ -18,6 +18,7 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     SignatureHelp: class {}, SignatureInformation: Information, ParameterInformation: Information,
     Range: class { constructor(...coordinates) { this.coordinates = coordinates; } },
     Location: class { constructor(uri, range) { Object.assign(this, { uri, range }); } },
+    Hover: class { constructor(contents, range) { Object.assign(this, { contents, range }); } },
     Diagnostic: class {}, SemanticTokensLegend: class {},
     EventEmitter: class { fire() {} dispose() {} },
     Uri: { parse: value => value },
@@ -79,6 +80,10 @@ test('VS Code adapters retain snippets, named insertions and live signature help
       if (needle.includes('market_value')) assert.match(help.signatures[0].label, /price_hierarchy: Hierarchy/);
     }
     current = original; fmc.version++;
+    const inputHover = await providers.get('registerHoverProvider').provider.provideHover(fmc, at(original.indexOf('input.industry_date')));
+    assert.match(inputHover.contents.value, /input: \{\n/);
+    assert.match(inputHover.contents.value, /price_source: code<PriceSources> \(optional\)/);
+    assert.match(inputHover.contents.value, /industry_date: date = input.as_of_date/);
     const use = at(original.indexOf('security.wind_level1_industry'));
     const target = await providers.get('registerDefinitionProvider').provider.provideDefinition(fmc, use);
     assert.ok(target.uri.endsWith('/holdings_entry.yambl'));

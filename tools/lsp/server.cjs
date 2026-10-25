@@ -24,7 +24,7 @@ function receive(message) {
         completionProvider: { triggerCharacters: ['.', ':', '(', ','] }, signatureHelpProvider: { triggerCharacters: ['(', ','] }, hoverProvider: true, definitionProvider: true, referencesProvider: true,
         semanticTokensProvider: { legend: { tokenTypes: ['yamblValueType'], tokenModifiers: [] }, full: true },
         documentSymbolProvider: true, documentFormattingProvider: true },
-        serverInfo: { name: 'yambl-lsp', version: '0.1.18' } } });
+        serverInfo: { name: 'yambl-lsp', version: '0.1.19' } } });
       return;
     }
     if (!initialized || shutdown) {

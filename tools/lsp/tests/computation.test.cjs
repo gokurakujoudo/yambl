@@ -43,6 +43,27 @@ test('actual FMC completion handles unfinished inputs and typed collection/refer
   }
 });
 
+test('actual FMC input hover shows the complete inferred input structure', () => {
+  const { original, feature } = fmcEditor();
+  const first = feature('hover', original.indexOf('input.industry_date'));
+  const second = feature('hover', original.indexOf('input.price_date'));
+  assert.equal(first.contents.value, second.contents.value);
+  assert.match(first.contents.value, /^input: \{\n/);
+  for (const entry of [
+    'as_of_date: date (required)',
+    'industry_date: date = input.as_of_date',
+    'price_date: date = input.as_of_date',
+    "price_hierarchy: Hierarchy = 'LocalHierarchy'",
+    'price_source: code<PriceSources> (optional)',
+    "Additional issuer's industry date",
+  ]) assert.ok(first.contents.value.includes(entry), entry);
+  assert.ok(!first.contents.value.includes('industry_type:'), 'bound dimensions are not external inputs');
+  assert.ok(!first.contents.value.includes('price_fallback_days:'), 'instance config is not an input');
+  const member = feature('hover', original.indexOf('input.industry_date') + 'input.'.length);
+  assert.match(member.contents.value, /input.industry_date: date = input.as_of_date/);
+  assert.match(member.contents.value, /Additional issuer's industry date/);
+});
+
 test('actual FMC field calls offer signatures while parentheses and argument values are unfinished', () => {
   const { original, open, feature } = fmcEditor();
   for (const [needle, parameters] of [
