@@ -21,6 +21,11 @@ const methods = {
   best_available: ['field::best_available(named_parameters...) -> ReadResult<T>', 'Explicit dimension value overrides Hierarchy. Choose the latest date within the per-instance config fallback window, then source priority. SCD never crosses gaps.'],
   value: ['computed_field::value(named_parameters...) -> ReadResult<T>', 'Bind parameters of a dependent computed field. Unbound parameters merge by name; explicit bindings affect only this dependency.'],
 };
+const conversions = require('./conversions.cjs');
+for (const [name, parameters] of Object.entries(conversions.signatures)) {
+  methods[name] = [`${name}(${parameters.map(p => p.join(': ')).join(', ')}) -> ${conversions.returns[name]}`,
+    name === 'round' ? 'Explicit scale and required rounding mode: half_even, half_up, floor, ceil or toward_zero. No implicit rounding.' : name === 'truncate' ? 'Truncate toward zero at the explicitly supplied scale; return decimal.' : name.includes('datetime') ? 'ISO datetime with an explicit timezone; normalize to UTC. Invalid or lossy input returns ERROR.' : name.includes('date') ? 'ISO calendar date in YYYY-MM-DD form. Invalid input returns ERROR.' : 'Strict scalar conversion. Nonfinite values and implicit truncation or precision loss return ERROR.'];
+}
 
 function methodNames(type) {
   return ['collection', 'values', 'sequence'].includes(type?.name)
@@ -62,6 +67,7 @@ function nodes(field) {
   }
   field.calculation?.bindings.forEach(b => visit(b.expression));
   if (field.calculation) visit(field.calculation.result);
+  if (field.initializer) visit(field.initializer);
   return result;
 }
 

@@ -152,7 +152,7 @@
     },
     {
       "name": "keyword.declaration.yambl",
-      "match": "\\b(?:decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|computed|dimension|hierarchy|fallback_days|final|self|input|as|attr)\\b"
+      "match": "\\b(?:const|decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|computed|dimension|hierarchy|fallback_days|final|self|input|as|attr)\\b"
     },
     {
       "name": "keyword.control.yambl",
@@ -179,6 +179,14 @@
       "match": "\\b(?:NOT_DEFINED|NOT_APPLICABLE|EMPTY|NO_ENTRY|NO_DATA|ENTITY_NOT_FOUND|ERROR|PARTIAL|true|false)\\b"
     },
     {
+      "name": "support.function.yambl",
+      "match": "\\b(?:to_string|to_integer|to_decimal|to_float|parse_date|format_date|parse_datetime|format_datetime|truncate|round)(?=\\s*\\()"
+    },
+    {
+      "name": "constant.other.yambl",
+      "match": "\\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\\b"
+    },
+    {
       "name": "entity.name.type.yambl",
       "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
     },
@@ -188,7 +196,7 @@
     },
     {
       "name": "keyword.operator.yambl",
-      "match": "->|\\?\\?|==|!=|<=|>="
+      "match": "->|\\?\\?|==|!=|<=|>=|//|/"
     },
     {
       "name": "keyword.operator.assignment.yambl",

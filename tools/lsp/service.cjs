@@ -208,7 +208,7 @@ class Service {
   }
   calculationDocument(doc, offset) {
     const before = doc.text.slice(0, offset);
-    if (!doc.errors.length || !(/(?:\.|::)[a-z_0-9]*$/.test(before) || /::(?:at|best_available|value)\([^()]*$/.test(before))) return doc;
+    if (!doc.errors.length || !(/(?:\.|::)[a-z_0-9]*$/.test(before) || /\b[a-z][a-z_0-9]*\([^()]*$/.test(before))) return doc;
     let prefix = /(?:\.|::)[a-z_0-9]*$/.test(before) ? before.replace(/[a-z_0-9]*$/, '__completion') : before;
     if (/[=,]\s*$/.test(prefix)) prefix += '__completion';
     const balance = doc.tokens.reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
@@ -234,7 +234,7 @@ class Service {
     if (params.position && doc.blocks.some(b => { const r = range(doc.text, b.start, b.end); return params.position.line >= r.start.line && params.position.line <= r.end.line; })) return null;
     const token = params.position && this.tokenAt(doc, params.position);
     const target = token && doc.bindings.get(token.start);
-    const expressionNodes = doc.declarations.flatMap(d => d.fields.flatMap(nodes));
+    const expressionNodes = doc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes)]);
     if (method === 'textDocument/definition') {
       const targets = token && doc.markerTargets.get(token.start);
       if (targets) return targets.map(field => ({ uri: field.doc.uri, range: field.name.range }));
@@ -258,7 +258,7 @@ class Service {
     if (method === 'textDocument/hover') {
       const computation = token && doc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= token.start && token.end <= f.end);
       if (token?.value === 'input' && computation) return { contents: { kind: 'plaintext', value: inputTypeHelp(computation) }, range: token.range };
-      const invoked = token && expressionNodes.find(n => ['call', 'recover'].includes(n.kind) && n.operands[0].memberToken?.start === token.start);
+      const invoked = token && expressionNodes.find(n => ['call', 'recover'].includes(n.kind) && (n.operands[0].memberToken || (n.operands[0].kind === 'name' ? n.operands[0].token : null))?.start === token.start);
       if (invoked) return { contents: { kind: 'plaintext', value: methodHelp(token.value, invoked) || 'Unknown calculation method' }, range: token.range };
       if (token && /\binput\.$/.test(doc.text.slice(0, token.start))) {
         const parameter = computation?.inferredInputs?.find(p => p.name === token.value);
@@ -270,7 +270,7 @@ class Service {
     if (method === 'textDocument/signatureHelp') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       const calculationDoc = this.calculationDocument(doc, offset);
-      const call = calculationDoc.declarations.flatMap(d => d.fields.flatMap(nodes)).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
+      const call = calculationDoc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes)]).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
       if (!call) return null;
       const name = call.operands[0].value;
       const parameters = (call.parameters || []).map(p => ({ label: `${p.name}: ${typeLabel(p.type)}`, documentation: p.default ? 'Default: ' + defaultLabel(p.default) : p.required ? 'Unbound inputs are inferred into the caller.' : 'Optional selection parameter.' }));
@@ -282,24 +282,34 @@ class Service {
     if (method === 'textDocument/completion') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       const before = doc.text.slice(0, offset);
+      if (doc.comments.some(c => c.start <= offset && offset <= c.end) || doc.tokens.some(t => t.value.startsWith("'") && t.start < offset && offset < t.end)) return { isIncomplete: false, items: [] };
       const calculationDoc = this.calculationDocument(doc, offset);
       const computation = calculationDoc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= offset && offset <= f.end);
+      const constantContext = calculationDoc.declarations.find(d => d.kind === 'constant' && d.token.start <= offset && offset <= d.end);
+      const builtinCall = /\b([a-z][a-z_0-9]*)\(([^()]*)$/.exec(before);
+      const builtinSignature = builtinCall && require('./language/conversions.cjs').signatures[builtinCall[1]];
+      if (builtinSignature && /(?:^|,)\s*[a-z_0-9]*$/.test(builtinCall[2])) {
+        const used = new Set([...builtinCall[2].matchAll(/\b([a-z][a-z_0-9]*)\s*=/g)].map(m => m[1]));
+        return { isIncomplete: false, items: builtinSignature.filter(([name]) => !used.has(name)).map(([label, type]) => ({ label, kind: 5, insertText: label + '=', detail: type })) };
+      }
       if (/::[a-z_]*$/.test(before)) {
         const fieldName = /\.([a-z][a-z0-9_]*)::[a-z_]*$/.exec(before);
         const memberStart = fieldName ? before.length - fieldName[0].length + 1 : -1;
         const selected = calculationDoc.bindings.get(memberStart);
-        const labels = computation ? selected?.mode === 'computed' ? ['value'] : ['at', 'best_available'] : ['type', 'value', 'entity'];
+        const operator = /::[a-z_]*$/.exec(before);
+        const receiver = calculationDoc.accessTerms?.get(operator.index);
+        const labels = computation ? selected ? selected.mode === 'computed' ? ['value'] : ['at', 'best_available'] : [] : receiver?.sort === 'field' ? ['type', ...(receiver.instance ? ['value'] : []), ...(receiver.source?.owner?.kind === 'entity' ? ['entity'] : [])] : [];
         return { isIncomplete: false, items: labels.map(label => ({ label, kind: 10, detail: help[label] || help.self })) };
       }
       if (/\binput\.[a-z_0-9]*$/.test(before) && computation) return { isIncomplete: false, items: (computation.inferredInputs || []).filter(p => p.name !== '__completion').map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
       const member = /\.([a-z_0-9]*)$/.exec(before);
-      if (member && computation) {
-        const expression = nodes(computation).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
+      if (member && (computation || constantContext)) {
+        const expression = nodes(computation || constantContext).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
         const receiver = expression?.operands[0]?.inferred?.type;
-        if (receiver) {
+        if (receiver && receiver.kind !== 'unknown') {
           const symbols = new Map([...this.documents.values(), calculationDoc].flatMap(d => [...d.scope.values()].map(s => [s.key, s])));
           const owner = symbols.get(receiver.key);
-          const fields = new Map(owner?.effective || []);
+          const fields = new Map(owner?.kind === 'value' ? owner.fields.map(f => [f.name.value, f]) : owner?.effective || []);
           // Descendant-only fields are legal reads and may yield NOT_DEFINED.
           if (receiver.kind === 'reference' && owner) {
             let root = owner; while (root.base) root = root.base;
@@ -310,8 +320,18 @@ class Service {
           }
           const items = [...fields].map(([label, field]) => ({ label, kind: 5, detail: describe(field) }));
           if (receiver.name === 'partial') items.push(...['value', 'issues'].map(label => ({ label, kind: 5, detail: label === 'value' ? typeLabel(receiver.args[0]) : 'Immutable issue details' })));
-          items.push(...methodNames(receiver).map(label => ({ label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 })));
+          if (computation) items.push(...methodNames(receiver).map(label => ({ label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 })));
           return { isIncomplete: false, items };
+        }
+      }
+      if (member && !computation) {
+        const receiver = calculationDoc.accessTerms?.get(member.index);
+        if (receiver) {
+          const symbols = new Map([...calculationDoc.scope.values()].map(d => [d.key, d]));
+          if (receiver.dictionary) return { isIncomplete: false, items: codeEntries(receiver.dictionary).map(e => ({ label: e.name.value, kind: 20, detail: describe(e) })) };
+          const enclosing = calculationDoc.declarations.find(d => d.bodyStart <= offset && offset <= d.end);
+          const owner = receiver.path === 'self' ? calculationDoc.scope.get(enclosing?.name.value) : symbols.get(receiver.type.key);
+          return { isIncomplete: false, items: [...(owner?.effective || [])].map(([label, field]) => ({ label, kind: 5, detail: describe(field) })) };
         }
       }
       const fieldCall = /\.([a-z][a-z0-9_]*)::(at|best_available|value)\(([^()]*)$/.exec(before);
@@ -399,10 +419,12 @@ class Service {
         }
         return { isIncomplete: false, items: [...(owner?.effective || [])].map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
       }
+      if (member) return { isIncomplete: false, items: [] };
       const items = [...keywords, ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: constants.includes(label) ? 21 : 14, detail: help[label] || 'YAMBL built-in' }));
-      if (computation) {
-        items.push({ label: 'input', kind: 6, detail: 'External input: input.name; omitted input fallback: input.name ?? expression', insertText: 'input.${1:name}', insertTextFormat: 2 });
-        const context = nodes(computation).filter(n => n.environment && n.token.start <= offset && offset <= n.end).sort((a, b) => (a.end - a.token.start) - (b.end - b.token.start))[0];
+      if (computation || constantContext) {
+        for (const [label, parameters] of Object.entries(require('./language/conversions.cjs').signatures)) items.push({ label, kind: 3, detail: `${label}(${parameters.map(p => p.join(': ')).join(', ')})`, insertText: label + '($0)', insertTextFormat: 2 });
+        if (computation) items.push({ label: 'input', kind: 6, detail: 'External input: input.name; omitted input fallback: input.name ?? expression', insertText: 'input.${1:name}', insertTextFormat: 2 });
+        const context = (computation ? nodes(computation) : []).filter(n => n.environment && n.token.start <= offset && offset <= n.end).sort((a, b) => (a.end - a.token.start) - (b.end - b.token.start))[0];
         for (const [label, value] of context?.environment || []) items.push({ label, kind: 6, detail: typeLabel(value.type) });
       }
       for (const [label, decl] of doc.scope) items.push({ label, kind: decl.kind === 'entity' ? 7 : 20, detail: describe(decl) });

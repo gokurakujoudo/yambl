@@ -93,13 +93,17 @@ class Resolver {
           this.doc.valueTypeTokens.set(node.token.start, node.token);
           result = term(type(name, name === 'string' ? 'string' : 'value', { params: this.parameters(node) }));
         } else if (name === 'Entity') { if (params) this.issue(node, 'invalid parameters for Entity'); result = term(entity); }
-        else if (symbol && symbol.kind !== 'decorator') {
+        else if (symbol && !['decorator', 'constant'].includes(symbol.kind)) {
           if (params) this.issue(node, `invalid parameters for ${name}; do not mix positional and named parameters`);
           result = symbol.kind === 'decodes' ? term(type('Decodes', 'reference', { key: this.doc.scope.get('Decodes').key, exact: symbol.key }), 'value', { path: name, dictionary: symbol }) : term(type(name, symbol.kind === 'entity' ? 'reference' : 'value', { key: symbol.key }));
         } else { this.issue(node, `unknown type: ${name}`); result = term(unknown); }
       }
     }
-    for (const access of node.accesses || []) result = this.access(result, access);
+    for (const access of node.accesses || []) {
+      if (!this.doc.accessTerms) this.doc.accessTerms = new Map();
+      this.doc.accessTerms.set(access.operator.start, result);
+      result = this.access(result, access);
+    }
     for (const operation of node.operations || []) result = this.combine(result, this.evaluate(operation.term), operation);
     return result;
   }

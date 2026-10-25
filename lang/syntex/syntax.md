@@ -1,344 +1,404 @@
-# YAMBL 语法说明
+# YAMBL 语法总览
 
-本文记录当前案例使用的语法及已确认的语义。对应的首版解析、静态检查与格式化
-工具位于 `yambl-compiler`。
-结构化值类型使用 `value` 声明，透明别名使用 `type ... = ...`。
-类型值、依赖路径、exact 和双冒号访问见[类型表达式](type-expressions.md)。
+YAMBL 描述类型、字段、元信息及计算依赖。本文按语言结构分类；每个主题的详细约束
+链接到专门参考。IR、存储结构和 Python API 属于编译产物，不是源语言语法。
 
-## 命名
+## 文件与词法
 
-| 名称类别 | 命名约定 | 示例 |
+文件使用 UTF-8 无 BOM、LF、四空格缩进，末尾一个换行符。输入接受 CRLF 和缺少末尾
+换行；格式化统一输出。声明、语句不用分号。标识符使用 ASCII 字母、数字和下划线。
+
+| 形式 | 含义 |
+| --- | --- |
+| `# 注释` | 行注释；字符串内的 `#` 不开始注释 |
+| `正文  # 注释` | 格式化后的行尾注释 |
+| 独占行 `---` | 开闭不嵌套的 Markdown 文本块，可位于顶层或声明体 |
+| `'text'` | 单行字符串；`\'` 为单引号，`\\` 为反斜杠 |
+| `123`、`-123` | 整数字面量；计算表达式的负号是前缀运算符 |
+| `12.50`、`1e-3` | decimal 数值字面量 |
+| `true`、`false` | bool 字面量 |
+| `0b00100` | flags 条目的二进制位值 |
+
+字符串中的其他反斜杠转义保留原样。Markdown 不参与语义、不自动绑定声明；正文空白
+保留，只统一换行，未闭合报错。文本块外连续空白行最多一个。格式化保留字符串拼写、
+声明顺序、注释内容和计算表达式已有的换行。
+
+## 名称与文件作用域
+
+| 对象 | 命名 | 示例 |
 | --- | --- | --- |
-| 实体类型 | `PascalCase` | `Fund`、`HoldingEntry`、`Security` |
-| 值类型 | `snake_case` | `string`、`date`、`decimal` |
-| 字段 | `snake_case` | `fund_id`、`net_asset`、`holdings_entry_id` |
+| entity | PascalCase | Security、HoldingEntry |
+| value、透明别名 | snake_case | money、hierarchy_entry |
+| 字段、局部变量、参数、dimension | snake_case | price、as_of_date |
+| decorator | snake_case，带 `@` 调用 | @extra_input_params |
+| decodes | 复数 PascalCase | Currencies |
+| 仓库定义的字典 code | PascalCase | Static、WindIndustryLevel1 |
+| 编译期常量 | UPPER_SNAKE_CASE | OTHER_INDUSTRY |
 
-## 类型说明
-
-内置值类型清单、使用示例及类型参数规则见
-[内置值类型](../builtins/value-types.md)。结构化值类型的声明见下文。
-
-`collection<T>`、`values<T>` 和 `mapping<TKey, TValue>` 的泛型约束及语义见
-[内置集合类型](../builtins/collection-types.md)。
-
-内置值类型原语 `code<decodes_id>` 通过实例名称指定代码字典，支持
-`code<Currencies>` 和 `code<'Currencies'>`。裸名称必须解析到可见字典，否则报错。
-带引号且未定义的字典允许由外部提供，CLI 逐处 warning，LSP 不提示。
-具体语义见 [code](../builtins/value-types.md#code)。
-
-## 字符串与元信息
-
-字符串使用单引号，内部使用 `\'` 表示单引号，例如 `'Security\'s currency'`。
-当前解析器也保留反斜杠转义的原始拼写；读取字符串值时 `\\` 表示反斜杠，
-其他转义（例如正则中的 `\d`）保持原样，不据此选定正则方言。
-
-`@title('...')` 和 `@description('...')` 为其后的实体、Decodes 声明或字段
-添加标题和描述。每个目标上的同名元信息只能出现一次。它们不改变字段类型。
-
-```text
-entity Security {
-    @title('Currency')
-    @description('Security\'s currency')
-    attr currency: code<'Currencies'>
-}
-```
-
-格式化器保留字符串拼写，包括 `\'`、空格和 `#`；字符串不能跨物理行。
-
-## 注释
-
-行尾注释的标准格式为：正文、两个空格、`#`、一个空格、注释文本。注释延续到
-当前行末尾，例如：
-
-```text
-attr quantity: decimal  # 持仓数量
-attr amount: decimal[18, 4]  # 总位数为 18，小数位数为 4
-```
-
-允许行首注释，即独占一行的注释，使用 `#`、一个空格和注释文本：
-
-```text
-# 基金模型
-entity Fund {
-    id fund_id: string['[a-zA-Z0-9]{12}']  # 基金标识
-}
-```
-
-字符串内部的 `#` 属于字符串内容，不开始注释，例如：
-
-```text
-attr code: string[regex: '[A-Z#]+']  # 正则表达式包含井号
-```
-
-注释前后的空格数量不影响解析，不因数量不符而报语法错误。格式化器统一将
-行尾注释修正为正文后两个空格、`#` 后一个空格；行首注释也统一为 `#` 后一个
-空格。格式化器不改动字符串内部的空格或 `#`。
-
-例如，以下输入允许解析：
-
-```text
-#基金模型
-attr quantity: decimal #持仓数量
-```
-
-格式化后为：
-
-```text
-# 基金模型
-attr quantity: decimal  # 持仓数量
-```
-
-## 命名空间与文件
-
-当前业务案例在文件开头使用以下写法：
-
-```text
+```yambl
 namespace core
-```
 
-`core/` 中的三个实体文件使用 `namespace core`；字典已拆分到
-`decodes/currencies.yambl`，使用 `namespace decodes`。
-`core/security.yambl` 显式导入字典：
-
-```text
 from decodes import Currencies
+
+entity Security {
+    id security_id: string
+    static attr currency: code<Currencies>
+}
 ```
 
-完整案例和待定解析规则见[命名空间与跨文件引用](namespaces.md)。
+每个文件至多一个 namespace，位于 import 和声明之前。同 namespace 的声明跨文件
+直接可见；跨 namespace 必须 import，导入只在当前文件生效。暂不接受导入别名或通配符。
+名称解析支持前向引用，普通声明不能遮蔽内置名称。
 
-命名空间由显式声明决定，一般建议与目录结构一致，但不强制对应。同一命名空间
-的声明可跨文件直接引用；跨命名空间的导入仅在当前文件有效。
+`yambl-root.lclcfg` 标记模型仓库，包含一个静态 `prefix: 'fmc'`；完整名称由 prefix、
+namespace 和声明名组成。目录不决定 namespace。见[名称解析](namespaces.md)。
 
-## 文件格式
+## 顶层声明
 
-格式化器使用四空格缩进，统一为 LF 换行。最后一条内容后有且仅有一个换行符
-（`\n`），使编辑器显示一个空白末行；删除额外的末尾空白行。解析器允许缺少
-末尾换行，由格式化器补齐。文本块外连续空白行缩减为一个，字符串内容和声明顺序
-保持不变。输入同时接受 LF 和 CRLF，格式化输出 UTF-8 无 BOM。
+| 形式 | 含义 |
+| --- | --- |
+| `entity Name { ... }` | 具有身份的实体类型 |
+| `entity Child inherits Parent { ... }` | 单继承实体类型 |
+| `final entity Name { ... }` | 禁止被继承或 extend |
+| `extend Name { ... }` | 增补已有实体的字段或 dimension，不创建新实体 |
+| `value name { ... }` | 无 ID 的结构化值类型，天然 final |
+| `type name = Type` | 透明类型别名 |
+| `type name<a: Constraint> = Type` | 带编译期参数的透明别名 |
+| `decodes Names { ... }` | Decodes 实例及其代码条目 |
+| `decorator @name(...)` | 有类型和显式 targets 的元信息声明 |
+| `const NAME: Type = expression` | 有明确类型的编译期常量 |
 
-## Decodes 实例声明
+Entity 是所有实体的抽象最终基类，不能实例化；未显式继承的实体各自建立业务继承树。
+字段的实体类型表示实例引用，保存 ID，不需要额外的 ref。
 
-`decodes` 是声明内置 `Decodes` 模型实例的专用关键字，实例使用复数名称：
+## 结构化值类型
 
-```text
+```yambl
+value amount {
+    static attr quantity: decimal
+    static attr currency: code<'Currencies'>
+}
+```
+
+value 只有非集合的 static 字段或实体引用，没有 ID、继承、extend 或默认值，禁止
+直接或间接值嵌套循环。同类型按所有字段判等，引用字段按 ID 比较，不自动定义大小顺序。
+
+## 字面量与上下文类型
+
+数值默认推断为 integer 或 decimal；字符串和布尔值分别推断为 string 和 bool。
+声明类型、带类型的 let、返回类型以及集合元素和结构字段为字面量提供目标类型。
+无需给每个值重复写类型构造器。
+
+```yambl
+value amount {
+    static attr quantity: decimal
+    static attr label: string
+}
+
+const OTHER_INDUSTRY: string = 'Other'
+const UNIT_AMOUNT: amount = {quantity: 1.25, label: OTHER_INDUSTRY}
+
+entity Example {
+    id key: string
+    computed attr samples: values<decimal> {
+        let a: decimal = 1.25
+        return [a, 2, 2]
+    }
+    computed attr totals: mapping<string, decimal> {
+        return {'Other': UNIT_AMOUNT.quantity}
+    }
+    computed attr empty: collection<Example> {
+        return []
+    }
+}
+```
+
+`[...]` 根据上下文表示 values 或 collection，去除重复值；无上下文时根据元素推断。
+`{key: value}` 根据上下文表示 mapping 或结构化 value。结构值必须完整提供每个字段，
+不允许未知或重复字段；mapping 的键必须唯一。`[]` 和 `{}` 缺少足够的类型上下文时报错。
+结构字段 key 使用字段名，也接受同名字符串；mapping 的字符串键使用单引号。
+集合元素仍须符合 collection/values 的类型约束，字面量不开放嵌套集合存储。
+
+日期、带时区 datetime、字典代码及实体引用可由目标类型解释字符串字面量。
+实体引用按目标唯一 ID 类型检查，不查询实例存在性；整数 ID 使用整数字面量。
+已定义字典验证代码成员，外部字典不查询数据。类型信息不足时使用显式类型 let。
+这些构造用于计算表达式和 const；config 默认值、decorator 实参仍沿用各自的值表达式规则。
+
+## 编译期常量
+
+const 必须显式声明类型，遵循 namespace/import、前向引用和名称冲突规则。
+初始化表达式可使用字面量、其他 const、字典代码、纯运算、条件表达式和
+[转换函数](../builtins/functions.md)。依赖循环、类型错误或求值失败阻止编译。
+所有分支都检查纯度和类型，仅对选中的分支求值。
+
+const 不能访问 self、input、实例字段、非正常结果，也不能执行查询或任意代码。
+它与 exact 类型约束及 EMPTY 等结果状态是不同概念。
+
+## 字段类别
+
+| 形式 | 语义 |
+| --- | --- |
+| `id name: Type` | 实体标识，不属于 attr，不参与 attrs 筛选 |
+| `static attr name: Type` | 时间无关属性；普通 `attr` 为等价简写 |
+| `config attr name: Type = literal` | 可配置属性，默认值可省略 |
+| `snapshot attr name: Type` | 每个字段独立的日期快照 |
+| `scd attr name: Type` | 左闭右开有效期间内的值 |
+| `computed attr name: Type { ... }` | 由依赖计算，不生成物理列 |
+
+entity 与 extend 可定义属性，value 只接受 static。不同快照字段使用相同日期参数不表示
+同日必须共同存在。配置有效值依次来自匹配 ConfigGroup、实例值、实际子类型默认值；
+EMPTY、NOT_APPLICABLE 不触发默认值。读取不适用于实际子类型的字段返回 NOT_DEFINED。
+
+## 类型表达式
+
+| 写法 | 类型或约束 |
+| --- | --- |
+| `bool`、`string`、`integer`、`float`、`decimal` | 标量；无 int 别名 |
+| `date`、`datetime`、`snowflake_id` | 日期、日期时间、标识值 |
+| `decimal[18, 4]` | 总精度和小数位数；也可写命名参数 |
+| `string['regex']` | 字符串正则约束，未指定执行方言 |
+| `Security` | 实例引用 |
+| `type<Security>` | Security 或其子类型的类型值 |
+| `code<Currencies>` | 已声明字典的代码值 |
+| `code<'PriceSources'>` | 当前作用域的字典；未定义时允许外部字典 |
+| `collection<Security>` | 无序、引用去重的实体引用集合 |
+| `values<string>` | 无序、值去重的值集合 |
+| `mapping<string, decimal>` | 无序、键唯一，值不得为集合 |
+| `attrs<AttrCats.Static, Security>` | 指定类别的非集合字段描述 |
+| `alias<self.kind::value>` | 与依赖表达式同值 |
+| `exact<Currencies.USD>` | 常量类型约束，仅用于 override/overload |
+
+方括号参数须全部按位置或全部按名称提供，不允许混用、重复、缺失或未知参数。
+`decimal[precision: 18, scale: 4]` 与 `decimal[18, 4]` 等价；`string[regex: 'x']`
+与 `string['x']` 等价。命名参数可换序。无参数 decimal 不补隐式精度。
+
+mapping 的键接受 string 兼容类型或实体引用。code、snowflake_id、类型名、字段名可以
+单向兼容 string；普通 string 不自动反向转换。值类型没有继承关系。
+
+透明别名实参按位置传入，不支持命名、默认或可变参数。别名体按声明作用域解析，实参
+按调用作用域解析；self 依赖须显式传参。循环别名或类型依赖报错，普通实体相互引用合法。
+见[类型表达式](type-expressions.md)、[值类型](../builtins/value-types.md)、
+[集合类型](../builtins/collection-types.md)和[字段映射](../builtins/field-mapping.md)。
+
+## 字典与 flags
+
+```yambl
 decodes Currencies {
     - 100 CNY: 'CNY'
     - 200 USD: 'USD'
 }
-```
 
-条目形式为 `- ordering code: decode`。本例的 `ordering` 是整数，`code`
-使用 PascalCase 裸词元（大写字母开头，后接字母或数字），`decode` 使用单引号字符串。
-`ordering` 支持十进制和 `0b` 二进制整数，是使用方的升序排序基准，
-不会使 `entries` 集合具有顺序。模型定义及字段映射见 [Decodes](../models/decodes.yambl)。
-
-`Decodes` 按 `decodes_id` 唯一标识，是禁止继承与 extend 的 final 实体。
-entries 是 `values<decodes_entry>`；条目无独立实体身份，code 在所属字典内唯一。
-声明中的字典名称表示实例，不能作为实体类型使用。
-
-```text
-attr x: code<Currencies>  # 合理取值为 Currencies.CNY
-attr y: Decodes  # 合理取值为 Currencies
-```
-
-`Currencies.CNY` 是字典限定的代码值写法。override/overload 中的
-`attr x: Currencies` 等价于 `attr x: exact<Currencies>`，约束为固定字典引用。
-
-`@flags` 将 decodes 条目数值解释为位掩码，显式条目必须是互不重复的正单比特。
-每个 flags 字典自动提供 `None = 0` 和全选值 `All`，禁止在源文件重复定义这两个 code。
-`AttrCats.Static + AttrCats.Config` 表示同一 flags 字典的按位并集；重复项不改变结果，
-None 不增加位。该组合仍是该字典的 code，可以用于 attrs、field_mapping 和泛型参数。
-`AttrCats.All - AttrCats.Snapshot` 移除 Snapshot；重复移除只生效一次。
-`+` 和 `-` 同优先级、从左到右计算，均低于 `.` 和 `::`。
-完整声明与边界见 [Decodes](../models/decodes.yambl)。
-
-## 实体与标识字段
-
-使用 `entity` 和花括号声明实体类型，在实体内使用 `id 字段名: 类型` 声明
-标识字段：
-
-```text
-entity Fund {
-    id fund_id: string['[a-zA-Z0-9]{12}']
+@flags
+decodes Rights {
+    - 0b01 Read: 'Read'
+    - 0b10 Write: 'Write'
 }
 ```
 
-案例中字符串参数的含义与待定规则见[内置值类型](../builtins/value-types.md)。
+条目为 `- ordering Code: 'Decode'`。code 在字典内唯一；普通字典的 ordering 表示升序
+优先级，不赋予集合顺序。`Currencies.USD` 是代码值，Currencies 是 Decodes 引用值，
+不是字段类型。Decodes 是 final entity。
 
-证券案例使用同一形式描述证券标识：
+flags 的显式数值仅允许互不重复的正单比特，自动生成 None=0、All=全部位的并集。
+同字典代码的 `+` 添加选择，`-` 移除选择，重复操作幂等，按从左到右计算。
+AttrCats 位值为 Static=2、Config=4、Snapshot=8、Scd=16、Computed=32、All=62。
 
-```text
+## Decorator
+
+```yambl
+@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Static)
+decorator @note(text: string = 'Note', *label?: string)
+
 entity Security {
-    id security_id: string['[a-zA-Z0-9]{12}']
-
-    attr currency: code<Currencies>
+    @note('Name', source: string, description='Display metadata')
+    static attr name: string
 }
 ```
 
-持仓条目的标识声明为：
+普通参数接收非集合值或引用：先位置实参，后命名实参。`*name: Type` 接收一个调用处的
+`key: Type` pair，所有 pair 在普通实参之后，按声明顺序匹配。`*name?: Type` 可省略，
+可选 pair 必须在末尾。普通参数的默认值使用 `= value`。
 
-```text
-id holdings_entry_id: snowflake_id
-```
+每个 decorator 必须有 @targets，默认不可重复，@allow_multiple 开放重复调用。
+每次调用隐含可选末尾 string description，可直接写剩余末尾字符串或 description=。
+已有普通参数先绑定，description 不出现在形式参数声明中。
 
-`snowflake_id` 是内置值类型；该声明本身不规定 ID 生成行为。位结构与生成策略
-见[内置值类型](../builtins/value-types.md#snowflake_id)。实体身份的作用域以及
-是否支持组合标识仍待确定。
+| 内置 decorator | 用途 |
+| --- | --- |
+| `@targets(...)` | decorator 适用对象和属性类别 |
+| `@allow_multiple` | 允许重复修饰 |
+| `@title(...)`、`@description(...)` | 标题、描述 |
+| `@temporal(day: date)` | snapshot/scd 时间参数名 |
+| `@dimension(name)` | 引用命名 dimension，可重复 |
+| `@extra_input_params(name: Type = value, '说明')` | computed 可选输入，默认值可省略 |
+| `@sparse('cat')`、`@dense('cat')` | 无维度、非集合 static 的长表/宽表分组 |
+| `@flags` | flags 字典 |
+| `@override`、`@overload` | 字段关系 |
 
-## 属性与引用
+sparse、dense、dimension 互斥。dimension_ref 和 input_type 是编译期约束，不是存储类型。
+完整规则见[元信息](decorators.md)。
 
-使用 `attr 字段名: 类型` 声明普通属性：
+## 字段关系
 
-```text
-attr security: Security
-attr quantity: decimal
-```
+同一实体和其 extend 不能重复定义字段。重声明继承字段必须标 override，保持类别和
+元信息契约一致；exact 可收窄原类型，不能更换或放宽已确定的常量。config 默认值可变。
 
-实体类型字段默认表示实体引用，因此 `security` 引用一个 `Security` 实体。
-值类型字段描述值，因此 `quantity` 的类型是 `decimal`。实体引用无需额外的
-`ref` 关键字。
+同一继承树不同分支新增同名属性须各自标 overload，保持共同兼容类型和一致元信息。
+合法实现共享逻辑字段身份，保留原声明位置。不同业务根的同名字段不合并。两个标记
+不能并用，不用于 ID。计算与存储字段不能相互重声明；计算实现可不同，返回类型与
+推导输入契约必须一致。见[字段关系](field-relationships.md)。
 
-`collection<HoldingEntry>` 表示无序且不重复的持仓条目实体引用集合，不表示
-内嵌实体。值的集合使用 `values<T>`，键值映射使用 `mapping<TKey, TValue>`；
-类型参数限制统一在 [builtins](../builtins/collection-types.md) 中定义。
+## Dimension
 
-## 独立快照属性
+dimension 定义于 entity 或 extend，由子类继承使用，同作用域重名报错，不接受 decorator。
 
-使用 `snapshot attr 字段名: 类型` 声明快照属性。当前案例将时间注解放在
-对应属性的前一行：
-
-```text
-@temporal(as_of_date: date)
-snapshot attr holdings: collection<HoldingEntry>
-
-@temporal(as_of_date: date)
-snapshot attr net_asset: decimal
-```
-
-`@temporal(as_of_date: date)` 描述该属性的时间参数，参数名为 `as_of_date`，
-类型为 `date`。两个属性的快照相互独立；相同的时间参数不会将它们合并成
-必须同时存在的整体快照。
-
-YAMBL 在此处仅描述模型，不校验业务数据的完整性或其他数据质量。
-例如，模型不要求同一日期的持仓和净资产同时存在，也不检查两者的数据一致性。
-语言的语法检查与业务数据质量校验是不同的职责。
-
-时间参数为单个 date pair，参数名由调用者定义；通用声明与调用见 [Decorator](decorators.md)。
-
-## 扩展、继承与属性模式
-
-`extend EntityName { ... }` 将属性直接补充到对应实体的定义中，不创建独立实体、
-子类型或命名空间符号。属性元信息保留其原始定义位置（文件、行、列），用于诊断
-和源码追踪。格式化仍保留源文件中的 `extend` 块。跨文件解析后，合并的字段参与
-继承和重名检查；字段中的名称按照它实际声明所在文件的导入解析。
-
-```text
+```yambl
 entity Security {
-    id security_id: string
-}
-
-extend Security {
+    config attr price_fallback_days: integer = 5
     dimension prices {
-        value source: code<'PriceSources'>
+        value price_source: code<'PriceSources'>
+        hierarchy price_hierarchy: Hierarchy = 'LocalHierarchy'
+        fallback_days = self.price_fallback_days
     }
     @temporal(as_of_date: date)
     @dimension(prices)
     snapshot attr price: decimal
-
-    config attr price_fallback_days: integer = 20
-}
-
-entity Bond inherits Security {
-    attr coupon: decimal
-
-    @temporal(as_of_date: date)
-    scd attr notional_value: decimal
 }
 ```
 
-`inherits` 指定父实体；子类型获得父类型的字段，并可增加字段。`Bond` 因而拥有
-`security_id`、`price`、`price_fallback_days`、`coupon` 和 `notional_value`。
-当前支持单继承；循环继承、同一实体内部或扩展产生的重复字段均报错。
-父子属性重声明须使用 `@override`，不同分支的同名属性须使用 `@overload`。
-签名一致性、逻辑字段身份及 `final entity` 规则见[字段关系](field-relationships.md)。
-扩展可添加属性和命名 dimension，不能补充 `id`；final 实体禁止扩展。父类型和扩展目标按当前文件可见名称查找。
-`Decodes` 禁止继承，字典实例也不能作为父类型。当前编译器尚不支持扩展内置实体
-其他 final 内置实体；Entity 是抽象最终基类，可作为继承目标。
+value 必填；hierarchy、fallback_days 可省略。fallback_days 只用于 snapshot。
+显式维度值优先于显式 hierarchy，后者优先于声明默认值。最多自动选择一个 Hierarchy，
+其余维度须显式提供；无 Hierarchy 时必须提供维度值。snapshot 先按回退窗口内日期倒序，
+再按来源 ordering 升序选择；SCD 不跨缺口回退。见[计算规则](computations.md)。
 
-父类型或其他子类型的实例允许获取子类型特有字段；字段不适用于该实例的实际
-类型时，结果为内置常量 [NOT_DEFINED](../builtins/constants.md)。例如普通
-`Security` 或另一个 `Security` 子类型实例获取 `Bond.coupon` 对应的字段，
-结果为 `NOT_DEFINED`；`Bond` 及其子类型可拥有该字段的实际值。
-静态检查器不读取实例；生成的双后端 Python 运行时执行上述语义。
+## 计算体
 
-| 属性形式 | 含义 |
+```yambl
+entity Position {
+    static attr quantity: decimal
+    static attr price: decimal
+    computed attr market_value: decimal {
+        let amount = self.quantity * self.price
+        return if amount > 0 then amount else 0
+    }
+}
+```
+
+计算体有零个或多个不可变 let，最后为唯一显式 return。let 可写 `let name: Type = expression`
+提供目标类型，也可省略类型由初始化表达式推断。不支持循环、更新赋值和任意
+代码执行。lambda 写为 `item -> expression`。if、布尔运算和 recover 惰性执行；所有
+分支仍参与静态类型与参数推导。
+
+## 运算符
+
+| 从高到低 | 形式 |
 | --- | --- |
-| `attr` | `static attr` 的简写，可用于条件筛选 |
-| `static attr` | 时间无关、可用于索引筛选的属性 |
-| `snapshot attr` | 按时间参数描述独立快照 |
-| `scd attr` | SCD Type 2 时间相关属性，保留变化历史 |
-| `config attr` | 与时间无关、可作为参数被配置覆盖的属性 |
+| 成员、调用、括号 | `.`、`::`、`(...)` |
+| 前缀 | `-x`、`not x` |
+| 乘除 | `*`、`/`、`//` |
+| 加减 | `+`、`-` |
+| 比较 | `==`、`!=`、`<`、`<=`、`>`、`>=`，不支持链式比较 |
+| 布尔与 | `and` |
+| 布尔或 | `or` |
+| 省略回退 | `??`，右结合 |
+| 分支、lambda | `if ... then ... else ...`、`x -> ...` |
 
-`@temporal(as_of_date: date)` 可用于 `snapshot` 和 `scd`，不能用于 `config` 或 `static`。
-`@dimension(prices)` 引用 entity 或 extend 内的命名 dimension。value 必填，hierarchy 和
-fallback_days 可选；旧内联写法报迁移诊断。只允许 static、snapshot、scd 使用，
-computed 参数由依赖推导。完整规则及字段操作见 [计算字段](computations.md)。
+integer 保持整数精度，与 decimal 混算得到 decimal；decimal 加减乘与求和不按隐式
+默认精度截断。`/` 总是返回 float，`//` 返回向下取整的 integer，例如 `-7 // 3 = -3`。
+除零、非有限结果、溢出或结果类型精度超限返回 ERROR。
+大小比较接受兼容的数字、字符串、日期或带时区 datetime；实体引用、结构值和集合
+不自动获得大小顺序。布尔运算只接受 bool。普通类型转换必须显式调用函数。
 
-`config attr name: Type = literal` 可声明默认值，也可省略 `= literal`。
-当前编译器支持 `integer`、`snowflake_id` 的整数字面量，`float`、`decimal`
-的数字字面量，`string` 的单引号字面量，以及 `bool` 的 `true` / `false`。
-其他类型的模型默认值尚未开放；ConfigGroup 覆盖、SCD 存储和有效期读取已实现，见计算与存储规范。
+## 转换与精度处理
 
-## 案例状态与待定规则
+| 函数 | 作用 |
+| --- | --- |
+| `to_string(value)` | 标量或实体引用 ID 转字符串 |
+| `to_integer(value)` | 无损转换为整数，拒绝小数部分 |
+| `to_decimal(value)` | 精确 decimal 转换，float 保留其二进制实际数值 |
+| `to_float(value)` | 无损转为有限 float；近似除法使用 `/` |
+| `parse_date(text)`、`format_date(value)` | ISO 日期解析与输出 |
+| `parse_datetime(text)`、`format_datetime(value)` | 带显式时区的 ISO 日期时间，规范化 UTC |
+| `truncate(value, scale)` | 向零截断，返回 decimal |
+| `round(value, scale, mode)` | 按明确模式舍入，返回 decimal |
 
-最新完整文件位于
-[fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的
-`core/` 和 `decodes/` 目录。实体、字典和跨文件名称解析已可由首版编译器检查，
-案例使用的 `snowflake_id` 已纳入内置值类型。
+函数实参先位置后命名，命名参数可换序，禁止重复、未知或缺失实参。
+转换错误在计算中返回 ERROR，在 const 中产生编译错误。
+完整签名、严格转换边界及示例见[转换函数](../builtins/functions.md)。
 
-后续还需确定完整词法字符集、其他字符串转义、声明分隔规则及运行时映射。
-当前编译器的实现边界见其 README；文件与仓库解析规则见命名空间文档。
+## 输入推导与绑定
 
-## 条件配置组与依赖字段类型
+未绑定的读取依赖按参数名合并为计算输入，要求类型、约束和默认关系兼容。
+`input.name` 引入或重命名参数，普通未知标识符不会变成 input。
 
-[ConfigGroup](../models/config_group.yambl) 是内置 final 实体。
-`type<Entity>`、`type<Security>` 和 `field_mapping<AttrCats.Static, self.selected_kind::value>`
-的约束与任意类型字段引用见[实体类型与字段映射](../builtins/field-mapping.md)。
-这些声明已由编译器及 LSP 支持；配置组通过存储记录提供，运行时按 priority、实例值和实际子类型默认值执行。
+`input.price_date ?? input.as_of_date` 只处理参数未提供，不处理 EMPTY 等数据状态。
+显式输入值优先于声明默认值，声明默认值优先于 `??`；0、false、空字符串不触发回退。
+默认关系循环报错。常量、self 字段或内部表达式绑定依赖后，该依赖不再贡献对应输入；
+只有所有同名依赖均绑定时，参数才完全消除。对子计算的绑定只影响其依赖子树。
 
-## 结构化值类型
+@extra_input_params 声明可省略的输入和说明，可提供默认值并与依赖推导合并。
+外层 best_effort 是整棵计算树的调用上下文，不能局部改写。见[计算规则](computations.md)。
 
-```text
-value quote {
-    attr amount: decimal
-    static attr currency: string
-}
+## 点号与双冒号
 
-entity Observation {
-    attr quotation: quote
-    attr alternatives: values<quote>
-}
-```
+| 上下文 | 形式 | 含义 |
+| --- | --- | --- |
+| 字典 | `Currencies.USD` | 字典代码 |
+| 计算值 | `self.price`、`h.security.issuer` | 字段读取，单个引用透明解引用 |
+| 计算输入 | `input.as_of_date` | 外部参数 |
+| 计算序列 | `holdings.map(...)` | 序列方法 |
+| 部分结果 | `p.value`、`p.issues` | PARTIAL 载荷与明细 |
+| 类型表达式 | `self.field` | 字段描述，不是字段值 |
+| 字段描述 | `Attr::type` | 声明类型 |
+| 有实例的字段描述 | `self.field::value` | 实例字段值，可参与依赖类型 |
+| 有所属实体的字段描述 | `Attr::entity` | 实际声明实体 |
+| 存储字段 | `field::at(...)` | 按明确日期与维度定位 |
+| 存储字段 | `field::best_available(...)` | 按 dimension 和回退规则选择 |
+| 计算字段 | `field::value(...)` | 显式绑定子计算参数 |
 
-value 名称为 snake_case，天然 final，不能继承、被继承或 extend，不接受显式
-final value。字段只允许 attr 或等价的 static attr，天然 static，无 ID。
-字段可以是非集合值（含嵌套 value）或实体引用；引用保存目标实体 ID。
-禁止 collection、values、mapping、field_mapping 字段及直接或间接值嵌套循环。
-实体引用不形成值嵌套循环。允许 title、description 和自定义 decorator；禁止默认值和字段关系标记。
-同一值类型按所有字段判等，引用字段比较引用 ID；除明确定义外不支持大小比较。
-这些是值语义约定，当前工具只检查声明，不执行值比较。
+集合不会隐式展开。类型描述与运行时值的成员集合不同；没有实例的 mapping 字段描述
+不能读取 ::value。decorator 的 self 捕获被修饰声明，不能执行实例取数。
 
-## Markdown 说明文本块
+## 集合方法
 
-独占行的 `---` 开始和结束一个文本块，可放在顶层或声明体内独立位置。
-下一个分隔行结束文本块，无嵌套；未闭合时报语法错误。
-正文为不透明 Markdown，不参与名称解析、不绑定后续声明、不产生语言补全和导航。
-格式化保留正文的缩进、尾随空格及连续空行，仅将 CRLF 统一为 LF。
-文本块不会改变其后语言诊断的位置。
+Seq 和 Grouped 是计算过程类型，不是新的物理存储集合。
 
-## Decorator 声明
+| 方法 | 输入 → 输出 | 行为 |
+| --- | --- | --- |
+| `map(f)` | Seq<T> → Seq<U> | 每行映射一次，保留重复贡献 |
+| `filter(predicate)` | Seq<T> → Seq<T> | 保留真值行 |
+| `flat_map(f)` | Seq<T> → Seq<U> | 展开一层 |
+| `group_by(key)` | Seq<T> → Grouped<K,T> | 按类型化键相等分组 |
+| `sum_by(value)` | 序列 → 数值；分组 → mapping | 汇总所有贡献 |
+| `recover(cases)` | 保持正常值类型 | 只执行匹配的状态分支 |
 
-`decorator @name(...)` 定义有类型的元信息；参数绑定、`*` pair、默认值、
-`self::entity`、必须显式声明的 `@targets` 范围和 `@allow_multiple` 见 [Decorator 规则](decorators.md)。
-`@title(text='Name')` 与 `@title('Name')` 等价。
-`@temporal` 的 date 参数由调用者命名，不限于 `as_of_date`。
+空序列求和为相应类型的零，空分组为正常空 mapping。读取可共享，业务行的贡献和失败
+位置不能因去重丢失。recover 使用 `case EMPTY -> replacement`；未匹配状态原样保留，
+重复标签报错。`case PARTIAL as p -> p.value` 显式接受部分结果，其他算子保留 issues。
+
+## 结果状态
+
+| 状态 | 含义 |
+| --- | --- |
+| NOT_DEFINED | 字段不适用于实际类型 |
+| EMPTY | 记录存在但值为空 |
+| NO_ENTRY | 所需记录不存在 |
+| NO_DATA | 没有满足选择要求的数据 |
+| ENTITY_NOT_FOUND | 引用目标不存在 |
+| NOT_APPLICABLE | 字段在业务上不适用 |
+| ERROR | 读取或计算失败 |
+| PARTIAL | 有有效载荷，同时有非错误遗漏明细 |
+
+状态不是字典 code，也不是同名字符串。PARTIAL 必须携带载荷，不进入物理字段状态。
+严格聚合不丢弃失败行；best_effort 可略过六种非错误状态，有贡献和遗漏时返回 PARTIAL，
+全失败仍失败。ERROR 只能显式 recover。正常空集合和空区间是成功结果。
+见[结果](../builtins/constants.md)。
+
+## 编译与工具边界
+
+静态检查验证语法、名称、类型和依赖；显式数据校验另行检查实例。格式化仅要求语法
+可解析。仓库检查扩大到所属根仓库，格式化只处理指定路径。源码检查、IR 独立校验、
+生成与数据校验是不同操作。
+
+[IR 契约](ir.md)定义单文件和 Schema；[存储能力清单](storage.md#能力清单)说明各类型
+在 SQLite、JSONL 和 Python API 中的实现状态。尚不支持的业务字段在生成前报错。

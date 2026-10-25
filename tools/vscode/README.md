@@ -139,3 +139,11 @@ completion and signature help. The editor inserts `name=` and preserves snippets
 `@extra_input_params` supplies optional input declarations and descriptions; `??`
 handles omitted inputs. The former `.default(...)` syntax is no longer supported.
 The formatter preserves multiline lambda bodies and chained recovery calls.
+
+Typed locals (`let amount: decimal = 1.25`), contextual collection and structured
+value literals, and `const NAME: Type = expression` use the same analysis for
+diagnostics, hover, completion and navigation. Member suggestions follow the
+receiver type for both `.` and `::`. Conversion functions offer parameter names,
+signatures and documentation; `/` and `//` have separate numeric rules.
+See the [language reference](../../lang/syntex/README.md) and
+[conversion functions](../../lang/builtins/functions.md).

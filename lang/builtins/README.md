@@ -33,11 +33,11 @@
 `collection<T>`、`values<T>` 和 `mapping<TKey, TValue>` 的泛型约束、集合语义
 和使用示例见[内置集合类型](collection-types.md)。
 
-## 待确定
+## 表达式与转换
 
-- 实体身份的作用域、组合标识和标识继承规则。
-- 尚未定义的其他值类型转换。
-- 内置关键字与保留字清单。
+[转换函数](functions.md)定义严格数值转换、ISO 日期格式、截断和显式舍入。
+[语法总览](../syntex/syntax.md)按类别说明关键字、上下文字面量、const、let 与运算符。
+实体继承树共享 ID 空间；组合标识和 ID 自动生成策略尚未开放。
 
 [内置常量](constants.md)定义 `NOT_DEFINED`、`NOT_APPLICABLE`、`EMPTY`、`NO_ENTRY`、
 `NO_DATA`、`ENTITY_NOT_FOUND`、`ERROR` 七种非正常结果；名称和说明在

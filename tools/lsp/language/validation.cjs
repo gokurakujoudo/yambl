@@ -20,11 +20,11 @@ function validate(documents) {
   }
   function bind(doc, token, target) { if (target) doc.bindings.set(token.start, target); }
   for (const doc of documents) {
-    doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map(); doc.valueTypeTokens = new Map(); doc.markerTargets = new Map();
+    doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map(); doc.valueTypeTokens = new Map(); doc.markerTargets = new Map(); doc.accessTerms = new Map();
     if (doc.errors.length) continue;
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
       const name = decl.name.value; decl.key = key(doc, namespace(doc), name); decl.ownFields = new Map();
-      if (['value', 'type_alias', 'decorator'].includes(decl.kind) ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, ['value', 'type_alias', 'decorator'].includes(decl.kind) ? (decl.kind === 'decorator' ? 'decorator names must use snake_case' : 'value names must use snake_case') : 'declaration names must use PascalCase');
+      if (decl.kind === 'constant' ? !/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(name) : ['value', 'type_alias', 'decorator'].includes(decl.kind) ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, decl.kind === 'constant' ? 'constant names must use UPPER_SNAKE_CASE' : ['value', 'type_alias', 'decorator'].includes(decl.kind) ? (decl.kind === 'decorator' ? 'decorator names must use snake_case' : 'value names must use snake_case') : 'declaration names must use PascalCase');
       const modelDefinition = namespace(doc) === 'builtins' && builtinModels.has(name);
       if ((!modelDefinition && reserved.includes(name)) || symbols.has(decl.key)) issue(doc, decl.token, `duplicate or reserved declaration: ${name}`);
       symbols.set(decl.key, decl); bind(doc, decl.name, decl);
@@ -143,6 +143,7 @@ function formatType(node) {
 }
 
 function describe(target) {
+  if (target.kind === 'constant') return `const ${target.name.value}: ${formatType(target.type)} = ${target.doc.text.slice(target.initializer.token.start, target.initializer.end)}`;
   const { typeLabel } = require('./calculation-tools.cjs');
   if (target.kind === 'calculation_binding') return `${target.name.value}: ${typeLabel(target.resolvedType)}`;
   if (target.kind === 'decorator_parameter') return `${target.pair ? '*' : ''}${target.name.value}${target.optional ? '?' : ''}: ${formatType(target.type)}${target.default ? ' = ' + formatType(target.default) : ''}`;

@@ -12,6 +12,10 @@ yambl generate -o path ./build/model.yambl-ir.json -o output ./build/generated -
 
 ## 表结构
 
+计算结果额外支持 float、带时区 datetime、values、mapping 和由 frozen dataclass 表示的
+结构化 value，包括其中的实体引用。字面量和转换函数在 SQLite、JSONL 后端共用执行代码。
+这些结果不产生存储列；存储字段支持范围见下方能力清单。
+
 每个业务根实体有一张身份宽表，保存 ID、实际实体类型及未指定分组的无维度 static 字段；
 同一继承树共享 ID 空间，子类型字段也并入根实体宽表，读取仍检查实际类型上的适用性。
 无维度的 static 集合将状态放入宽表、成员放入独立表。有维度的 static 字段按根实体和
@@ -58,7 +62,7 @@ VALUE 记录存在但无成员表示正常空集合。实体引用不建立强�
 Decimal、整数和相应 ID 使用 TEXT，避免 SQLite 数值精度限制。bool 使用 0/1，
 date 使用 ISO 日期。本地字典代码校验成员身份，外部字典只保存带字典类型的字符串。
 不执行任意正则，不生成 Snowflake ID。数据库保存布局修订号和模型摘要，读取器要求匹配。
-当前布局修订号为 5；IR 为修订号 4，运行时契约为 3。旧布局数据库须重新生成，本轮不提供迁移。
+当前布局修订号为 5；IR 为修订号 5，运行时契约为 4。旧产物须重新生成，不提供迁移。
 内部元数据表为 `tb_yambl_metadata`，也使用统一前缀。
 
 `schema.md` 包含全部表、列、主键、CHECK、外键、索引、逻辑字段映射和各表 DDL。
@@ -177,6 +181,9 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 | 能力 | 规范 | Python / LSP | IR | SQLite / JSONL | Python 类型 / 读取 |
 | --- | --- | --- | --- | --- | --- |
 | namespace、import、仓库根、qualified name | 已定义 | 已实现 | 已解析 | 使用身份映射 | 使用身份映射 |
+| const、上下文字面量、带类型 let | 已定义 | 已实现 | 结构化保存并校验 | 不产生存储 | 两后端共用计算实现 |
+| /、//、严格转换、显式精度转换 | 已定义 | 已实现 | 保留操作和类型 | 不产生存储 | 标准库执行，失败返回 ERROR |
+| 计算 values、mapping、结构值和 datetime | 已定义 | 已实现 | 保留目标类型 | 不扩展物理存储类型 | frozenset、只读 mapping、frozen dataclass、UTC datetime |
 | entity、继承、final、extend | 已定义 | 已实现 | 已实现 | 根身份与有效字段 | 实际子类型 handle |
 | override、overload、exact | 已定义 | 已实现 | 保留实现与共同契约 | 共享逻辑存储 | 按实际实现校验 |
 | attr/static 统一、类别筛选 | 已定义 | 已实现 | static | 无维度身份宽表，有维度分组 | 惰性属性与显式方法 |

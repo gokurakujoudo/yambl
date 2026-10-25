@@ -66,7 +66,9 @@ attr holding_entries: mapping<Security, HoldingEntry>
 这些泛型约束属于模型的类型规则。无重复语义描述集合本身，不表示 YAMBL
 执行了业务数据质量校验；当前编译器检查类型组合，不检查存储的集合内容。
 
-集合及其元素的可空性、空集合的表示方式仍待讨论。
+正常空集合与非正常结果分开表示：存在正常记录而没有成员是成功的空集合；无记录为
+NO_ENTRY，存在空值记录为 EMPTY。当前物理引用集合的记录/成员表和读取契约见
+[存储规范](../syntex/storage.md)。集合元素本身不是无载荷的结果状态。
 
 code、snowflake_id、type<T> 和 attrs<a, b> 可单向视作 string，也可作为 mapping 的 key。
 旧的 map 拼写不再接受。field_mapping 是语言定义的 mapping 别名。

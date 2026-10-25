@@ -5,7 +5,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 修订与独立性
 
-当前 `format_revision` 为整数 `4`。格式尚未固化，不承诺修订间兼容；结构变化时递增
+当前 `format_revision` 为整数 `5`。格式尚未固化，不承诺修订间兼容；结构变化时递增
 修订号。读取器拒绝不支持的修订号，要求重新编译，不自动迁移。
 
 文件完整保存本次采用的内置声明、原语目录和七个无载荷结果常量及携带载荷的 PARTIAL的含义。独立校验仅依赖
@@ -38,7 +38,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 声明的 `kind` 为 `entity`、`value`、`type_alias`、`decorator` 或 `decodes`。
 每个声明保存 `name`、`identity`、`final`、`parent`、`parameters`、`expression`、
-`decorators`、`dimensions`、`fields`、`effective`、`entries` 和 `source`。
+`decorators`、`dimensions`、`fields`、`effective`、`entries`、`initializer`、`references` 和 `source`。
 
 `name` 是完整 qualified name。通常 `identity` 与它相同。普通仓库允许在
 `namespace builtins` 中编写本地定义，这些定义与工具提供的全局内置定义仍是不同
@@ -48,7 +48,8 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 - `parent` 是显式父类型身份，未写继承时为空字符串；`Entity` 可作为显式父类型。
 - `parameters` 保持形式参数顺序；每项保存 `name`、类型表达式 `type`、可选默认表达式
   `default`、是否为 pair 的 `pair`、是否可省略的 `optional` 和 `source`。
-- `expression` 仅用于别名正文，其他声明为 `null`。
+- `expression` 保存别名正文或 constant 声明类型，其他声明为 `null`。
+- `initializer` 仅 constant 非空；`references` 保存初始化表达式作用域中的名称及解析身份。
 - `fields` 保存本声明及合并 extend 的实现；继承来的字段通过 `effective` 选取。
 - `entries` 保存 `{code, ordering, decode, generated, source}`；flags 包括生成的
   `None` 和 `All`，`ordering` 保存十进制整数字符串。
@@ -170,4 +171,10 @@ Schema 由 IR 数据类型生成；`yambl schema -o output ./build/ir.schema.jso
 
 修订号 4 在 decorator 调用的 Argument 中增加 `default: Expression | null`，保留 pair 默认值。
 隐含 description 仍是有绑定身份的普通元信息；输入说明通过 extra_input_params 的 pair key 关联。
-修订号 3 及之前的产物需重新编译。
+修订号 5 增加 constant 声明、结构化初始化表达式和声明作用域 references。
+计算表达式增加 sequence、object 节点；object 的 operands 按 key/value 交替保存。
+全局转换函数使用 call 节点，callee 为已校验的函数名；不保存可执行 Python 或源码片段。
+let 的 annotation 保存显式类型，表达式 annotation 保存推断出的字面量目标类型或结构值接收者类型。
+TypeHint 包含名称、泛型实参、参数约束、成员访问、flags 运算、绑定、目标身份和源码位置。
+独立读取重新检查常量纯度、依赖、类型和求值结果，并核对派生计算信息。
+运行时契约为 4，存储布局仍为 5。此前修订的产物须重新编译。

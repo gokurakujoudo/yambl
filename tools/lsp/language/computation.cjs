@@ -4,10 +4,51 @@ const { Resolver, type, accepts, equal, base, canonical, unknown } = require('./
 const { semantic, resolveDimension } = require('./dimensions.cjs');
 const { resultConstants } = require('./syntax.cjs');
 const numbers = ['integer', 'decimal', 'float'];
+const conversions = require('./conversions.cjs');
+const constants = require('./constant-evaluation.cjs');
 const snake = name => /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name);
 
 function checkComputations(documents, symbols, report) {
   const completed = new Map(), active = new Set();
+  const constantTypes = new Map(), constantActive = new Set(), constantValues = new Map();
+  function constant(declaration) {
+    if (constantTypes.has(declaration)) return constantTypes.get(declaration);
+    const node = declaration.initializer, issue = (node, message) => report(declaration.doc, node.token, message);
+    if (constantActive.has(declaration)) { issue(node, `constant dependency cycle: ${declaration.name.value}`); return unknown; }
+    constantActive.add(declaration);
+    const checker = new Checker(declaration.doc, declaration, issue);
+    const expected = new Resolver(declaration.doc, report, symbols, declaration, true).resolve(declaration.type);
+    const before = declaration.doc.diagnostics.length;
+    const actual = checker.infer(node, new Map(), expected).type;
+    function pure(expression, keyPosition = false) {
+      if (expression.kind === 'name' && !keyPosition) {
+        const symbol = declaration.doc.scope.get(expression.value);
+        if (!(expression.value in conversions.signatures) && !['constant', 'decodes'].includes(symbol?.kind)) issue(expression, `not a pure constant dependency: ${expression.value}`);
+      }
+      if (['descriptor', 'recover', 'lambda'].includes(expression.kind) || (expression.kind === 'call' && expression.operands[0].kind !== 'name')) issue(expression, 'constant expressions cannot read fields, inputs or non-normal results');
+      expression.operands.forEach((child, i) => pure(child, expression.kind === 'object' && expression.inferred?.type?.key && i % 2 === 0));
+      expression.arguments.forEach(a => pure(a.expression));
+    }
+    pure(node);
+    if (!compatible(expected, actual)) issue(node, `incompatible constant result: expected ${expected.name}, got ${actual.name}`);
+    if (declaration.doc.diagnostics.length === before) {
+      try {
+        const payload = constants.evaluate(node, name => {
+          const [root, code] = name.split('.'), target = declaration.doc.scope.get(root);
+          if (target?.kind === 'constant') { constant(target); if (constantValues.has(target)) { const value = constantValues.get(target); if (code === undefined) return value; if (value instanceof Map && value.has(code)) return value.get(code); } }
+          if (target?.kind === 'decodes' && code !== undefined) return code;
+          throw Error(`not a pure constant dependency: ${name}`);
+        });
+        if (expected.name === 'decimal' && expected.params?.length) {
+          const params = Object.fromEntries(expected.params), text = payload.text(), [whole, fraction = ''] = text.replace(/^-/, '').split('.');
+          if (fraction.length > Number(params.scale) || (whole === '0' ? 0 : whole.length) > Number(params.precision) - Number(params.scale)) throw Error('decimal exceeds declared precision or scale');
+        }
+        constantValues.set(declaration, payload);
+      } catch (error) { issue(node, `constant evaluation failed: ${error.message}`); }
+    }
+    constantActive.delete(declaration); constantTypes.set(declaration, expected);
+    return expected;
+  }
   function parameterDeclaration(doc, token, resolvedType) {
     let declaration = doc.bindings.get(token.start);
     if (!declaration) {
@@ -42,13 +83,16 @@ function checkComputations(documents, symbols, report) {
     const environment = new Map([['self', { type: type(field.owner.name.value, 'reference', { key: field.owner.key }) }]]);
     for (const binding of field.calculation.bindings) {
       if (!snake(binding.name) || environment.has(binding.name) || binding.name === 'input') issue(binding.expression, `duplicate or invalid local binding: ${binding.name}`);
-      const value = checker.read(checker.infer(binding.expression, environment), binding.expression);
+      const constraint = binding.annotation ? new Resolver(field.doc, report, symbols, field.owner, true).resolve(binding.annotation) : null;
+      const value = checker.read(checker.infer(binding.expression, environment, constraint), binding.expression);
+      if (constraint && !compatible(constraint, value.type)) issue(binding.expression, `incompatible local binding: expected ${constraint.name}, got ${value.type.name}`);
+      if (constraint) value.type = constraint;
       const declaration = { kind: 'calculation_binding', name: binding.token, doc: field.doc, resolvedType: value.type };
       field.doc.bindings.set(binding.token.start, declaration);
       environment.set(binding.name, { ...value, declaration });
     }
-    const actual = checker.read(checker.infer(field.calculation.result, environment), field.calculation.result).type;
     const expected = new Resolver(field.doc, report, symbols, field.owner, true).resolve(field.type);
+    const actual = checker.read(checker.infer(field.calculation.result, environment, expected), field.calculation.result).type;
     if (!compatible(expected, actual)) issue(field.calculation.result, `incompatible computed result: expected ${expected.name}, got ${actual.name}`);
     const locals = new Map();
     const expand = node => node.kind === 'name' && locals.has(node.value) ? locals.get(node.value) : { ...node, operands: node.operands.map(expand), arguments: node.arguments.map(a => ({ ...a, expression: expand(a.expression) })), cases: node.cases.map(c => ({ ...c, expression: expand(c.expression) })) };
@@ -132,13 +176,27 @@ function checkComputations(documents, symbols, report) {
       if (value.field) for (const parameter of this.parameters(value, value.field.mode === 'computed' ? 'value' : 'at', node)) this.addInput(parameter, node);
       return { type: value.type };
     }
-    infer(node, environment) {
-      const value = this.inferNode(node, environment);
+    infer(node, environment, expected = null) {
+      const value = this.inferNode(node, environment, expected);
       node.inferred = value;
       node.environment = new Map(environment);
       return value;
     }
-    inferNode(node, environment) {
+    inferNode(node, environment, expected) {
+      if (['sequence', 'object'].includes(node.kind)) return this.literal(node, environment, expected);
+      if (expected && ['string', 'integer', 'decimal'].includes(node.kind) && (['date', 'datetime', 'code'].includes(expected.name) || expected.kind === 'reference' || (numbers.includes(expected.name) && numbers.includes(node.kind) && compatible(expected, type(node.kind))))) {
+        if (['date', 'datetime'].includes(expected.name)) { try { constants.conversion('parse_' + expected.name, [node.value]); } catch (error) { this.issue(node, error.message); } }
+        if (expected.name === 'code') {
+          const dictionary = symbols.get(expected.args[0]?.key);
+          if (dictionary && !require('./decodes.cjs').codeEntries(dictionary).some(e => e.name.value === node.value)) this.issue(node, `unknown Decodes code: ${expected.args[0].name}.${node.value}`);
+        }
+        if (expected.kind === 'reference') {
+          const entity = symbols.get(expected.key), ids = [...(entity?.effective?.values() || [])].filter(f => f.mode === 'id');
+          if (ids.length !== 1) this.issue(node, 'reference literal requires one identifiable ID field');
+          else { const field = ids[0], idType = new Resolver(field.doc, report, symbols, field.owner, true).resolve(field.type); if (!compatible(idType, type(node.kind, node.kind === 'string' ? 'string' : 'value', { exact: node.value }))) this.issue(node, 'incompatible reference literal ID type'); }
+        }
+        return { type: expected };
+      }
       if (['string', 'integer', 'decimal', 'bool'].includes(node.kind)) return { type: type(node.kind, node.kind === 'string' ? 'string' : 'value', { exact: node.value }) };
       if (node.kind === 'name') {
         if (environment.has(node.value)) {
@@ -146,6 +204,8 @@ function checkComputations(documents, symbols, report) {
           if (value.declaration) this.doc.bindings.set(node.token.start, value.declaration);
           return value;
         }
+        const declaration = this.doc.scope.get(node.value);
+        if (declaration?.kind === 'constant') { this.doc.bindings.set(node.token.start, declaration); return { type: constant(declaration), declaration }; }
         if (node.value in resultConstants && node.value !== 'PARTIAL') return { type: unknown };
         this.issue(node, `unknown calculation name: ${node.value}`); return { type: unknown };
       }
@@ -161,6 +221,10 @@ function checkComputations(documents, symbols, report) {
           return { type: new Resolver(this.doc, report, symbols, this.owner).evaluate(syntax).type };
         }
         const parent = this.read(this.infer(receiver, environment), receiver);
+        if (parent.type.kind === 'value') {
+          const owner = symbols.get(parent.type.key), field = owner?.kind === 'value' && owner.fields.find(f => f.name.value === node.value);
+          if (field) { this.doc.bindings.set(node.memberToken.start, field); return { type: new Resolver(field.doc, report, symbols, owner, true).resolve(field.type) }; }
+        }
         if (parent.type.name === 'partial' && ['value', 'issues'].includes(node.value)) return { type: node.value === 'value' ? parent.type.args[0] : type('issues', 'collection') };
         if (parent.type.kind !== 'reference') { this.issue(node, 'member access requires a scalar entity reference'); return { type: unknown }; }
         const entity = symbols.get(parent.type.key);
@@ -177,7 +241,7 @@ function checkComputations(documents, symbols, report) {
         this.doc.bindings.set(node.memberToken.start, field);
         return { type: new Resolver(field.doc, report, symbols, field.owner, true).resolve(field.type), field };
       }
-      if (['call', 'recover'].includes(node.kind)) return this.invoke(node, environment);
+      if (['call', 'recover'].includes(node.kind)) return this.invoke(node, environment, expected);
       if (['binary', 'unary'].includes(node.kind)) {
         if (node.value === '??') {
           const left = node.operands[0];
@@ -193,24 +257,84 @@ function checkComputations(documents, symbols, report) {
           return { type: type('bool') };
         }
         if (['==', '!=', '<', '<=', '>', '>='].includes(node.value)) {
+          if (!['==', '!='].includes(node.value) && operands.some(t => ![...numbers, 'string', 'date', 'datetime'].includes(t.name) && t.kind !== 'unknown')) this.issue(node, 'ordered comparison requires numbers, strings, dates or datetimes');
           if (!compatible(base(operands[0]), operands[1]) && !compatible(base(operands[1]), operands[0])) this.issue(node, 'comparison requires compatible operand types');
           return { type: type('bool') };
         }
         if (operands.some(t => !numbers.includes(t.name) && t.kind !== 'unknown')) { this.issue(node, 'arithmetic requires integer, decimal or float operands'); return { type: unknown }; }
-        return { type: type(numbers[Math.max(0, ...operands.map(t => numbers.indexOf(t.name)))]) };
+        return { type: type(node.value === '/' ? 'float' : node.value === '//' ? 'integer' : numbers[Math.max(0, ...operands.map(t => numbers.indexOf(t.name)))]) };
       }
       if (node.kind === 'conditional') {
         const condition = this.read(this.infer(node.operands[0], environment), node.operands[0]);
         if (condition.type.name !== 'bool' && condition.type.kind !== 'unknown') this.issue(node, 'if condition requires bool');
-        const [left, right] = node.operands.slice(1).map(e => this.read(this.infer(e, environment), e).type);
+        const [left, right] = node.operands.slice(1).map(e => this.read(this.infer(e, environment, expected), e).type);
         if (compatible(base(left), right)) return { type: base(left) };
         if (compatible(base(right), left)) return { type: base(right) };
         this.issue(node, 'if branches require compatible result types'); return { type: unknown };
       }
       this.issue(node, 'expression is only valid in its binding or method context'); return { type: unknown };
     }
-    invoke(node, environment) {
+    literal(node, environment, expected) {
+      if (node.kind === 'sequence') {
+        if (expected && !['collection', 'values', 'sequence'].includes(expected.name)) { this.issue(node, 'sequence literal requires collection or values context'); return { type: unknown }; }
+        let element = expected?.args[0];
+        for (const operand of node.operands) {
+          const actual = this.read(this.infer(operand, environment, element), operand).type;
+          if (!element) element = base(actual);
+          else if (!compatible(element, actual)) { if (!expected && compatible(base(actual), element)) element = base(actual); else this.issue(operand, 'incompatible sequence literal element'); }
+        }
+        if (!element) { this.issue(node, 'empty literal requires a contextual type'); return { type: unknown }; }
+        if (element.kind === 'collection') this.issue(node, 'sequence literals cannot contain collection values');
+        return { type: expected || type(element.kind === 'reference' ? 'collection' : 'values', 'collection', { args: [element] }) };
+      }
+      const declaration = expected?.key && symbols.get(expected.key);
+      if (declaration?.kind === 'value') {
+        const fields = new Map(declaration.fields.map(f => [f.name.value, f])), supplied = new Set();
+        for (let i = 0; i < node.operands.length; i += 2) {
+          const key = node.operands[i], value = node.operands[i + 1], field = fields.get(key.value);
+          if (!['name', 'string'].includes(key.kind) || !field || supplied.has(key.value)) { this.issue(key, `unknown or duplicate value field: ${key.value}`); continue; }
+          supplied.add(key.value); this.doc.bindings.set(key.token.start, field);
+          const constraint = new Resolver(field.doc, report, symbols, declaration, true).resolve(field.type);
+          const actual = this.read(this.infer(value, environment, constraint), value).type;
+          if (!compatible(constraint, actual)) this.issue(value, `incompatible value field: ${key.value}`);
+        }
+        for (const name of fields.keys()) if (!supplied.has(name)) this.issue(node, `missing value field: ${name}`);
+        return { type: expected };
+      }
+      if (expected && expected.name !== 'mapping') { this.issue(node, 'object literal requires mapping or structured value context'); return { type: unknown }; }
+      let keyType = expected?.args[0], valueType = expected?.args[1];
+      for (let i = 0; i < node.operands.length; i += 2) {
+        for (const [offset, constraint] of [[0, keyType], [1, valueType]]) {
+          const operand = node.operands[i + offset], actual = this.read(this.infer(operand, environment, constraint), operand).type;
+          if (constraint && !compatible(constraint, actual)) this.issue(operand, 'incompatible mapping literal entry');
+          if (offset === 0 && !keyType) keyType = base(actual);
+          if (offset === 1 && !valueType) valueType = base(actual);
+        }
+      }
+      if (!keyType || !valueType) { this.issue(node, 'empty literal requires a contextual type'); return { type: unknown }; }
+      if (!(keyType.kind === 'reference' || ['string', 'snowflake_id', 'code', 'type', 'attrs'].includes(keyType.name)) || valueType.kind === 'collection') this.issue(node, 'mapping requires string-compatible or reference keys and non-collection values');
+      const literalKeys = node.operands.filter((n, i) => i % 2 === 0 && ['string', 'integer', 'decimal', 'bool'].includes(n.kind)).map(n => n.kind + ':' + n.value);
+      if (literalKeys.length !== new Set(literalKeys).size) this.issue(node, 'duplicate mapping literal key');
+      return { type: expected || type('mapping', 'collection', { args: [keyType, valueType] }) };
+    }
+    invoke(node, environment, expected) {
       const selected = node.operands[0], receiver = selected.operands[0], method = selected.value;
+      if (selected.kind === 'name') {
+        const signature = conversions.signatures[method];
+        if (!signature) { this.issue(node, `unknown calculation builtin: ${method}`); return { type: unknown }; }
+        const supplied = new Set(); let named = false;
+        node.parameters = signature.map(([name, expected]) => ({ name, type: type(expected), required: true }));
+        for (const [index, argument] of node.arguments.entries()) {
+          const name = argument.name || signature[index]?.[0] || '', expected = signature.find(p => p[0] === name)?.[1];
+          if ((!argument.name && named) || supplied.has(name) || !expected) { this.issue(argument.expression, `invalid, duplicate or out-of-order builtin argument: ${name}`); continue; }
+          named ||= Boolean(argument.name); supplied.add(name);
+          const actual = this.read(this.infer(argument.expression, environment), argument.expression).type;
+          const allowed = expected === 'scalar' ? actual.kind === 'reference' || [...numbers, 'string', 'code', 'snowflake_id', 'type', 'attrs', 'bool', 'date', 'datetime'].includes(actual.name) : expected === 'number_or_string' ? [...numbers, 'string'].includes(actual.name) : expected === 'number' ? numbers.includes(actual.name) : actual.name === expected;
+          if (!allowed && actual.kind !== 'unknown') this.issue(argument.expression, `${method}.${name} requires ${expected}`);
+        }
+        for (const [name] of signature) if (!supplied.has(name)) this.issue(node, `missing builtin argument: ${name}`);
+        return { type: type(conversions.returns[method], conversions.returns[method] === 'string' ? 'string' : 'value') };
+      }
       if (!receiver) { this.issue(node, 'expression is only valid in its binding or method context'); return { type: unknown }; }
       if (selected.kind === 'descriptor') {
         const value = this.infer(receiver, environment);
@@ -228,8 +352,9 @@ function checkComputations(documents, symbols, report) {
         if (method === 'best_available' && value.field.metadata.filter(a => a.name === 'dimension' && a.dimension?.hierarchy && !supplied.has(a.dimension.value.value)).length > 1) this.issue(node, 'best_available supports one automatic Hierarchy; bind the other dimension values');
         return { type: value.type };
       }
-      const value = this.read(this.infer(receiver, environment), receiver);
+      const value = this.read(this.infer(receiver, environment, method === 'recover' ? expected : null), receiver);
       if (method === 'recover') {
+        const resultType = value.type.kind === 'unknown' && expected ? expected : base(value.type);
         if (node.arguments.length || !node.cases.length) this.issue(node, 'recover requires case branches');
         const seen = new Set();
         for (const branch of node.cases) {
@@ -244,10 +369,10 @@ function checkComputations(documents, symbols, report) {
             const resolved = type('partial', 'value', { args: [value.type] });
             local.set(branch.binding, { type: resolved, declaration: parameterDeclaration(this.doc, branch.bindingToken, resolved) });
           }
-          const alternative = this.read(this.infer(branch.expression, local), branch.expression);
+          const alternative = this.read(this.infer(branch.expression, local, resultType), branch.expression);
           if (!compatible(base(value.type), alternative.type)) this.issue(branch.expression, 'incompatible recovery branch result');
         }
-        return { type: base(value.type) };
+        return { type: resultType };
       }
       if (!['map', 'filter', 'flat_map', 'group_by', 'sum_by'].includes(method)) { this.issue(node, `unknown calculation method: ${method}`); return { type: unknown }; }
       if (node.arguments.length !== 1 || node.arguments[0].name || node.arguments[0].expression.kind !== 'lambda') { this.issue(node, `${method} requires one lambda argument`); return { type: unknown }; }
@@ -278,6 +403,7 @@ function checkComputations(documents, symbols, report) {
     }
   }
   for (const doc of documents.filter(d => !d.errors.length)) for (const declaration of doc.declarations) {
+    if (declaration.kind === 'constant') constant(declaration);
     for (const dimension of declaration.dimensions || []) if (dimension.fallback) {
       const checker = new Checker(doc, dimension.owner, (node, message) => report(doc, node.token, message));
       const actual = checker.read(checker.infer(dimension.fallback, new Map([['self', { type: type(dimension.owner.name.value, 'reference', { key: dimension.owner.key }) }]])), dimension.fallback);

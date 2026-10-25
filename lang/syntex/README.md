@@ -1,40 +1,29 @@
-# 语言结构
+# YAMBL 语言参考
 
-本目录用于定义词法、语法、格式化规则，以及 YAMBL 文件和模型仓库的结构。
-以下区分已确认的约定和仍待讨论的规则。
+[语法总览](syntax.md) 按语言结构介绍文件、声明、类型、字段、表达式与结果处理。
+代码块中的声明体片段须放入相应 entity、value 或 computed attr 中。
 
-## 已确认
+| 主题 | 参考 |
+| --- | --- |
+| 文件、命名、声明、字段类别、表达式与成员访问 | [语法总览](syntax.md) |
+| 仓库、namespace、import 与名称作用域 | [名称解析](namespaces.md) |
+| 类型值、依赖类型、字段描述、别名与泛型参数 | [类型表达式](type-expressions.md) |
+| 原始值类型及参数 | [值类型](../builtins/value-types.md) |
+| 字面量、类型推断、常量和运算符 | [语法总览](syntax.md#字面量与上下文类型) |
+| 严格转换、日期格式、截断和舍入 | [转换函数](../builtins/functions.md) |
+| 引用集合、值集合与映射 | [集合类型](../builtins/collection-types.md) |
+| 属性筛选与异构字段映射 | [字段映射](../builtins/field-mapping.md) |
+| decorator 声明、实参、适用范围与重复限制 | [元信息](decorators.md) |
+| 字段身份、override、overload 与 final | [字段关系](field-relationships.md) |
+| 计算、参数、dimension、Hierarchy、ConfigGroup 与聚合 | [计算规则](computations.md) |
+| 非正常状态与 PARTIAL | [结果](../builtins/constants.md) |
 
-- 值类型名称使用 `snake_case`，实体类型名称使用 `PascalCase`，字段名称使用
-  `snake_case`。
-- 实体类型字段默认表示引用；实体类型集合表示引用集合，无需额外的 `ref`
-  关键字。
-- 引用集合使用 `collection<T>`，值集合使用 `values<T>`，二者均无序且不允许
-  重复元素，排序由数据使用方决定。键值映射使用 `mapping<TKey, TValue>`，具体
-  类型参数限制见[内置集合类型](../builtins/collection-types.md)。
-- 快照按字段独立描述。多个字段使用相同的时间参数，不表示它们组成一份
-  必须同时存在的整体快照。
-- `extend` 直接补充实体属性，字段保留原始定义位置；`inherits` 允许子类型增加
-  字段，重名按 override/overload 规则检查。`scd`、`config`、标题和描述的写法见语法说明。
-- YAMBL 在此处仅描述模型，不校验数据完整性等数据质量。语言本身的语法检查
-  与业务数据质量校验是不同的职责。
+产物契约单独维护：
 
-## 语法说明与案例
+- [JSON IR](ir.md)：独立模型、源码位置、Schema 和修订号。
+- [存储与 Python API](storage.md)：SQLite、JSONL、自包含生成包及逐项能力清单。
+- [内置声明](../builtins/decorators.yambl)：decorator 的签名和 targets。
+- [内置模型](../models/)：Decodes、Hierarchy、ConfigGroup。
 
-[语法说明](syntax.md)整理当前使用的声明形式、已确认的含义和待定规则。
-跨文件案例和名称解析的待定规则见[命名空间与跨文件引用](namespaces.md)。
-结构化值类型使用 `value` 声明；透明别名和 `::type` / `::value` 见
-[类型表达式](type-expressions.md)。
-通用元信息声明、参数绑定和重复修饰见 [Decorator](decorators.md)。
-模型仓库的编译产物、独立校验和修订规则见 [JSON 中间模型](ir.md)。
-
-最新业务案例保存在
-[fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) 仓库的
-`core/fund.yambl`、`core/holdings_entry.yambl`、`core/security.yambl` 和
-`decodes/currencies.yambl` 中。
-
-类型系统的已确认约定见 [builtins/](../builtins/README.md)，内置值类型及其
-参数说明见[内置值类型](../builtins/value-types.md)。词法细节、完整文件结构和
-仓库解析规则仍待讨论。
-
-[计算字段与批量执行](computations.md) 定义命名 dimension、参数推导、Hierarchy、有效 ConfigGroup 和 PARTIAL。
+语言可表达的类型和后端可执行的类型分别列明。生成器拒绝尚不支持的业务字段，
+不会静默遗漏字段或把类型降为 Any。

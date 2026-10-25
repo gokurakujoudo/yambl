@@ -110,6 +110,8 @@ async function main() {
     expectScope(line, keyword, scope);
   }
   for (const annotation of vocabulary.annotations) expectScope(`@${annotation}('x')`, '@' + annotation, 'entity.name.function.yambl');
+  for (const name of Object.keys(require('../lsp/language/conversions.cjs').signatures)) expectScope(`${name}(1)`, name, 'support.function.yambl');
+  expectScope("const OTHER_INDUSTRY: string = 'Other'", 'OTHER_INDUSTRY', 'constant.other.yambl');
   for (const constant of vocabulary.constants) expectScope(constant, constant, 'constant.language.yambl');
   for (const constant of Object.keys(vocabulary.resultConstants)) {
     expectScope(`@title(${constant})`, constant, 'constant.language.yambl');
@@ -183,8 +185,8 @@ async function main() {
     expectScope(word, word, ['computed', 'dimension', 'hierarchy', 'fallback_days'].includes(word) ? 'keyword.declaration.yambl' : 'keyword.control.yambl');
   }
   expectScope('case PARTIAL as p -> p.value', 'PARTIAL', 'constant.language.yambl');
-  for (const line of ['h -> h.security', 'case EMPTY -> 0', 'input.day ?? input.as_of_date']) {
-    const operator = line.includes('->') ? '->' : '??';
+  for (const line of ['h -> h.security', 'case EMPTY -> 0', 'input.day ?? input.as_of_date', '7 // 3']) {
+    const operator = line.includes('->') ? '->' : line.includes('??') ? '??' : '//';
     const index = line.indexOf(operator);
     const token = grammar.tokenizeLine(line, textmate.INITIAL).tokens.find(t => t.startIndex === index);
     assert.equal(token.endIndex, index + 2, 'multi-character operator must be one token');

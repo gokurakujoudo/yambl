@@ -21,6 +21,50 @@ function fmcEditor() {
   return { uri, original, service, open, feature };
 }
 
+test('contextual literals, typed locals, constant navigation and conversion signatures', () => {
+  const service = new Service(() => {}), uri = 'untitled:literal-editor';
+  const text = `const OTHER_INDUSTRY: string = 'Other'
+value amount { static attr quantity: decimal static attr label: string }
+entity E {
+    id key: string
+    computed attr total: decimal {
+        let a: amount = {quantity: 1.25, label: OTHER_INDUSTRY}
+        let numbers: values<integer> = [1, 2]
+        return round(a.quantity, scale=1, mode='half_even')
+    }
+}`;
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  assert.deepEqual(service.document(uri).diagnostics, []);
+  const feature = (method, at) => service.feature('textDocument/' + method, { textDocument: { uri }, position: position(text, at), context: { includeDeclaration: false } });
+  const member = text.indexOf('a.quantity');
+  const completion = feature('completion', member + 2).items.map(i => i.label);
+  for (const name of ['quantity', 'label', 'recover']) assert.ok(completion.includes(name), name);
+  assert.equal(feature('definition', member + 2).range.start.character, 'value amount { static attr '.length);
+  const constant = text.lastIndexOf('OTHER_INDUSTRY');
+  assert.equal(feature('definition', constant).range.start.line, 0);
+  assert.equal(feature('references', text.indexOf('OTHER_INDUSTRY')).length, 1);
+  assert.match(feature('hover', constant).contents.value, /const OTHER_INDUSTRY: string = 'Other'/);
+  assert.match(feature('hover', text.indexOf('round(')).contents.value, /half_even/);
+  assert.match(feature('signatureHelp', text.indexOf('scale=') + 2).signatures[0].label, /round\(value: number, scale: integer, mode: string\)/);
+  assert.equal(format(parse(format(parse(text)))), format(parse(text)));
+});
+
+test('descriptor completions use the receiver and reject invalid member contexts', () => {
+  const service = new Service(() => {}), uri = 'untitled:descriptor-completions';
+  for (const [text, marker, labels] of [
+    ['entity E { static attr n: integer computed attr c: integer { return self.n::at() } }', 'self.n::', ['at', 'best_available']],
+    ['entity E { computed attr n: integer { return 1 } computed attr c: integer { return self.n::value() } }', 'self.n::', ['value']],
+    ['entity E { computed attr c: integer { let n = 1 return n::value() } }', 'n::', []],
+    ['entity E { static attr n: integer static attr related: self.n::type }', 'self.n::', ['type', 'value', 'entity']],
+    ['type fields<t: type<Entity>> = mapping<attrs<AttrCats.Static, t> as Attr, Attr::type>', 'Attr::', ['type']],
+    ['entity E { computed attr c: integer { return unknown.member } }', 'unknown.', []],
+  ]) {
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const result = service.feature('textDocument/completion', { textDocument: { uri }, position: position(text, text.indexOf(marker) + marker.length) });
+    assert.deepEqual(result.items.map(i => i.label), labels, marker);
+  }
+});
+
 test('actual FMC completion handles unfinished inputs and typed collection/reference members', () => {
   const { original, open, feature } = fmcEditor();
   for (const [prefix, name, expected] of [

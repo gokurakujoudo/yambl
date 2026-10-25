@@ -1,0 +1,144 @@
+[
+  [
+    "const OTHER: string = 'Other' entity E { computed attr label: string { return OTHER } }"
+  ],
+  [
+    "const A: integer = B + 1 const B: integer = 2"
+  ],
+  [
+    "const A: integer = B const B: integer = A"
+  ],
+  [
+    "namespace one const A: integer = 2",
+    "namespace two from one import A const B: integer = A + 1"
+  ],
+  [
+    "const wrong: integer = 1"
+  ],
+  [
+    "const A: integer = 1 // 0"
+  ],
+  [
+    "const A: integer = ERROR"
+  ],
+  [
+    "const A: integer = if true then 1 else ERROR"
+  ],
+  [
+    "const A: integer = self.x"
+  ],
+  [
+    "const A: integer = to_integer('1.5')"
+  ],
+  [
+    "const A: decimal = round(1.25, scale=1, mode='half_even')"
+  ],
+  [
+    "const A: date = parse_date('2026-02-30')"
+  ],
+  [
+    "const A: float = to_float('0.1')"
+  ],
+  [
+    "const A: decimal = truncate(-1.239, scale=2)"
+  ],
+  [
+    "entity E { computed attr x: integer { let a: integer = 1 return a } }"
+  ],
+  [
+    "entity E { computed attr x: integer { let a: integer = 1.25 return a } }"
+  ],
+  [
+    "entity E { computed attr x: float { return 1 / 3 } computed attr y: integer { return -7 // 3 } }"
+  ],
+  [
+    "entity E { computed attr x: decimal { return 1 / 3 } }"
+  ],
+  [
+    "entity E { computed attr x: integer { return to_integer() } }"
+  ],
+  [
+    "entity E { computed attr x: integer { return to_integer(1, value=2) } }"
+  ],
+  [
+    "entity E { computed attr x: decimal { return round(1.25, 1) } }"
+  ],
+  [
+    "entity E { computed attr x: decimal { return round(mode='floor', value=1.25, scale=1) } }"
+  ],
+  [
+    "entity E { computed attr x: string { return format_date(parse_date('2026-01-01')) } }"
+  ],
+  [
+    "entity E { computed attr x: values<integer> { return [1, 2, 2] } }"
+  ],
+  [
+    "entity E { computed attr x: values<integer> { return [] } }"
+  ],
+  [
+    "entity E { computed attr x: integer { let a = [] return 1 } }"
+  ],
+  [
+    "entity E { computed attr x: values<integer> { return ['a'] } }"
+  ],
+  [
+    "entity E { computed attr x: mapping<string, integer> { return {'a': 1, 'b': 2} } }"
+  ],
+  [
+    "entity E { computed attr x: mapping<string, integer> { return {'a': 1, 'a': 2} } }"
+  ],
+  [
+    "entity E { computed attr x: mapping<string, integer> { return {} } }"
+  ],
+  [
+    "value amount { static attr quantity: decimal static attr label: string } entity E { computed attr x: amount { return {quantity: 1.25, label: 'Other'} } }"
+  ],
+  [
+    "value amount { static attr quantity: decimal } entity E { computed attr x: amount { return {} } }"
+  ],
+  [
+    "value amount { static attr quantity: decimal } entity E { computed attr x: amount { return {unknown: 1} } }"
+  ],
+  [
+    "entity E { id id: string computed attr x: collection<E> { return ['a', 'b'] } }"
+  ],
+  [
+    "entity E { computed attr x: date { return '2026-02-30' } }"
+  ],
+  [
+    "entity E { computed attr x: bool { return [1] < [2] } }"
+  ],
+  [
+    "const A: decimal[4, 2] = 1.25"
+  ],
+  [
+    "const A: decimal[4, 2] = 123.45"
+  ],
+  [
+    "const A: decimal = if true then 1 else 1.25"
+  ],
+  [
+    "entity E { computed attr x: values<integer> { return if true then [] else [1] } }"
+  ],
+  [
+    "entity E { computed attr x: integer { return to_integer(case EMPTY -> 1) } }"
+  ],
+  [
+    "entity E { computed attr x: mapping<string, integer> {\nreturn {\n'x': 1\n}\n} }"
+  ],
+  [
+    "const A: float = 1e999"
+  ],
+  [
+    "const A: float = to_float(1 / 10 + 2 / 10)"
+  ],
+  [
+    "const A: decimal = if true then 1 else 1.25"
+  ],
+  [
+    "value item { static attr a: integer } const ITEMS: values<item> = [{a: 1}]"
+  ],
+  [
+    "entity E { computed attr x: values<integer> { return NO_ENTRY.recover(case NO_ENTRY -> []) } }"
+  ]
+]

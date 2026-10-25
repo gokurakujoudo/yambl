@@ -9,7 +9,7 @@ const resultConstants = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtin
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
   'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as', 'decorator',
-  'computed', 'dimension', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
+  'const', 'computed', 'dimension', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
 const annotations = ['title', 'description', 'temporal', 'dimension', 'sparse', 'dense', 'overload', 'override', 'flags', 'allow_multiple', 'targets'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'dimension_ref', 'input_type'];
 const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
@@ -39,7 +39,7 @@ function parse(text, uri = '') {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, ' ') + masked.slice(end);
   }
   let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|->|\?\?|==|!=|<=|>=|[{}\[\]()<>,:.=@+*?-]/y;
+  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\/\/|::|->|\?\?|==|!=|<=|>=|[{}\[\]()<>,:.=@+*?\/-]/y;
   while (offset < text.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(masked);
@@ -80,6 +80,15 @@ function parse(text, uri = '') {
       take(); node = expressionNode('unary', token, token.value, [calculation(6)]);
     } else if (is('(')) {
       take(); node = calculation(); take(')');
+    } else if (is('[') || is('{')) {
+      const object = is('{'), close = object ? '}' : ']'; take(); const operands = [];
+      while (!is(close)) {
+        if (operands.length) take(',');
+        operands.push(calculation());
+        if (object) { take(':'); operands.push(calculation()); }
+        if (!is(',')) break;
+      }
+      take(close); node = expressionNode(object ? 'object' : 'sequence', token, '', operands);
     } else {
       take();
       if (token.value.startsWith("'")) node = expressionNode('string', token, stringValue(token.value));
@@ -97,6 +106,7 @@ function parse(text, uri = '') {
         while (!is(')')) {
           if (args.length || cases.length) take(',');
           if (is('case')) {
+            if (node.kind === 'name') throw peek();
             const token = take(), statuses = [name().value];
             while (is(',')) { take(); statuses.push(name().value); }
             const bindingToken = is('as') ? (take(), name()) : null;
@@ -116,7 +126,7 @@ function parse(text, uri = '') {
           doc.tokens.splice(index, 1, { ...signed, value: '-', end: signed.start + 1, range: range(text, signed.start, signed.start + 1) },
             { ...signed, value: signed.value.slice(1), start: signed.start + 1, range: range(text, signed.start + 1, signed.end) });
         }
-        const precedence = { '??': 0.5, or: 1, and: 2, '==': 3, '!=': 3, '<': 3, '<=': 3, '>': 3, '>=': 3, '+': 4, '-': 4, '*': 5 }[peek().value];
+        const precedence = { '??': 0.5, or: 1, and: 2, '==': 3, '!=': 3, '<': 3, '<=': 3, '>': 3, '>=': 3, '+': 4, '-': 4, '*': 5, '/': 5, '//': 5 }[peek().value];
         if (!precedence || precedence < minimum) break;
         const op = take(); node = expressionNode('binary', node.token, op.value, [node, calculation(precedence + (op.value === '??' ? 0 : 1))]);
       }
@@ -221,6 +231,12 @@ function parse(text, uri = '') {
         for (const parameter of parameters) { parameter.kind = 'decorator_parameter'; parameter.doc = doc; parameter.owner = declaration; }
         doc.declarations.push(declaration); piece(start, 0); continue;
       }
+      if (is('const')) {
+        const start = index, token = take(), constantName = name(); take(':'); const constraint = type(); take('='); const initializer = calculation();
+        if (metadata.length) throw token;
+        doc.declarations.push({ kind: 'constant', token, name: constantName, type: constraint, initializer, metadata: [], fields: [], entries: [], doc, end: doc.tokens[index - 1].end });
+        piece(start, 0, true); continue;
+      }
       if (is('type')) {
         const start = index, token = take(), aliasName = name(), parameters = [];
         if (is('<')) {
@@ -272,7 +288,7 @@ function parse(text, uri = '') {
           if (mode === 'computed') {
             take('{'); piece(start, 1); const bindings = [];
             while (is('let')) {
-              const start = index; take(); const binding = name(); take('='); bindings.push({ token: binding, name: binding.value, expression: calculation() }); piece(start, 2, true);
+              const start = index; take(); const binding = name(); const annotation = is(':') ? (take(), type()) : null; take('='); bindings.push({ token: binding, name: binding.value, annotation, expression: calculation() }); piece(start, 2, true);
             }
             const resultStart = index; take('return'); const result = calculation(); piece(resultStart, 2, true);
             const close = index; field.end = take('}').end; piece(close, 1);
@@ -308,9 +324,9 @@ function format(doc) {
     }
     let depth = 0;
     return groups.map(tokens => {
-      let closing = 0; for (const token of tokens) { if (token.value !== ')') break; closing++; }
+      let closing = 0; for (const token of tokens) { if (![')', ']', '}'].includes(token.value)) break; closing++; }
       const result = { ...piece, tokens, indent: piece.indent + Math.max(0, depth - closing) };
-      depth += tokens.filter(t => t.value === '(').length - tokens.filter(t => t.value === ')').length;
+      depth += tokens.filter(t => ['(', '[', '{'].includes(t.value)).length - tokens.filter(t => [')', ']', '}'].includes(t.value)).length;
       return result;
     });
   });
@@ -327,11 +343,14 @@ function format(doc) {
   });
   const pieces = splitPieces.map(piece => {
     let text = '', previous = '', priorEquals = false;
+    const declarationEquals = ['let', 'const'].includes(piece.tokens[0].value) ? piece.tokens.find(t => t.value === '=')?.start : null;
     const keywordEquals = new Set(piece.tokens.filter((t, i) => t.value === '=' && ((piece.tokens[0].value === '@' && piece.tokens[i - 2]?.value !== ':') || (piece.calculation && i !== 2 && piece.tokens[0].value === 'let') || (piece.calculation && !['let', 'hierarchy', 'fallback_days'].includes(piece.tokens[0].value))) && /^[A-Za-z_]/.test(piece.tokens[i - 1]?.value)).map(t => t.start));
     for (const token of piece.tokens) {
       const value = token.value;
-      const noBefore = piece.calculation ? ['?', '.', '::', ':', ',', ')', ']', '(', '['] : ['?', '.', '::', ':', ',', ')', '>', ']', '(', '[', '<'];
-      const noAfter = piece.calculation ? ['.', '::', '@', '(', '['] : ['*', '.', '::', '@', '(', '<', '['];
+      if (token.start === declarationEquals) keywordEquals.delete(token.start);
+      const expressionContext = piece.calculation && (declarationEquals == null || token.start > declarationEquals);
+      const noBefore = expressionContext ? ['?', '.', '::', ':', ',', ')', ']', '}', '('] : ['?', '.', '::', ':', ',', ')', '>', ']', '(', '[', '<'];
+      const noAfter = expressionContext ? ['.', '::', '@', '(', '[', '{'] : ['*', '.', '::', '@', '(', '<', '['];
       const space = !keywordEquals.has(token.start) && !priorEquals && text && !noBefore.includes(value) && !noAfter.includes(previous);
       text += (space ? ' ' : '') + value; previous = value; priorEquals = keywordEquals.has(token.start);
     }

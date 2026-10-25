@@ -1,7 +1,6 @@
 # 内置值类型
 
-值类型属于 YAMBL 的 builtins，名称使用 `snake_case`。当前已确认需要以下
-八种基础值类型，以及 `code` 和 `type` 值类型原语：
+值类型属于 YAMBL 的 builtins，名称使用 `snake_case`。基础类型与值类型原语如下：
 
 | 类型 | 基本含义 |
 | --- | --- |
@@ -43,8 +42,8 @@ id holdings_entry_id: snowflake_id
 | `string` | `string['[a-zA-Z0-9]{12}']` | `string[regex: '[a-zA-Z0-9]{12}']` |
 
 `decimal[18, scale: 4]` 混用了两种参数形式，是不合法的类型参数写法。
-参数的重复、命名参数的顺序和部分省略规则尚未确定，格式化器是否统一改写
-参数形式也尚未确定。
+不允许参数重复、缺失或未知参数；命名参数可以换序。decimal 必须同时提供 precision
+和 scale，string 必须提供 regex。格式化保留位置或命名写法及源码顺序。
 
 `decimal` 和 `string` 使用方括号传入描述参数。集合类型使用尖括号传入类型，
 例如 `collection<HoldingEntry>` 和 `values<decimal>`；具体规则见
@@ -136,13 +135,11 @@ Ctrl+Click 字典声明可查看当前编译单元内的引用列表。
 内置 hierarchy_entry 和 decodes_entry 均由模型仓库中的 value 声明定义。
 透明别名使用 type 声明，见[类型表达式](../syntex/type-expressions.md)。其他自定义标量类型仍待定义。
 
-## 待确定
+## 执行边界
 
-- 基础值类型的完整相等规则；结构化 value 已定义为同类型所有字段相等。
-- 运行时如何验证外部字典中的代码，以及字典更新后的引用处理。
-- 内置值类型的位宽、取值范围、时区、字面量和可空性，以及到数据库或 Python
-  类型的映射。
-- `decimal` 参数的合法范围、是否允许部分参数，以及参数重复和命名参数的
-  顺序规则；其他内置类型是否支持参数。
-- 正则表达式的匹配范围、转义和具体语法方言。
-- `snowflake_id` 的具体值结构及生成策略。
+类型声明与物理后端的支持范围分别维护，见[存储能力清单](../syntex/storage.md#能力清单)。
+integer 的计算保持任意精度，decimal 的结果按声明 precision/scale 检查；精确数值在
+当前后端中使用文本编码。空值通过[结果状态](constants.md)区分，不隐式等同于零或空字符串。
+
+外部字典代码不查询外部数据。正则执行方言、Snowflake 位结构及生成策略未定义。
+这些限制不影响现有类型声明和引用解析。

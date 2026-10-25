@@ -15,7 +15,7 @@ entity Holding {
 }
 ```
 
-表达式支持比较、布尔运算、加减乘、`if ... then ... else ...`，不支持除法、循环、
+表达式支持比较、布尔运算、加减乘除、`if ... then ... else ...`，不支持循环、
 修改赋值或任意代码执行。分支、布尔短路与 recover 只执行实际选中的表达式。
 普通引用的 `reference.field` 自动读取引用对象，无法解析时保留原生结果。
 集合不会隐式展开。
@@ -124,7 +124,9 @@ FMC 的完整案例位于 `core/computations.yambl`：
 
 读取请求可去重，持仓贡献不能去重。空序列求和为对应数值类型的零，空分组为正常空 mapping。
 integer 保持任意精度，与 decimal 混算使用 decimal；decimal 运算不受 Python 默认精度截断。
-float 非有限结果或溢出为 ERROR。结果 precision/scale 超限报 ERROR，不自动舍入。
+`/` 无论操作数为 integer、decimal 还是 float，结果均为 float；非有限结果或溢出为
+ERROR。`//` 返回向下取整的 integer，负数同样向负无穷方向取整，例如 `-7 // 3 = -3`。
+两种除法的除零均为 ERROR。结果 precision/scale 超限报 ERROR，不自动舍入。
 
 ```yambl
 expression.recover(
@@ -153,7 +155,7 @@ when 只读取存储 static 字段并作等值 AND；非错误非正常值为不
 
 ## 产物、执行与边界
 
-IR 修订号 4，运行时契约 3，存储布局 5，JSONL 封装格式 1。旧产物须重新生成。
+IR 修订号 5，运行时契约 4，存储布局 5，JSONL 封装格式 1。旧产物须重新生成。
 IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
 生成包只依赖 Python 3.14+ 标准库，执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。
 
