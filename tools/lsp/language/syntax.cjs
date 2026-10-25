@@ -8,9 +8,10 @@ const resultConstants = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtin
 
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
-  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as', 'decorator'];
+  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as', 'decorator',
+  'computed', 'dimension', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
 const annotations = ['title', 'description', 'temporal', 'dimension', 'sparse', 'dense', 'overload', 'override', 'flags', 'allow_multiple', 'targets'];
-const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id'];
+const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'dimension_ref'];
 const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
 const entities = [];
 const structures = [];
@@ -38,7 +39,7 @@ function parse(text, uri = '') {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, ' ') + masked.slice(end);
   }
   let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|[{}\[\]()<>,:.=@+*?-]/y;
+  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|->|==|!=|<=|>=|[{}\[\]()<>,:.=@+*?-]/y;
   while (offset < text.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(masked);
@@ -61,7 +62,66 @@ function parse(text, uri = '') {
   const name = () => /^[A-Za-z_][A-Za-z_0-9]*$/.test(peek().value) ? take() : fail();
   const literal = () => /^(?:'|-?\d)/.test(peek().value) ? take() : fail();
   const qualified = () => { let value = name().value; while (is('.')) { take(); value += '.' + name().value; } return value; };
-  const piece = (start, indent) => doc.pieces.push({ tokens: doc.tokens.slice(start, index), indent });
+  const piece = (start, indent, calculation = false) => doc.pieces.push({ tokens: doc.tokens.slice(start, index), indent, calculation });
+  const expressionNode = (kind, token, value = '', operands = [], args = [], cases = []) => ({ kind, token, value, operands, arguments: args, cases, end: doc.tokens[index - 1].end });
+  function calculation(minimum = 0) {
+    if (/^-\d/.test(peek().value)) {
+      const signed = peek();
+      doc.tokens.splice(index, 1, { ...signed, value: '-', end: signed.start + 1, range: range(text, signed.start, signed.start + 1) },
+        { ...signed, value: signed.value.slice(1), start: signed.start + 1, range: range(text, signed.start + 1, signed.end) });
+    }
+    const token = peek(); let node;
+    if (is('if')) {
+      take(); const condition = calculation(); take('then'); const yes = calculation(); take('else');
+      node = expressionNode('conditional', token, '', [condition, yes, calculation()]);
+    } else if (/^[A-Za-z_]/.test(token.value) && doc.tokens[index + 1]?.value === '->') {
+      take(); take('->'); node = expressionNode('lambda', token, token.value, [calculation()]);
+    } else if (is('not') || is('-') || is('+')) {
+      take(); node = expressionNode('unary', token, token.value, [calculation(6)]);
+    } else if (is('(')) {
+      take(); node = calculation(); take(')');
+    } else {
+      take();
+      if (token.value.startsWith("'")) node = expressionNode('string', token, stringValue(token.value));
+      else if (/^-?\d/.test(token.value) && !/^-?0b/.test(token.value)) node = expressionNode(/[.eE]/.test(token.value) ? 'decimal' : 'integer', token, token.value);
+      else if (['true', 'false'].includes(token.value)) node = expressionNode('bool', token, token.value);
+      else if (/^[A-Za-z_][A-Za-z_0-9]*$/.test(token.value) && !['return', 'let', 'then', 'else', 'case'].includes(token.value)) node = expressionNode('name', token, token.value);
+      else throw token;
+    }
+    while (true) {
+      if (is('.') || is('::')) {
+        const op = take(), member = name();
+        node = expressionNode(op.value === '.' ? 'member' : 'descriptor', node.token, member.value, [node]); node.memberToken = member;
+      } else if (is('(')) {
+        take(); const args = [], cases = [];
+        while (!is(')')) {
+          if (args.length || cases.length) take(',');
+          if (is('case')) {
+            const token = take(), statuses = [name().value];
+            while (is(',')) { take(); statuses.push(name().value); }
+            const binding = is('as') ? (take(), name().value) : '';
+            take('->'); cases.push({ token, statuses, binding, expression: calculation() });
+          } else {
+            const token = peek(); let key = '';
+            if (doc.tokens[index + 1]?.value === '=') { key = name().value; take('='); }
+            args.push({ token, name: key, expression: calculation() });
+          }
+          if (!is(',')) break;
+        }
+        take(')'); node = expressionNode(cases.length ? 'recover' : 'call', node.token, '', [node], args, cases);
+      } else {
+        if (/^-\d/.test(peek().value)) {
+          const signed = peek();
+          doc.tokens.splice(index, 1, { ...signed, value: '-', end: signed.start + 1, range: range(text, signed.start, signed.start + 1) },
+            { ...signed, value: signed.value.slice(1), start: signed.start + 1, range: range(text, signed.start + 1, signed.end) });
+        }
+        const precedence = { or: 1, and: 2, '==': 3, '!=': 3, '<': 3, '<=': 3, '>': 3, '>=': 3, '+': 4, '-': 4, '*': 5 }[peek().value];
+        if (!precedence || precedence < minimum) break;
+        const op = take(); node = expressionNode('binary', node.token, op.value, [node, calculation(precedence + 1)]);
+      }
+    }
+    return node;
+  }
   function type(operand = false) {
     const token = /^(?:'|-?\d)/.test(peek().value) ? take() : name();
     if (/^-?0b/.test(token.value)) throw token;
@@ -176,7 +236,7 @@ function parse(text, uri = '') {
       const start = index; const final = is('final') ? take() : null; const token = take();
       if (final && token.value !== 'entity') throw token;
       if (!['entity', 'extend', 'decodes', 'value'].includes(token.value) || (token.value === 'extend' && metadata.length)) throw token;
-      const declaration = { kind: token.value, token: final || token, final: Boolean(final), name: name(), metadata, fields: [], entries: [], doc };
+      const declaration = { kind: token.value, token: final || token, final: Boolean(final), name: name(), metadata, fields: [], entries: [], dimensions: [], doc };
       if (declaration.kind === 'entity' && is('inherits')) { take(); declaration.parent = name(); }
       declaration.bodyStart = take('{').end; piece(start, 0);
       while (!is('}')) {
@@ -187,12 +247,35 @@ function parse(text, uri = '') {
           if (!peek().value.startsWith("'")) fail();
           declaration.entries.push({ token, order, code, value: take() }); piece(start, 1);
         } else {
+          if (is('dimension') && declaration.kind !== 'value') {
+            const start = index, token = take(), dimensionName = name(); take('{'); piece(start, 1);
+            const dimension = { kind: 'dimension', token, name: dimensionName, doc, owner: declaration };
+            let roleStart = index; take('value'); dimension.value = name(); take(':'); dimension.type = type(); piece(roleStart, 2);
+            if (is('hierarchy')) {
+              roleStart = index; take(); dimension.hierarchy = name(); take(':'); dimension.hierarchyType = type();
+              if (is('=')) { take(); dimension.default = calculation(); }
+              piece(roleStart, 2, true);
+            }
+            if (is('fallback_days')) {
+              roleStart = index; take(); take('='); dimension.fallback = calculation(); piece(roleStart, 2, true);
+            }
+            const close = index; dimension.end = take('}').end; piece(close, 1); declaration.dimensions.push(dimension); continue;
+          }
           const metadata = [];
           while (is('@')) metadata.push(annotation(1));
           const start = index; const token = take(); const mode = token.value;
-          if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static'].includes(mode)) throw token;
-          if (['snapshot', 'scd', 'config', 'static'].includes(mode)) take('attr');
+          if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static', 'computed'].includes(mode)) throw token;
+          if (['snapshot', 'scd', 'config', 'static', 'computed'].includes(mode)) take('attr');
           const field = { token, mode: mode === 'attr' ? 'static' : mode, name: name(), metadata, doc }; take(':'); field.type = type();
+          if (mode === 'computed') {
+            take('{'); piece(start, 1); const bindings = [];
+            while (is('let')) {
+              const start = index; take(); const binding = name(); take('='); bindings.push({ token: binding, name: binding.value, expression: calculation() }); piece(start, 2, true);
+            }
+            const resultStart = index; take('return'); const result = calculation(); piece(resultStart, 2, true);
+            const close = index; field.end = take('}').end; piece(close, 1);
+            field.calculation = { bindings, result }; declaration.fields.push(field); continue;
+          }
           if (is('=')) {
             field.defaultToken = take();
             field.default = ['true', 'false'].includes(peek().value) ? take() : literal();
@@ -214,18 +297,33 @@ function parse(text, uri = '') {
 
 function format(doc) {
   if (doc.errors.length) return null;
-  const pieces = doc.pieces.map(piece => {
+  const splitPieces = doc.pieces.flatMap(piece => {
+    const groups = []; let items = piece.tokens;
+    for (const comment of doc.comments) {
+      if (piece.indent > 1 && items[0]?.start < comment.start && comment.start < items.at(-1).end) {
+        groups.push({ ...piece, tokens: items.filter(t => t.start < comment.start) });
+        items = items.filter(t => t.start > comment.end);
+      }
+    }
+    if (items.length) groups.push({ ...piece, tokens: items });
+    return groups;
+  });
+  const pieces = splitPieces.map(piece => {
     let text = '', previous = '', priorEquals = false;
-    const keywordEquals = new Set(piece.tokens.filter((t, i) => t.value === '=' && piece.tokens[0].value === '@' && /^[A-Za-z_]/.test(piece.tokens[i - 1]?.value)).map(t => t.start));
+    const keywordEquals = new Set(piece.tokens.filter((t, i) => t.value === '=' && (piece.tokens[0].value === '@' || (piece.calculation && i !== 2 && piece.tokens[0].value === 'let') || (piece.calculation && !['let', 'hierarchy', 'fallback_days'].includes(piece.tokens[0].value))) && /^[A-Za-z_]/.test(piece.tokens[i - 1]?.value)).map(t => t.start));
     for (const token of piece.tokens) {
       const value = token.value;
-      const space = !keywordEquals.has(token.start) && !priorEquals && text && !['?', '.', '::', ':', ',', ')', '>', ']', '(', '[', '<'].includes(value) && !['*', '.', '::', '@', '(', '<', '['].includes(previous);
+      const noBefore = piece.calculation ? ['?', '.', '::', ':', ',', ')', ']', '(', '['] : ['?', '.', '::', ':', ',', ')', '>', ']', '(', '[', '<'];
+      const noAfter = piece.calculation ? ['.', '::', '@', '(', '['] : ['*', '.', '::', '@', '(', '<', '['];
+      const space = !keywordEquals.has(token.start) && !priorEquals && text && !noBefore.includes(value) && !noAfter.includes(previous);
       text += (space ? ' ' : '') + value; previous = value; priorEquals = keywordEquals.has(token.start);
     }
     return { start: piece.tokens[0].start, end: piece.tokens.at(-1).end, text, indent: piece.indent };
   });
   for (const token of doc.comments) {
-    const indent = Number(doc.declarations.some(d => token.start >= d.bodyStart && token.end < d.end));
+    const nearby = doc.pieces.find(p => p.indent === 2 && p.tokens[0].start <= token.start && token.start < p.tokens.at(-1).end);
+    const nested = doc.pieces.filter(p => p.indent === 1 && ['{', '}'].includes(p.tokens.at(-1).value) && p.tokens[0].start < token.start).at(-1);
+    const indent = nearby || nested?.tokens.at(-1).value === '{' ? 2 : Number(doc.declarations.some(d => token.start >= d.bodyStart && token.end < d.end));
     pieces.push({ ...token, text: '# ' + token.value.slice(1).trim(), indent, comment: true });
   }
   pieces.push(...doc.blocks.map(block => ({ ...block, indent: 0 })));

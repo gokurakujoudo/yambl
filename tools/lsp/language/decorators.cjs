@@ -55,6 +55,7 @@ function bindCall(call, node, issue, symbols, values = null) {
   const declaration = doc.scope.get(name);
   if (declaration?.kind !== 'decorator') { actualResolver.issue(call, `unknown decorator: ${name}`); return ''; }
   doc.bindings.set(call.markerToken.start, declaration);
+  if (name === 'dimension') return require('./dimensions.cjs').dimensionCall(call, node, issue, symbols) || '';
   const formalResolver = new Resolver(declaration.doc, issue, symbols, null, false, actualResolver.bindings);
   const ordinary = declaration.parameters.filter(p => !p.pair), pairs = declaration.parameters.filter(p => p.pair);
   const supplied = new Map(), keys = new Set();

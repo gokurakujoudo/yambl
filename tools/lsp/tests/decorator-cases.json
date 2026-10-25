@@ -132,10 +132,10 @@
     "namespace meta @targets(DecoratorTargets.Entity) decorator @tag()"
   ],
   [
-    "entity A { @dimension(source: Hierarchy) attr x: string }"
+    "entity A { dimension dimension_11 { value source: Hierarchy }  @dimension(dimension_11) attr x: string }"
   ],
   [
-    "entity A { @dimension(source: Missing) attr x: string }"
+    "entity A { dimension dimension_11 { value source: Missing }  @dimension(dimension_11) attr x: string }"
   ],
   [
     "entity A { @dimension() attr x: string }"
@@ -546,10 +546,10 @@
     "entity A { @sparse('x') attr x: mapping<string, string> }"
   ],
   [
-    "entity A { @sparse('x') @dimension(source: string) attr x: string }"
+    "entity A { dimension dimension_24 { value source: string }  @sparse('x') @dimension(dimension_24) attr x: string }"
   ],
   [
-    "entity A { @dense('x') @dimension(source: string) attr x: string }"
+    "entity A { dimension dimension_23 { value source: string }  @dense('x') @dimension(dimension_23) attr x: string }"
   ],
   [
     "entity A { @sparse('x') @dense('x') attr x: string }"

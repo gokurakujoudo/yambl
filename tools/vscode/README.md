@@ -29,7 +29,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
   非 static 属性以及与已有 sparse/dense/dimension 标记互斥的选项。
 - 七个非正常值常量 `NOT_DEFINED`、`NOT_APPLICABLE`、`EMPTY`、`NO_ENTRY`、`NO_DATA`、
   `ENTITY_NOT_FOUND`、`ERROR` 提供高亮、常量补全和含义悬停。显式赋值、回退及运算
-  传播规则尚未定义，不能用作模型表达式或 config 默认值。
+  计算表达式支持 recover 与 PARTIAL，config 默认值仍不接受结果常量。
 - `@flags`、二进制掩码和 `+`、`-` 支持高亮；字典点号后补全 PascalCase code，包括
   flags 自动生成的 `None`、`All`。组合中每一项可跳转到条目；生成项跳转所属字典声明。
 - 属性悬停显示完整类型（含泛型与参数）、存在的 title 和 description。

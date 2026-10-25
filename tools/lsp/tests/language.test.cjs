@@ -6,10 +6,10 @@ const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json')];
 
 test('ordinary attrs share static identity, targets and filtering', () => {
-  const doc = parse('entity A { @dimension(source: string) attr label: string } entity B inherits A { @override @dimension(source: string) static attr label: string }');
+  const doc = parse('entity A { dimension sources { value source: string } @dimension(sources) attr label: string } entity B inherits A { @override @dimension(sources) static attr label: string }');
   validate([doc]); assert.deepEqual(doc.diagnostics, []);
   assert.equal(doc.scope.get('A').effective.get('label').mode, 'static');
-  assert.equal(format(doc).includes('@dimension(source: string)\n    attr label: string'), true);
+  assert.equal(format(doc).includes('@dimension(sources)\n    attr label: string'), true);
   const invalid = parse('entity A { attr keys: attrs<AttrCats.Attr, A> }');
   validate([invalid]); assert.ok(invalid.diagnostics.some(d => d.message.includes('Attr')));
 });
@@ -121,12 +121,12 @@ test('overload identities, branch defaults and effective mapping candidates', ()
   assert.equal(bond.identity, stock.identity); assert.equal(deep.identity, bond.identity);
   assert.deepEqual(mappingCandidates(scope.get('Base'), 'config', symbols).get('category').map(f => f.default.value), ['1', '2', '3']);
   assert.equal(mappingCandidates(scope.get('Base'), 'static', symbols).get('currency').length, 1);
-  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'static', symbols).keys()], ['entity_type']);
+  assert.deepEqual([...mappingCandidates(builtinEntities.get('ConfigGroup'), 'static', symbols).keys()], ['priority', 'entity_type']);
 });
 
 test('signature equivalence resolves imports, dimensions and quoted dictionaries', () => {
   const docs = [parse('namespace base entity Base {} decodes Codes {}'),
-    parse("namespace left from base import Base from base import Codes entity Left inherits Base { @overload @title('T') @dimension(b: string) @dimension(a: string) attr x: code<Codes> }"),
-    parse("namespace right from base import Base from base import Codes entity Right inherits Base { @dimension(a: string) @title('T') @dimension(b: string) @overload attr x: code<'Codes'> }")];
+    parse("namespace left from base import Base from base import Codes entity Left inherits Base { dimension da { value a: string } dimension db { value b: string } @overload @title('T') @dimension(db) @dimension(da) attr x: code<Codes> }"),
+    parse("namespace right from base import Base from base import Codes entity Right inherits Base { dimension da { value a: string } dimension db { value b: string } @dimension(da) @title('T') @dimension(db) @overload attr x: code<'Codes'> }")];
   validate(docs); assert.deepEqual(docs.flatMap(d => d.diagnostics), []);
 });

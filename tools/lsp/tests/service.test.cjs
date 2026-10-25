@@ -35,7 +35,7 @@ test('flags codes complete, hover and navigate through unions and generated None
   ]) {
     service.open.set(uri, { text: source, version: 3 }); service.refresh();
     const result = request('completion', source.indexOf(', A>'));
-    assert.deepEqual(result.items.map(i => i.label), ['Static', 'Config', 'Snapshot', 'Scd', 'None', 'All']);
+    assert.deepEqual(result.items.map(i => i.label), ['Static', 'Config', 'Snapshot', 'Scd', 'Computed', 'None', 'All']);
   }
   const ordinary = "decodes Codes { - 1 Read: 'Read' } type chosen<a: code<Codes>> = string entity A { attr x: chosen<Codes.> }";
   service.open.set(uri, { text: ordinary, version: 4 }); service.refresh();
@@ -174,7 +174,7 @@ test('Decodes references follow symbol identity and quoted names retain string s
   const dictionary = write('decodes.yambl', 'namespace dict decodes Currencies {}');
   const source = `namespace core from dict import Currencies entity A {
     attr code: code<Currencies>
-    @dimension(source: code<'Currencies'>)
+    dimension sources { value source: code<'Currencies'> } @dimension(sources)
     snapshot attr value: decimal[18, 4]
     attr many: values<code<'Currencies'>>
     attr dynamic: code<'Outside'>

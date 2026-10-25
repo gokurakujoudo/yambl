@@ -42,13 +42,13 @@ Bond 定义了 coupon，但在某种业务情形下不适用该字段时，可�
 
 名称和说明集中在 [result-constants.json](result-constants.json)，由 Python 和 LSP
 共用并随安装包分发。当前语言没有常量声明语法，这份资源保存语言原语的定义，
-不把结果常量定义成 Decodes code。VS Code 提供七个名称的高亮、补全和含义悬停。
+不把结果常量定义成 Decodes code。VS Code 提供这些名称及 PARTIAL的高亮、补全和含义悬停。
 
 声明检查器不执行实例读取。YAMBL 源码的显式赋值规则尚未定义，七个常量
 均不能作为 config 默认值、decorator 实参或类型表达式使用；同名字符串仍是普通字符串。
-格式化仅检查语法，不赋予常量运行时能力。
+计算表达式可显式返回原生非正常结果，并用 recover 指定恢复；config 默认值和 decorator 实参仍不接受这些常量。
 
-通用语言层不定义 Hierarchy 回退、比较、运算传播或多个非正常结果的优先级。
-
-SQLite 直接读取的状态编码和结果边界见 [存储与读取](../syntex/storage.md)。
-这些后端约定不增加通用比较、运算传播或 Hierarchy/ConfigGroup 回退规则。
+新增 `PARTIAL` 表示计算有有效载荷但略过了部分非错误贡献，必须携带 value 和 issues，
+不能作为无载荷 NonNormalResult，也不进入物理字段状态编码。
+严格聚合、best_effort、惰性 recover 和保留问题明细的传播规则见
+[计算字段](../syntex/computations.md)。SQLite/JSONL 的状态编码见 [存储与读取](../syntex/storage.md)。

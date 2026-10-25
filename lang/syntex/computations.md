@@ -1,0 +1,135 @@
+# 计算字段与批量执行
+
+计算字段是独立的 `computed` 属性类别，使用不可变 `let` 和最后一个显式 `return`。
+它可以声明在 entity 或 extend 中，也支持继承及契约一致的 override/overload。
+计算实现可不同，但返回类型、推导参数及默认关系必须相同；不能与存储字段互相重声明。
+计算字段不生成表列，不参与 ConfigGroup.when。`AttrCats.Computed` 的位值为 32。
+
+```yambl
+entity Holding {
+    static attr quantity: decimal
+    static attr security: Security
+    computed attr market_value: decimal {
+        return self.quantity * self.security.price::best_available()
+    }
+}
+```
+
+表达式支持比较、布尔运算、加减乘、`if ... then ... else ...`，不支持除法、循环、
+修改赋值或任意代码执行。分支、布尔短路与 recover 只执行实际选中的表达式。
+普通引用的 `reference.field` 自动读取引用对象，无法解析时保留原生结果。
+集合不会隐式展开。
+
+## 命名 dimension 与字段操作
+
+```yambl
+entity Security {
+    config attr price_fallback_days: integer = 20
+    dimension price_source_dimension {
+        value price_source: code<'PriceSources'>
+        hierarchy price_hierarchy: Hierarchy = 'LocalHierarchy'
+        fallback_days = self.price_fallback_days
+    }
+    @temporal(as_of_date: date)
+    @dimension(price_source_dimension)
+    snapshot attr price: decimal
+}
+```
+
+dimension 属于实体，可在 extend 中定义并由子类继承使用；同作用域重名报错。
+value 必填，类型为 string 或 code；hierarchy 与 fallback_days 可选。声明本身不接受
+decorator。`dimension_ref` 只用于编译期元信息，不能作为存储字段类型。
+旧 `@dimension(source: ..., selector: Hierarchy)` 写法给出迁移诊断。
+
+| 写法 | 作用 |
+| --- | --- |
+| `field::at(...)` | 明确定位日期和全部维度；snapshot 精确到日，SCD 取当天有效期间 |
+| `field::best_available(...)` | 按声明的 Hierarchy 和回退规则选择 |
+| `computed_field::value(...)` | 绑定子计算参数 |
+| `self.field` | 值上下文中的字段读取简写 |
+
+显式 value 优先于 hierarchy，显式 hierarchy 优先于声明默认值。没有可用 Hierarchy
+时必须提供 value；最多自动选择一个 Hierarchy，其余维度必须明确提供。
+Hierarchy ordering 是任意精度整数，必须唯一，按真实整数升序排列。
+
+snapshot 选择包含两端的 `[as_of_date - fallback_days, as_of_date]`，先按日期倒序，
+再按来源优先级。fallback_days 只用于 snapshot，由实际证券实例的有效 config 决定；
+省略则为零，负数报 ERROR，极大整数不会造成日期溢出。SCD 不跨缺口回退，static 不使用日期。
+NO_ENTRY 视为不存在，EMPTY 与 NOT_APPLICABLE 跳过；无候选返回 NO_ENTRY，候选全部被
+跳过返回 NO_DATA。选中值之前的 ERROR 阻止选择；选中正常值后不解码更低优先级载荷。
+结构、摘要或整体查询错误仍返回 ERROR。
+
+## 参数推导与绑定
+
+未绑定依赖按参数名合并，类型、约束及默认关系须兼容。不同名称保持独立。
+用 `input.name` 引入或重命名外部参数；未知普通名字不是隐式参数。
+`input.price_date.default(input.as_of_date)` 只处理调用时省略参数，不处理 EMPTY 等数据结果。
+省略使用独立内部标记，不使用 None。默认依赖图、计算依赖图出现循环时报错。
+所有分支参与静态推导，但运行时只执行实际使用的分支。
+
+常量或内部字段表达式绑定某个依赖后，该依赖不再贡献外部参数。只有全部依赖均已绑定，
+同名参数才从对外签名消失。对子计算的显式绑定只影响该子树。
+
+FMC 的完整案例位于 `core/computations.yambl`：
+
+- Fund 的 `as_of_date` 为持仓日，必填；portfolio 就是 self。
+- `price_date`、`industry_date` 分别默认持仓日，彼此独立，可指定 A/B/C 三个日期。
+- 固定 `IndustryTypes.WindIndustryLevel1` 后不再暴露 industry_type。
+- price_source 可显式指定，price_hierarchy 默认 LocalHierarchy。
+- price_fallback_days 在各证券实例上求有效 config，不是外部参数。
+
+## 集合方法与结果
+
+`Seq<T>` 与 `Grouped<K,T>` 仅是计算过程类型，不增加物理集合格式。
+
+| 方法 | 签名与行为 |
+| --- | --- |
+| map(f) | Seq<T> → Seq<U>，保留行数和重复贡献 |
+| filter(predicate) | Seq<T> → Seq<T>，保留条件为真的行 |
+| flat_map(f) | Seq<T> → Seq<U>，展开一层 |
+| group_by(key) | Seq<T> → Grouped<K,T>，按类型化键相等分组 |
+| sum_by(value) | 序列返回数值；分组返回 mapping<K, Number> |
+| recover(cases) | 显式匹配非正常状态，未匹配结果保持原样 |
+
+读取请求可去重，持仓贡献不能去重。空序列求和为对应数值类型的零，空分组为正常空 mapping。
+integer 保持任意精度，与 decimal 混算使用 decimal；decimal 运算不受 Python 默认精度截断。
+float 非有限结果或溢出为 ERROR。结果 precision/scale 超限报 ERROR，不自动舍入。
+
+```yambl
+expression.recover(
+    case EMPTY -> replacement,
+    case NO_ENTRY, NO_DATA -> replacement,
+    case PARTIAL as p -> p.value
+)
+```
+
+重复标签、非 PARTIAL 绑定或不兼容分支类型报错。PARTIAL 必须携带有效载荷和不可变 issues，
+不增加到物理状态编码中。显式返回 p.value 表示接受部分结果；未显式接受时，后续算子保留 issues。
+
+严格模式不丢弃失败贡献：同一状态返回该状态，混合状态或任何 ERROR 返回 ERROR。
+外层 `best_effort=True` 传递整棵计算树，允许略过六种非错误状态；有有效贡献且有遗漏时
+返回 Partial，全失败仍返回失败。ERROR 只能由源码 recover 显式处理。
+issues 保留逻辑字段、实例、日期、维度和贡献位置，共享读取不合并贡献定位。
+
+## 有效 ConfigGroup
+
+每个 config 字段按 **匹配组 → 实例值 → 实际子类型默认值** 求值。组 priority 是必填
+integer，数值越大越优先；最高优先级并列时，类型化值相同则合并，否则 ERROR。
+组必须设置该字段才参与该字段竞争。自动考虑所有组，不增加启用列表参数。
+when 只读取存储 static 字段并作等值 AND；非错误非正常值为不匹配，ERROR 阻止配置求值。
+实例仅 NO_ENTRY 触发默认值，EMPTY/NOT_APPLICABLE 不触发。结果记录 ConfigGroup 来源和组身份。
+会话内配置保持一致，修改后重新打开；缓存按实际实例和实现区分。
+
+## 产物、执行与边界
+
+IR 修订号 3，运行时契约 2，存储布局 5，JSONL 封装格式 1。旧产物须重新生成。
+IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
+生成包只依赖 Python 3.14+ 标准库，执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。
+
+计算字段仅生成 read 方法和 frozen 请求数据类；存储字段保留惰性 property。
+批量 API 返回外层查询结果和按请求顺序排列的逐请求结果，保留重复请求。
+SQLite 按依赖阶段批量查询身份、静态字段、配置、行业期间和价格窗口；精确金额在 Python 中计算。
+文件后端每表每会话只加载一次，复用等值和时间索引。两后端共享选择、状态、配置和聚合规则。
+完整 property 缓存可复用；关闭后只允许完全由缓存完成的计算。操作失败 ERROR 不缓存。
+
+本轮不提供通用函数声明、通用查询语言、写入 API、迁移、汇率换算或多 Hierarchy 自动组合。

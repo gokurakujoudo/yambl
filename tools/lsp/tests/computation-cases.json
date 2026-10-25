@@ -1,0 +1,119 @@
+[
+  [
+    "entity E { static attr amount: decimal computed attr total: decimal { return self.amount.recover(case EMPTY -> 0, case NO_ENTRY, NO_DATA -> 0, case PARTIAL as p -> p.value, case ERROR -> -1) } }"
+  ],
+  [
+    "\n            entity Security {\n                dimension prices { value source: code<'Sources'> hierarchy hierarchy: Hierarchy = 'Local' fallback_days = self.days }\n                config attr days: integer = 20\n                @temporal(as_of_date: date) @dimension(prices)\n                snapshot attr price: decimal\n            }\n            entity Holding {\n                static attr security: Security\n                static attr quantity: decimal\n                computed attr amount: decimal { return self.quantity * self.security.price::best_available() }\n            }\n            entity Fund {\n                @temporal(as_of_date: date) snapshot attr holdings: collection<Holding>\n                computed attr amount: decimal {\n                    let holdings = self.holdings::at()\n                    return holdings.sum_by(h -> h.amount::value(as_of_date=input.price_date.default(input.as_of_date)))\n                }\n            }\n        "
+  ],
+  [
+    "\n            decodes Industries { - 1 Primary: 'Primary' }\n            entity E {\n                dimension industries { value industry: code<Industries> }\n                @temporal(day: date) @dimension(industries) scd attr industry: string\n                computed attr primary: string { return self.industry::at(industry=Industries.Primary) }\n            }\n        "
+  ],
+  [
+    "entity E { computed attr a: integer { return self.b } computed attr b: integer { return self.a } }"
+  ],
+  [
+    "entity E { @temporal(day: date) snapshot attr x: integer computed attr a: integer { return self.x::at(day=input.day.default(input.day)) } }"
+  ],
+  [
+    "entity E { computed attr a: integer { return 1 } } entity F inherits E { @override computed attr a: integer { return 2 } }"
+  ],
+  [
+    "entity E { @temporal(day: date) snapshot attr x: integer computed attr a: integer { return self.x } } entity F inherits E { @override computed attr a: integer { return 2 } }"
+  ],
+  [
+    "entity E { static attr a: integer } entity F inherits E { @override computed attr a: integer { return 2 } }"
+  ],
+  [
+    "\n            entity E { @dimension(prices) static attr price: decimal }\n            extend E { dimension prices { value source: string hierarchy hierarchy: Hierarchy } }\n            entity Child inherits E { @dimension(prices) static attr other: decimal }\n        "
+  ],
+  [
+    "entity E { dimension prices { value source: integer } }"
+  ],
+  [
+    "entity E { dimension prices { value source: string hierarchy h: string } }"
+  ],
+  [
+    "entity E { dimension prices { value source: string hierarchy h: Hierarchy = 1 } }"
+  ],
+  [
+    "entity E { dimension Prices { value source: string } }"
+  ],
+  [
+    "entity E { dimension p { value s: string } dimension p { value t: string } }"
+  ],
+  [
+    "entity E { static attr p: string dimension p { value s: string } }"
+  ],
+  [
+    "entity E { dimension p { value s: string } } entity F inherits E { dimension p { value t: string } }"
+  ],
+  [
+    "entity E { dimension p { value day: string } @temporal(day: date) @dimension(p) snapshot attr x: decimal }"
+  ],
+  [
+    "entity E { dimension p { value s: string fallback_days = 2 } @dimension(p) static attr x: decimal }"
+  ],
+  [
+    "\ndecodes Industries { - 1 Primary: 'Primary' }\nentity Issuer {\n    id key: string\n    dimension industries { value industry_type: code<Industries> }\n    @dimension(industries) @temporal(as_of_date: date)\n    scd attr industry: string\n}\nentity Security {\n    id key: string\n    static attr issuer: Issuer\n    config attr days: integer = 3\n    dimension prices {\n        value source: code<'Sources'>\n        hierarchy hierarchy: Hierarchy = 'Local'\n        fallback_days = self.days\n    }\n    @dimension(prices) @temporal(as_of_date: date)\n    snapshot attr price: decimal\n    computed attr industry: string { return self.issuer.industry::at(industry_type=Industries.Primary) }\n}\nentity Holding {\n    id key: string\n    static attr security: Security\n    static attr quantity: decimal\n    computed attr amount: decimal { return self.quantity * self.security.price::best_available() }\n}\nentity Fund {\n    id key: string\n    @temporal(as_of_date: date) snapshot attr holdings: collection<Holding>\n    computed attr amount: mapping<string, decimal> {\n        let holdings = self.holdings::at()\n        return holdings.group_by(h -> h.security.industry::value(as_of_date=input.industry_date.default(input.as_of_date)).recover(case NO_ENTRY -> 'Other')).sum_by(h -> h.amount::value(as_of_date=input.price_date.default(input.as_of_date)))\n    }\n}\n"
+  ],
+  [
+    "entity E {\n            static attr date_value: date\n            snapshot attr x: integer\n            computed attr child: integer { return self.x::at(as_of_date=input.other.default(input.day)) }\n            computed attr parent: integer { return self.child::value(day=self.date_value, other=input.valuation_date) }\n        }"
+  ],
+  [
+    "entity Root { computed attr x: integer { return self.only_child } } entity Child inherits Root { static attr only_child: integer }"
+  ],
+  [
+    "entity E { computed attr x: integer { let a = 1 let a = 2 return a } }"
+  ],
+  [
+    "entity E { snapshot attr x: integer computed attr y: integer { return self.x::at(as_of_date=input.best_effort) } }"
+  ],
+  [
+    "entity E { dimension d { value as_of_date: string } @dimension(d) static attr x: integer snapshot attr y: integer computed attr z: integer { return self.x + self.y } }"
+  ],
+  [
+    "entity E { snapshot attr x: integer computed attr y: integer { return self.x::at(as_of_date=input.day.default()) } }"
+  ],
+  [
+    "entity E { snapshot attr x: integer computed attr y: integer { return self.x::at(as_of_date=1) } }"
+  ],
+  [
+    "entity E { computed attr x: integer { return 1 } computed attr y: integer { return self.x::at() } }"
+  ],
+  [
+    "entity E { computed attr y: integer { return input.day } }"
+  ],
+  [
+    "entity E { computed attr y: integer { return self::type } }"
+  ],
+  [
+    "entity E { static attr items: collection<E> computed attr y: integer { return self.items.group_by(x -> x.items).sum_by(x -> 1) } }"
+  ],
+  [
+    "entity E { static attr items: collection<E> computed attr y: integer { return self.items.group_by(x -> 1).filter(x -> true).sum_by(x -> 1) } }"
+  ],
+  [
+    "entity E { static attr items: collection<E> computed attr y: integer { let row = 0 return self.items.sum_by(row -> 1) } }"
+  ],
+  [
+    "entity E { computed attr x: decimal { return if true then 1 else 2.5 } }"
+  ],
+  [
+    "entity E { dimension d { value source: string hierarchy h: Hierarchy } @dimension(d) snapshot attr x: integer computed attr y: integer { return self.x::best_available(h='Fixed') } }"
+  ],
+  [
+    "\ndecodes Industries { - 1 Primary: 'Primary' }\nentity Issuer {\n    id key: string\n    dimension industries { value industry_type: code<Industries> }\n    @dimension(industries) @temporal(as_of_date: date)\n    scd attr industry: string\n}\nentity Security {\n    id key: string\n    static attr issuer: Issuer\n    config attr days: integer = 3\n    dimension prices {\n        value source: code<'Sources'>\n        hierarchy hierarchy: Hierarchy = 'Local'\n        fallback_days = self.days\n    }\n    @dimension(prices) @temporal(as_of_date: date)\n    snapshot attr price: decimal\n    computed attr industry: string { return self.issuer.industry::at(industry_type=Industries.Primary) }\n}\nentity Holding {\n    id key: string\n    static attr security: Security\n    static attr quantity: decimal\n    computed attr amount: decimal { return self.quantity * self.security.price::best_available() }\n}\nentity Bond inherits Security {}\nentity Fund {\n    id key: string\n    scd attr members: collection<Holding>\n    @temporal(as_of_date: date) snapshot attr holdings: collection<Holding>\n    computed attr amount: mapping<string, decimal> {\n        let holdings = self.holdings::at()\n        return holdings.group_by(h -> h.security.industry::value(as_of_date=input.industry_date.default(input.as_of_date)).recover(case NO_ENTRY -> 'Other')).sum_by(h -> h.amount::value(as_of_date=input.price_date.default(input.as_of_date)))\n    }\n}\nextend Security {\n    computed attr identity_text: string { return self.key }\n    computed attr safe: integer { return if true and not false then -2 + 3 * 4 else self.days }\n    computed attr recovered: integer { return ERROR.recover(case ERROR -> 42) }\n    computed attr preserved: integer { return EMPTY.recover(case NO_ENTRY -> 0) }\n    computed attr overflow: decimal[3, 1] { return 123.45 }\n    computed attr choose: integer { return if false or false then self.days else 8 }\n}\nextend Fund {\n    computed attr filtered: decimal {\n        return self.holdings::at().filter(h -> h.quantity >= 3).map(h -> h.quantity).sum_by(q -> q)\n    }\n    computed attr expanded: decimal {\n        return self.holdings::at().flat_map(h -> self.holdings::at()).sum_by(h -> h.quantity)\n    }\n    computed attr accepted: mapping<string, decimal> {\n        return self.amount::value().recover(case PARTIAL as p -> p.value)\n    }\n}\n"
+  ],
+  [
+    "entity E { id key: string snapshot attr x: integer computed attr y: integer { return self.x::at(as_of_date=input.id_value) } }"
+  ],
+  [
+    "entity E { id key: string snapshot attr x: integer computed attr x_range: integer { return 1 } }"
+  ],
+  [
+    "entity E { id key: string static attr read_total: string computed attr total: integer { return 1 } }"
+  ],
+  [
+    "entity E { dimension prices { value source:string hierarchy hierarchy:Hierarchy='Local' fallback_days = self.days+1 } config attr days:integer=2 @dimension(prices) snapshot attr price:decimal computed attr value:decimal { let p=self.price::at(as_of_date=input.day) return if p>0 then p*2 # chosen branch\nelse 0 } }"
+  ]
+]

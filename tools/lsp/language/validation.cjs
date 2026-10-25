@@ -5,6 +5,8 @@ const { isFlags, codeEntries, checkDecodes } = require('./decodes.cjs');
 const { values, generics, entities, structures, stringValue, resultConstants } = require('./syntax.cjs');
 const { relationships, builtinModels } = require('./relationships.cjs');
 const { Resolver, checkAliases } = require('./expressions.cjs');
+const { collectDimensions, checkDimensions } = require('./dimensions.cjs');
+const { checkComputations } = require('./computation.cjs');
 const reserved = [...values, ...generics, ...entities, ...structures, ...builtinModels.keys(), ...Object.keys(resultConstants), 'Entity'];
 const namespace = doc => [doc.prefix, doc.namespace].filter(Boolean).join('.');
 const key = (doc, ns, name) => [doc.repository || '', ns, name].join('\0');
@@ -104,14 +106,18 @@ function validate(documents) {
       if (!seen.has(target)) { seen.add(target); pending.push(...next(target)); }
     }
   }
+  collectDimensions(documents.filter(d => !d.errors.length), issue);
   relationships(symbols, issue);
+  checkDimensions(documents.filter(d => !d.errors.length), issue, symbols);
   checkDecorators(documents, issue, symbols);
   checkAliases(documents, issue, symbols);
   for (const check of pendingChecks) check();
   for (const args of pendingTypes) {
     const kind = checkType(...args);
+    if (args[1].name === 'dimension_ref') issue(args[0], args[1].token, 'dimension_ref is only valid in decorator metadata');
     if (args[2]?.kind === 'value' && kind === 'collection') issue(args[0], args[1].token, 'value fields cannot be collections');
   }
+  checkComputations(documents, symbols, issue);
   const invalidField = field => field.doc.diagnostics.some(d => d.severity === 1 &&
     field.doc.tokens.some(t => t.start >= (field.metadata[0]?.token || field.token).start && t.start < field.end &&
       t.range.start.line === d.range.start.line && t.range.start.character === d.range.start.character));
@@ -136,6 +142,7 @@ function formatType(node) {
 }
 
 function describe(target) {
+  if (target.kind === 'calculation_binding') return `${target.name.value}: ${target.resolvedType}`;
   if (target.kind === 'decorator_parameter') return `${target.pair ? '*' : ''}${target.name.value}${target.optional ? '?' : ''}: ${formatType(target.type)}${target.default ? ' = ' + formatType(target.default) : ''}`;
   if (target.kind === 'decorator') {
     const targets = target.metadata.filter(a => a.name === 'targets').map(a => `@targets(${a.arguments.map(arg => (arg.mode === 'keyword' ? arg.key.value + '=' : '') + formatType(arg.type)).join(', ')})\n`).join('');
@@ -143,8 +150,10 @@ function describe(target) {
   }
   if (target.kind === 'code') return `code ${target.name.value}${target.generated ? ' = ' + (target.name.value === 'None' ? '0' : 'all declared flags') + ' (generated)' : ': ' + stringValue(target.value.value) + ' (' + target.order.value + ')'}`;
   const details = ['title', 'description'].flatMap(name => (target.metadata || []).filter(a => a.name === name && a.value).map(a => `${name}: ${stringValue(a.value.value)}`));
-  const mode = ['snapshot', 'scd', 'config', 'static'].includes(target.mode) ? target.mode + ' attr' : target.mode;
+  if (target.kind === 'dimension') return `dimension ${target.name.value} {\n    value ${target.value.value}: ${formatType(target.type)}${target.hierarchy ? '\n    hierarchy ' + target.hierarchy.value + ': Hierarchy' + (target.default ? ' = ' + target.default.token.value : '') : ''}\n}`;
+  const mode = ['snapshot', 'scd', 'config', 'static', 'computed'].includes(target.mode) ? target.mode + ' attr' : target.mode;
   const signature = target.kind === 'type_alias' ? `type ${target.name.value}${target.parameters.length ? '<' + target.parameters.map(p => p.token.value + ': ' + formatType(p.type)).join(', ') + '>' : ''} = ${formatType(target.type)}` : target.kind ? `${target.kind} ${target.name.value}` : `${mode} ${target.name.value}: ${formatType(target.type)}`;
+  if (target.calculation) details.push('Inferred parameters:\n' + (target.inferredInputs || []).map(p => `${p.name}: ${p.type.name}${p.default ? ' = ' + (p.default.kind === 'member' ? 'input.' + p.default.value : p.default.token.value) : p.required ? ' (required)' : ' (optional)'}`).concat(['best_effort: bool = false']).join('\n'));
   return [(target.kind === 'decodes' && isFlags(target) ? '@flags\n' : '') + signature, ...details].join('\n\n');
 }
 

@@ -36,3 +36,5 @@
 类型系统的已确认约定见 [builtins/](../builtins/README.md)，内置值类型及其
 参数说明见[内置值类型](../builtins/value-types.md)。词法细节、完整文件结构和
 仓库解析规则仍待讨论。
+
+[计算字段与批量执行](computations.md) 定义命名 dimension、参数推导、Hierarchy、有效 ConfigGroup 和 PARTIAL。

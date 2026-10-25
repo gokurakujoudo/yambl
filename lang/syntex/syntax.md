@@ -238,8 +238,11 @@ entity Security {
 }
 
 extend Security {
+    dimension prices {
+        value source: code<'PriceSources'>
+    }
     @temporal(as_of_date: date)
-    @dimension(source: code<'PriceSources'>)
+    @dimension(prices)
     snapshot attr price: decimal
 
     config attr price_fallback_days: integer = 20
@@ -258,7 +261,7 @@ entity Bond inherits Security {
 当前支持单继承；循环继承、同一实体内部或扩展产生的重复字段均报错。
 父子属性重声明须使用 `@override`，不同分支的同名属性须使用 `@overload`。
 签名一致性、逻辑字段身份及 `final entity` 规则见[字段关系](field-relationships.md)。
-扩展只能添加属性，不能补充 `id`；final 实体禁止扩展。父类型和扩展目标按当前文件可见名称查找。
+扩展可添加属性和命名 dimension，不能补充 `id`；final 实体禁止扩展。父类型和扩展目标按当前文件可见名称查找。
 `Decodes` 禁止继承，字典实例也不能作为父类型。当前编译器尚不支持扩展内置实体
 其他 final 内置实体；Entity 是抽象最终基类，可作为继承目标。
 
@@ -266,7 +269,7 @@ entity Bond inherits Security {
 类型时，结果为内置常量 [NOT_DEFINED](../builtins/constants.md)。例如普通
 `Security` 或另一个 `Security` 子类型实例获取 `Bond.coupon` 对应的字段，
 结果为 `NOT_DEFINED`；`Bond` 及其子类型可拥有该字段的实际值。
-这是实例读取的语义约定，当前检查器不执行实例读取或生成运行时代码。
+静态检查器不读取实例；生成的双后端 Python 运行时执行上述语义。
 
 | 属性形式 | 含义 |
 | --- | --- |
@@ -277,25 +280,14 @@ entity Bond inherits Security {
 | `config attr` | 与时间无关、可作为参数被配置覆盖的属性 |
 
 `@temporal(as_of_date: date)` 可用于 `snapshot` 和 `scd`，不能用于 `config` 或 `static`。
-`@dimension(source: code<'PriceSources'>, price_dimension: Hierarchy)` 描述一个维度，
-用于同一实体、同一时间（如适用）的多份独立数据。多个注解定义正交维度。
-每个注解第一参数必须为 string（含参数形式）或 code；可选第二参数必须为 Hierarchy。
-static（包括普通 attr）、snapshot、scd 属性可使用 dimension；id、config 和 value 字段禁止。
-同一字段的维度、Hierarchy 参数及时间参数名称均为 snake_case，且互不重复。
-
-显式 source 优先；没有 source 时可给 price_dimension 引用，按 Hierarchy 的
-ordering 升序查找存在的数据。该参数不生成实体属性或字段映射候选。
-其他维度须先固定；多个 Hierarchy 同时参与的组合取数规则暂未定义。
-取数执行器及跨日回退均未实现。空值、记录缺失和没有满足要求的数据分别由
-`EMPTY`、`NO_ENTRY`、`NO_DATA` 表达，完整清单见[非正常值常量](../builtins/constants.md)。
-回退及运算传播规则尚未定义。
-旧拼写 `@dimensions` 不再接受。
+`@dimension(prices)` 引用 entity 或 extend 内的命名 dimension。value 必填，hierarchy 和
+fallback_days 可选；旧内联写法报迁移诊断。只允许 static、snapshot、scd 使用，
+computed 参数由依赖推导。完整规则及字段操作见 [计算字段](computations.md)。
 
 `config attr name: Type = literal` 可声明默认值，也可省略 `= literal`。
 当前编译器支持 `integer`、`snowflake_id` 的整数字面量，`float`、`decimal`
 的数字字面量，`string` 的单引号字面量，以及 `bool` 的 `true` / `false`。
-其他类型的默认值语法与配置覆盖的来源、优先级仍待设计。当前只进行静态描述和
-字面量类型检查，不实现配置求值、SCD 历史存储或有效期边界计算。
+其他类型的模型默认值尚未开放；ConfigGroup 覆盖、SCD 存储和有效期读取已实现，见计算与存储规范。
 
 ## 案例状态与待定规则
 
@@ -312,7 +304,7 @@ ordering 升序查找存在的数据。该参数不生成实体属性或字段�
 [ConfigGroup](../models/config_group.yambl) 是内置 final 实体。
 `type<Entity>`、`type<Security>` 和 `field_mapping<AttrCats.Static, self.selected_kind::value>`
 的约束与任意类型字段引用见[实体类型与字段映射](../builtins/field-mapping.md)。
-这些声明已由编译器及 LSP 支持；配置组实例语法和配置执行尚未实现。
+这些声明已由编译器及 LSP 支持；配置组通过存储记录提供，运行时按 priority、实例值和实际子类型默认值执行。
 
 ## 结构化值类型
 

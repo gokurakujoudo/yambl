@@ -91,7 +91,7 @@ async function main() {
   const vocabulary = require('../lsp/language/syntax.cjs');
   for (const keyword of vocabulary.keywords) {
     const scope = ['entity', 'type'].includes(keyword) ? 'storage.type.yambl'
-      : ['namespace', 'from', 'import'].includes(keyword) ? 'keyword.control.yambl' : 'keyword.declaration.yambl';
+      : ['namespace', 'from', 'import', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'].includes(keyword) ? 'keyword.control.yambl' : 'keyword.declaration.yambl';
     const line = keyword === 'namespace' ? 'namespace core' : keyword === 'type' ? 'type example = string' : `${keyword} Thing`;
     expectScope(line, keyword, scope);
   }
@@ -165,6 +165,11 @@ async function main() {
   expectScope('@temporal(as_of_date: date)', '@temporal', 'entity.name.function.yambl');
   expectScope('@temporal(as_of_date: date)', 'as_of_date', 'variable.other.property.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'snapshot', 'keyword.declaration.yambl');
+  for (const word of ['computed', 'dimension', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not']) {
+    expectScope(word, word, ['computed', 'dimension', 'hierarchy', 'fallback_days'].includes(word) ? 'keyword.declaration.yambl' : 'keyword.control.yambl');
+  }
+  expectScope('case PARTIAL as p -> p.value', 'PARTIAL', 'constant.language.yambl');
+  expectScope('self.price::best_available()', '::', 'punctuation.accessor.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'HoldingEntry', 'entity.name.type.yambl');
   for (const type of ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'collection', 'values', 'mapping']) {
     expectScope(`attr field: ${type}`, type, 'support.type.yambl');

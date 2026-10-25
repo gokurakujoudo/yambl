@@ -21,7 +21,7 @@ entity Security {}
 `source: code<'PriceSources'>`。key 使用 snake_case 标识符，保存为字符串；
 Type 按现有类型兼容规则检查。每个 `*` 参数只接收一个 pair，按声明顺序绑定。
 所有 pair 在普通实参之后；`*selector?: Hierarchy` 可省略，可选 pair 只能在末尾。
-同一次调用的 key 不可重复；temporal 和 dimension 的 key 还须在同一字段内互不重复。
+同一次调用的 key 不可重复；temporal 与引用的命名 dimension 参数还须在同一字段内互不重复。
 
 声明总是包含括号。无实参调用可写 `@flags` 或 `@flags()`；格式化保留这种选择，
 也保留位置/命名调用方式。调用中的等号写为 `text='Name'`，声明默认值写为
@@ -136,7 +136,8 @@ extend 块、字典条目和形式参数不能添加 decorator。
 
 内置注解的适用范围也在语言定义中声明，检查器统一读取 `@targets` 验证。
 内置特殊行为继续由检查器实现。dimension 标记为 allow_multiple，
-每次声明一个维度及可选 Hierarchy 参数。temporal 接收一个由调用者命名的 date 参数，
+每次引用一个实体内命名 dimension，签名为 `decorator @dimension(definition: dimension_ref)`；
+旧内联 pair 写法只用于迁移诊断。temporal 接收一个由调用者命名的 date 参数，
 如 `@temporal(effective_date: date)`，仅用于 snapshot/scd attr。
 flags 仅用于字典；override/overload 仅用于实体 attr。
 

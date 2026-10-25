@@ -10,9 +10,10 @@ const expected = {
   NOT_DEFINED: 'actual type', NOT_APPLICABLE: 'business context', EMPTY: 'record exists',
   NO_ENTRY: 'does not exist in storage', NO_DATA: 'retrieval requirements',
   ENTITY_NOT_FOUND: 'Dereferencing', ERROR: 'error occurred',
+  PARTIAL: 'usable data',
 };
 
-test('seven result constants share definitions, completion kinds and hover meanings', () => {
+test('result constants and PARTIAL share definitions, completion kinds and hover meanings', () => {
   assert.deepEqual(Object.keys(resultConstants), Object.keys(expected));
   const service = new Service(() => {}), uri = 'untitled:result-constants';
   for (const [name, meaning] of Object.entries(expected)) {
@@ -27,7 +28,7 @@ test('seven result constants share definitions, completion kinds and hover meani
     }
     assert.ok(!items.some(i => i.label === 'UNKNOWN'));
     assert.ok(request('hover').contents.value.includes(meaning));
-    assert.match(request('hover').contents.value, /propagation rules are not defined/);
+    assert.match(request('hover').contents.value, /explicit recover/);
     assert.deepEqual(service.document(uri).diagnostics.map(d => d.message), [`result constant ${name} cannot be used in model expressions`]);
     assert.equal(request('definition'), null);
     assert.equal(format(parse(format(parse(text)))), format(parse(text)));

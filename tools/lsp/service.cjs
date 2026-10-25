@@ -62,7 +62,7 @@ function decoratorSites(doc, start, used) {
   const next = tokens[index]?.value;
   if (owner) {
     if (next === 'id') return owner === 'entity' ? [['Id']] : [];
-    if (next && next !== '}' && !['attr', 'static', 'config', 'snapshot', 'scd'].includes(next)) return [];
+    if (next && next !== '}' && !['attr', 'static', 'config', 'snapshot', 'scd', 'computed'].includes(next)) return [];
     if (owner === 'value') return !next || ['}', 'attr', 'static'].includes(next) ? [['ValueAttr', 'static']] : [];
     if (next && next !== '}') return [['EntityAttr', next === 'attr' ? 'static' : next]];
     return owner === 'entity' ? [['Id'], ['EntityAttr']] : [['EntityAttr']];
@@ -108,6 +108,10 @@ const help = {
   inherits: 'Single inheritance. Duplicate inherited fields and cycles are errors.',
   snapshot: 'Independent temporal attribute snapshot.', scd: 'Slowly changing dimension Type 2 attribute.',
   config: 'Time-independent parameter that configuration can override.',
+  computed: 'Read-only derived field with immutable let bindings and a final return. Parameters are inferred from dependencies.',
+  best_available: 'Select date before source priority within the effective per-instance fallback window.',
+  at: 'Read an exact snapshot date or the SCD interval active on the specified date.',
+  recover: 'Replace explicitly matched non-normal results; unmatched states remain unchanged. Branches are lazy.',
   code: 'A Decodes code value. Dynamic dictionaries may be provided outside the model.',
   collection: 'Unordered unique entity references.', values: 'Unordered unique values.',
   mapping: 'Unordered unique string-compatible or reference keys and non-collection values.',
@@ -115,7 +119,7 @@ const help = {
   alias: 'Same value as an instance-rooted field expression.',
   exact: 'Singleton constraint permitted on override and overload fields.',
   as: 'Bind a mapping key for its value type expression.',
-  ...Object.fromEntries(Object.entries(resultConstants).map(([name, meaning]) => [name, `${meaning}\n\nResult constant. Explicit assignment, fallback and operation propagation rules are not defined.`])),
+  ...Object.fromEntries(Object.entries(resultConstants).map(([name, meaning]) => [name, `${meaning}\n\nCalculation results support explicit recover; PARTIAL requires a payload and issue details.`])),
   title: 'Short display title.', description: 'Descriptive metadata.',
   temporal: 'One caller-named date parameter on snapshot or scd attr.', dimension: 'Independent data dimension with an optional Hierarchy selector.',
   decorator: 'Declare typed metadata with value parameters and caller-defined key/type pairs.',
@@ -238,13 +242,54 @@ class Service {
     }
     if (method === 'textDocument/completion') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
-      if (/::[a-z]*$/.test(doc.text.slice(0, offset))) return { isIncomplete: false, items: ['type', 'value', 'entity'].map(label => ({ label, kind: 10, detail: help.self })) };
       const before = doc.text.slice(0, offset);
+      let calculationDoc = doc;
+      if (doc.errors.length && /(?:\binput\.|::)[a-z_0-9]*$/.test(before)) {
+        const recovered = Object.assign(parse(before.replace(/[a-z_0-9]*$/, '__completion') + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
+        if (!recovered.errors.length) {
+          const root = rootFor(doc.uri);
+          const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+          validate([...siblings, recovered]); calculationDoc = recovered;
+        }
+      }
+      const computation = calculationDoc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= offset && offset <= f.end);
+      if (/::[a-z_]*$/.test(before)) {
+        const fieldName = /\.([a-z][a-z0-9_]*)::[a-z_]*$/.exec(before);
+        const memberStart = fieldName ? before.length - fieldName[0].length + 1 : -1;
+        const selected = calculationDoc.bindings.get(memberStart);
+        const labels = computation ? selected?.mode === 'computed' ? ['value'] : ['at', 'best_available'] : ['type', 'value', 'entity'];
+        return { isIncomplete: false, items: labels.map(label => ({ label, kind: 10, detail: help[label] || help.self })) };
+      }
+      if (/\binput\.[a-z_0-9]*$/.test(before) && computation) return { isIncomplete: false, items: (computation.inferredInputs || []).map(p => ({ label: p.name, kind: 5, detail: p.type.name + (p.default ? ' (has call default)' : p.required ? ' (required)' : ' (optional)') })) };
+      const fieldCall = /\.([a-z][a-z0-9_]*)::(at|best_available|value)\(([^()]*)$/.exec(before);
+      if (fieldCall && /(?:^|,)\s*[a-z_0-9]*$/.test(fieldCall[3])) {
+        const field = calculationDoc.bindings.get(fieldCall.index + 1);
+        const inputs = [];
+        if (field?.mode === 'computed') inputs.push(...(field.inferredInputs || []).map(p => ({ name: p.name, detail: p.type.name })));
+        else if (field) {
+          if (['snapshot', 'scd'].includes(field.mode)) inputs.push({ name: field.metadata.find(c => c.name === 'temporal')?.dimensions[0]?.token.value || 'as_of_date', detail: 'date' });
+          for (const call of field.metadata.filter(c => c.name === 'dimension')) {
+            const d = call.dimension;
+            if (!d) continue;
+            inputs.push({ name: d.value.value, detail: 'Explicit dimension value' });
+            if (fieldCall[2] === 'best_available' && d.hierarchy) inputs.push({ name: d.hierarchy.value, detail: 'Hierarchy selector' });
+          }
+        }
+        const used = new Set([...fieldCall[3].matchAll(/\b([a-z][a-z0-9_]*)\s*=/g)].map(m => m[1]));
+        return { isIncomplete: false, items: inputs.filter(p => !used.has(p.name)).map(p => ({ label: p.name, kind: 5, insertText: p.name + '=', detail: p.detail })) };
+      }
       const call = /@([a-z][a-z0-9_]*)\(([^@{}()]*)$/.exec(before);
       if (call && !/\bdecorator\s*$/.test(before.slice(0, call.index)) && /(?:^|,)\s*[a-z_0-9]*$/.test(call[2])) {
         const close = doc.text.indexOf(')', offset);
         const scope = doc.errors.length ? this.completionScope(doc, call.index, close < 0 ? offset : close + 1) : doc.scope;
         const declaration = scope.get(call[1]);
+        if (call[1] === 'dimension') {
+          const surrounding = doc.declarations.find(d => d.bodyStart <= offset && offset <= d.end);
+          let owner = surrounding && scope.get(surrounding.name.value);
+          const dimensions = new Map(), seen = new Set();
+          while (owner && !seen.has(owner)) { seen.add(owner); for (const [name, dimension] of owner.ownDimensions || []) if (!dimensions.has(name)) dimensions.set(name, dimension); owner = owner.base; }
+          return { isIncomplete: false, items: [...dimensions].map(([label, d]) => ({ label, kind: 5, detail: describe(d) })) };
+        }
         const used = new Set([...call[2].matchAll(/\b([a-z][a-z0-9_]*)\s*=/g)].map(m => m[1]));
         return { isIncomplete: false, items: declaration?.kind === 'decorator' ? declaration.parameters.filter(p => !p.pair && !used.has(p.name.value)).map(p => ({ label: p.name.value, kind: 5, insertText: p.name.value + '=', detail: describe(p) })) : [] };
       }
@@ -270,7 +315,7 @@ class Service {
         });
         return { isIncomplete: false, items: applicable.map(d => ({ label: d.name.value, kind: 3, detail: describe(d) })) };
       }
-      const selfPath = /\bself(?:\.[a-zA-Z_][a-zA-Z_0-9]*::value)*\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
+      const selfPath = /\bself(?:\.[a-zA-Z_][a-zA-Z_0-9]*(?:::value)?)*\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
       const codePath = /\b([A-Z][a-zA-Z_0-9]*)\.[a-zA-Z_0-9]*$/.exec(doc.text.slice(0, offset));
       if (selfPath || codePath) {
         let completionDoc = doc;

@@ -17,12 +17,12 @@ yambl generate -o path ./build/model.yambl-ir.json -o output ./build/generated -
 无维度的 static 集合将状态放入宽表、成员放入独立表。有维度的 static 字段按根实体和
 维度结构分组，config 按根实体独立存入长表。普通 `attr` 是 `static attr`
 的简写；源码格式化保留写法，签名、筛选和 IR 都使用 static。
-`AttrCats.Static`、Config、Snapshot、Scd 的位值分别为 2、4、8、16，All 为 30。
+`AttrCats.Static`、Config、Snapshot、Scd 的位值分别为 2、4、8、16，Computed 为 32，All 为 62。
 `AttrCats.Attr` 已移除。`@dimension` 允许 static、snapshot、scd，禁止 config。
 
 每个逻辑 snapshot/SCD 字段有独立时间表；关系声明共享逻辑字段存储，但读取使用
 实际实体上的实现约束。维度列非空，参与键；维度名称或类型不同就分表。
-Hierarchy selector 是元信息，不是维度列，本阶段必须显式提供全部维度。
+Hierarchy selector 是元信息，不是维度列，直接读取必须显式提供全部维度；计算中的 best_available 可自动选择一个 Hierarchy。
 
 表名使用 `tb_` 前缀，namespace 各段与实体的 snake_case 名称用单下划线连接；
 内置表省略 `builtins` namespace。数据库名保留仓库 prefix，字段表使用逻辑身份所属的
@@ -58,7 +58,7 @@ VALUE 记录存在但无成员表示正常空集合。实体引用不建立强�
 Decimal、整数和相应 ID 使用 TEXT，避免 SQLite 数值精度限制。bool 使用 0/1，
 date 使用 ISO 日期。本地字典代码校验成员身份，外部字典只保存带字典类型的字符串。
 不执行任意正则，不生成 Snowflake ID。数据库保存布局修订号和模型摘要，读取器要求匹配。
-当前布局修订号为 4；IR 仍为修订号 2。旧布局数据库须重新生成，本轮不提供迁移。
+当前布局修订号为 5；IR 为修订号 3，运行时契约为 2。旧布局数据库须重新生成，本轮不提供迁移。
 内部元数据表为 `tb_yambl_metadata`，也使用统一前缀。
 
 `schema.md` 包含全部表、列、主键、CHECK、外键、索引、逻辑字段映射和各表 DDL。
@@ -119,8 +119,8 @@ ConfigGroup 的 entity_type 是可空类型 qualified name，配有独立状态�
 SQL 校验 JSON 对象及 type/value 包装结构，主键保证同组同字段不重复；内部类型结构、
 字段候选范围和载荷兼容性尚无写入校验器。这里不定义七个非正常结果的 JSON 编码。
 
-内置表当前用于持久化和参考，不生成内置模型的读取方法，不执行 Hierarchy 选择或
-ConfigGroup 条件及覆盖规则。manifest 对这些字段标记 `readable: false`。
+内置表由批量运行时用于 Hierarchy 选择和 ConfigGroup 条件覆盖。ConfigGroup 包含必填 priority；
+通用内置模型 handle API 尚未开放，manifest 的 `readable: false` 表示不生成这种公开方法。
 
 ## 时间和结果
 
@@ -167,7 +167,7 @@ description（如有），不推断元信息继承。attr 的点查询和区间�
 区间结果为 `ReadResult[list[tuple[date, ReadResult[T]]]]`。整体查询失败返回外层 ERROR，
 不返回部分结果；可定位到单条记录的解码问题返回内层 ERROR。
 config 仅在 NO_ENTRY 时使用模型默认值，`Success.origin` 为 `model_default`；
-EMPTY 和 NOT_APPLICABLE 不回退。不执行 ConfigGroup、Hierarchy、价格回退或运算传播。
+EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarchy 与计算传播规则见 [计算字段](computations.md)。
 
 ## 能力清单
 
@@ -199,9 +199,10 @@ EMPTY 和 NOT_APPLICABLE 不回退。不执行 ConfigGroup、Hierarchy、价格�
 | scd | 已定义 | 已实现 | 已实现 | 显式期间 | 起点、变化与缺口 |
 | dimension | 已定义 | 已实现 | 已绑定 | 非空键列 | 必填显式参数 |
 | sparse / dense | 已定义 | 类型、互斥、分组冲突和补全已实现 | 已绑定 | 按继承根与 cat 的长表 / 宽表 | 复用同一读取语义 |
-| Decodes、Hierarchy、ConfigGroup 存储 | 已定义 | 静态已实现 | 保留 | 身份宽表和条目/映射子表 | 内置读取和选择/覆盖待实现 |
+| Decodes、Hierarchy、ConfigGroup 存储 | 已定义 | 静态已实现 | 保留 | 身份宽表和条目/映射子表 | 选择和覆盖已执行；通用内置 handle 待实现 |
 | 七个非正常结果 | 已定义 | 已实现 | 保留 | 三种字段状态 | 统一结果对象 |
-| 回退、比较、运算传播 | 未定义 | 无执行器 | 不附加规则 | 不执行 | 不执行 |
+| computed、参数推导、recover、PARTIAL | 已定义 | 已实现 | 独立 AST 和依赖/参数图 | 不生成物理字段 | 类型化单次/批量计算 |
+| Hierarchy 回退与有效 ConfigGroup | 已定义 | 已实现 | 命名维度及配置契约 | 批量候选与配置读取 | 共享精确运算与结果处理 |
 
 对应验收集中于编译器 `tests/storage/`、`tests/ir/test_schema.py` 和 LSP/高亮对照测试。
 
@@ -213,7 +214,7 @@ EMPTY 和 NOT_APPLICABLE 不回退。不执行 ConfigGroup、Hierarchy、价格�
 `open_sqlite(path)`、`open_files(path)` 均返回 `ReadResult[Reader]`；`open(path)` 保留为 SQLite 别名。
 
 生成目录的 `repository/` 是 JSONL 空仓库模板，已初始化内置字典。元数据为
-`repository.json`，包括文件格式修订号 1、布局修订号 4、模型摘要和所有表文件的 SHA-256。
+`repository.json`，包括文件格式修订号 1、布局修订号 5、模型摘要和所有表文件的 SHA-256。
 每张表对应 `tables/<表名>.jsonl`，包括空表；每行必须提供完整物理列。
 整数、Decimal、日期及引用 ID 使用精确文本，bool 使用整数 0/1。
 
@@ -246,5 +247,4 @@ python -m fmc_model check-data --backend files --path example-repository
 每个成环分量给出确定性的一个闭合 ID 路径，并报告字段、维度及日期或期间，不枚举全部环。
 
 FMC 示例初始化器从同一份数据创建 SQLite 或 JSONL，并在结束前显式校验；只接受新目标。
-本阶段仍无生产写入、迁移、SQLite 导出命令或通用查询语言，也不执行 Hierarchy、ConfigGroup、
-价格回退和一般运算传播规则。
+本阶段仍无生产写入、迁移、SQLite 导出命令或通用查询语言，计算执行范围见 [计算字段](computations.md)，不提供汇率换算或多 Hierarchy 自动组合。

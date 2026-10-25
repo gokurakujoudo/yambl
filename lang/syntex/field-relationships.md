@@ -72,7 +72,7 @@ override 保持原字段身份，也可重声明继承的 overload 字段。
 子类的 extend 可以声明 override，但同一实体内部或多处 extend 对同一字段
 重复声明仍报错。无继承目标的 override、缺少 override 的父子重声明均报错。
 两种标记只用于 attr，不能重复或同时使用，不适用于 id。
-字段依赖使用 alias 和显式 ::value；当前不执行实例计算。
+字段依赖使用 alias 和显式 ::value；计算字段以 computed attr 声明，独立于类型依赖，见 [计算字段](computations.md)。
 
 ## 编辑器导航
 

@@ -44,7 +44,7 @@
       }
     },
     {
-      "match": "(::)(type|value|entity)\\b",
+      "match": "(::)(type|value|entity|at|best_available)\\b",
       "captures": {
         "1": {
           "name": "punctuation.accessor.yambl"
@@ -152,11 +152,11 @@
     },
     {
       "name": "keyword.declaration.yambl",
-      "match": "\\b(?:decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|final|self|as|attr)\\b"
+      "match": "\\b(?:decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|computed|dimension|hierarchy|fallback_days|final|self|input|as|attr)\\b"
     },
     {
       "name": "keyword.control.yambl",
-      "match": "\\b(?:from|import)\\b"
+      "match": "\\b(?:from|import|let|return|if|then|else|case|and|or|not)\\b"
     },
     {
       "name": "support.type.yambl",
@@ -164,7 +164,7 @@
     },
     {
       "name": "support.type.yambl",
-      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|collection|values|mapping|attrs|alias|exact|type|field_mapping)\\b"
+      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|dimension_ref|collection|values|mapping|attrs|alias|exact|type|field_mapping)\\b"
     },
     {
       "name": "variable.parameter.yambl",
@@ -176,7 +176,7 @@
     },
     {
       "name": "constant.language.yambl",
-      "match": "\\b(?:NOT_DEFINED|NOT_APPLICABLE|EMPTY|NO_ENTRY|NO_DATA|ENTITY_NOT_FOUND|ERROR|true|false)\\b"
+      "match": "\\b(?:NOT_DEFINED|NOT_APPLICABLE|EMPTY|NO_ENTRY|NO_DATA|ENTITY_NOT_FOUND|ERROR|PARTIAL|true|false)\\b"
     },
     {
       "name": "entity.name.type.yambl",
