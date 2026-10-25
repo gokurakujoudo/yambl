@@ -29,10 +29,24 @@ async function main() {
     loadGrammar: async scope => scope === 'source.yambl'
       ? textmate.parseRawGrammar(fs.readFileSync(grammarFile, 'utf8'), grammarFile) : null,
   });
-  const grammar = await registry.loadGrammar('source.yambl');
+  const contribution = manifest.contributes.grammars[0];
+  const grammar = await registry.loadGrammarWithConfiguration('source.yambl', 1, {
+    balancedBracketSelectors: contribution.balancedBracketScopes || ['*'],
+    unbalancedBracketSelectors: contribution.unbalancedBracketScopes || [],
+  });
   assert.ok(grammar);
 
   let checks = 0;
+  function expectBracketMetadata(line, offset, length, balanced, state = textmate.INITIAL) {
+    const encoded = grammar.tokenizeLine2(line, state).tokens;
+    for (let column = offset; column < offset + length; column++) {
+      let metadata;
+      for (let i = 0; i < encoded.length && encoded[i] <= column; i += 2) metadata = encoded[i + 1];
+      // VS Code's token metadata bit 10 enables bracket matching/colorization.
+      assert.equal(Boolean(metadata & 1024), balanced, `${JSON.stringify(line)} at ${column}: bracket eligibility`);
+      checks++;
+    }
+  }
   function expectScope(line, fragment, scope) {
     const offset = line.indexOf(fragment);
     assert.ok(offset >= 0, `Missing fragment: ${fragment}`);
@@ -175,8 +189,27 @@ async function main() {
     const token = grammar.tokenizeLine(line, textmate.INITIAL).tokens.find(t => t.startIndex === index);
     assert.equal(token.endIndex, index + 2, 'multi-character operator must be one token');
     assert.ok(token.scopes.includes('keyword.operator.yambl'));
+    expectBracketMetadata(line, index, 2, false);
     checks++;
   }
+  for (const line of ['if x >= 1 then x else 0', 'if x <= 1 then x else 0']) {
+    expectBracketMetadata(line, line.indexOf('=') - 1, 2, false);
+  }
+  const nestedType = 'computed attr totals: mapping<string, collection<HoldingEntry>> {';
+  for (const match of nestedType.matchAll(/[<>{]/g)) expectBracketMetadata(nestedType, match.index, 1, true);
+  let computationState = textmate.INITIAL, arrowCount = 0;
+  const fmcSource = fs.readFileSync(path.resolve(__dirname, '../../../fmc-data-model/core/computations.yambl'), 'utf8');
+  for (const line of fmcSource.split(/\r?\n/)) {
+    const tokens = grammar.tokenizeLine(line, computationState);
+    for (const match of line.matchAll(/->/g)) {
+      const token = tokens.tokens.find(t => t.startIndex <= match.index && t.endIndex >= match.index + 2);
+      assert.ok(token?.scopes.includes('keyword.operator.yambl'));
+      expectBracketMetadata(line, match.index, 2, false, computationState);
+      arrowCount++;
+    }
+    computationState = tokens.ruleStack;
+  }
+  assert.ok(arrowCount >= 3, 'FMC must exercise both lambdas and recovery arrows');
   expectScope("value price_source: code<'PriceSources'>", 'price_source', 'variable.other.property.yambl');
   expectScope("hierarchy price_hierarchy: Hierarchy = 'LocalHierarchy'", 'price_hierarchy', 'variable.other.property.yambl');
   expectScope('decorator @extra_input_params(*parameter: input_type)', 'input_type', 'support.type.yambl');
