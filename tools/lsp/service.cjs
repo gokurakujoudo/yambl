@@ -206,6 +206,19 @@ class Service {
     onRecovered?.(recovered);
     return recovered.scope;
   }
+  calculationDocument(doc, offset) {
+    const before = doc.text.slice(0, offset);
+    if (!doc.errors.length || !(/(?:\.|::)[a-z_0-9]*$/.test(before) || /::(?:at|best_available|value)\([^()]*$/.test(before))) return doc;
+    let prefix = /(?:\.|::)[a-z_0-9]*$/.test(before) ? before.replace(/[a-z_0-9]*$/, '__completion') : before;
+    if (/[=,]\s*$/.test(prefix)) prefix += '__completion';
+    const balance = doc.tokens.reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
+    const recovered = Object.assign(parse(prefix + ')'.repeat(Math.max(0, balance)) + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
+    if (recovered.errors.length) return doc;
+    const root = rootFor(doc.uri);
+    const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+    validate([...siblings, recovered]);
+    return recovered;
+  }
   references(target, includeDeclaration) {
     const locations = [];
     if (!target) return locations;
@@ -255,29 +268,20 @@ class Service {
     }
     if (method === 'textDocument/signatureHelp') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
-      const call = expressionNodes.filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
+      const calculationDoc = this.calculationDocument(doc, offset);
+      const call = calculationDoc.declarations.flatMap(d => d.fields.flatMap(nodes)).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
       if (!call) return null;
       const name = call.operands[0].value;
       const parameters = (call.parameters || []).map(p => ({ label: `${p.name}: ${typeLabel(p.type)}`, documentation: p.default ? 'Default: ' + defaultLabel(p.default) : p.required ? 'Unbound inputs are inferred into the caller.' : 'Optional selection parameter.' }));
-      const argument = call.arguments.find(a => a.expression.end >= offset) || call.arguments.at(-1);
-      const active = Math.max(0, call.parameters?.findIndex(p => p.name === argument?.name) ?? 0);
+      const argument = call.arguments.find(a => a.token.start <= offset && offset <= a.expression.end);
+      const supplied = new Set(call.arguments.filter(a => a.expression.end < offset).map(a => a.name));
+      const active = Math.max(0, call.parameters?.findIndex(p => argument?.name ? p.name === argument.name : !supplied.has(p.name)) ?? 0);
       return { signatures: [{ label: call.parameters ? `${name}(${parameters.map(p => p.label).join(', ')}) -> ReadResult<${typeLabel(call.inferred?.type)}>` : methodHelp(name, call)?.split('\n')[0] || name, documentation: methodHelp(name, call), parameters }], activeSignature: 0, activeParameter: active };
     }
     if (method === 'textDocument/completion') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       const before = doc.text.slice(0, offset);
-      let calculationDoc = doc;
-      if (doc.errors.length && (/(?:\.|::)[a-z_0-9]*$/.test(before) || /::(?:at|best_available|value)\([^()]*$/.test(before))) {
-        let prefix = /(?:\.|::)[a-z_0-9]*$/.test(before) ? before.replace(/[a-z_0-9]*$/, '__completion') : before;
-        if (/[=,]\s*$/.test(prefix)) prefix += '__completion';
-        const balance = doc.tokens.reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
-        const recovered = Object.assign(parse(prefix + ')'.repeat(Math.max(0, balance)) + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
-        if (!recovered.errors.length) {
-          const root = rootFor(doc.uri);
-          const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
-          validate([...siblings, recovered]); calculationDoc = recovered;
-        }
-      }
+      const calculationDoc = this.calculationDocument(doc, offset);
       const computation = calculationDoc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= offset && offset <= f.end);
       if (/::[a-z_]*$/.test(before)) {
         const fieldName = /\.([a-z][a-z0-9_]*)::[a-z_]*$/.exec(before);
@@ -286,7 +290,7 @@ class Service {
         const labels = computation ? selected?.mode === 'computed' ? ['value'] : ['at', 'best_available'] : ['type', 'value', 'entity'];
         return { isIncomplete: false, items: labels.map(label => ({ label, kind: 10, detail: help[label] || help.self })) };
       }
-      if (/\binput\.[a-z_0-9]*$/.test(before) && computation) return { isIncomplete: false, items: (computation.inferredInputs || []).map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
+      if (/\binput\.[a-z_0-9]*$/.test(before) && computation) return { isIncomplete: false, items: (computation.inferredInputs || []).filter(p => p.name !== '__completion').map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
       const member = /\.([a-z_0-9]*)$/.exec(before);
       if (member && computation) {
         const expression = nodes(computation).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);

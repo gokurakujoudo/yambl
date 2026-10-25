@@ -4,6 +4,88 @@ const assert = require('node:assert/strict');
 const { parse, format } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const { Service } = require('../service.cjs');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const { position } = require('../language/syntax.cjs');
+
+function fmcEditor() {
+  const filename = path.resolve(__dirname, '../../../../fmc-data-model/core/computations.yambl');
+  const uri = pathToFileURL(filename).href, original = fs.readFileSync(filename, 'utf8');
+  const service = new Service(() => {});
+  let text, version = 0;
+  const open = source => { text = source; service.open.set(uri, { text, version: ++version }); service.refresh(); };
+  const feature = (method, offset) => service.feature('textDocument/' + method, { textDocument: { uri }, position: position(text, offset), context: { includeDeclaration: false } });
+  open(original);
+  assert.deepEqual(service.document(uri).diagnostics.filter(d => d.severity === 1), []);
+  return { uri, original, service, open, feature };
+}
+
+test('actual FMC completion handles unfinished inputs and typed collection/reference members', () => {
+  const { original, open, feature } = fmcEditor();
+  for (const [prefix, name, expected] of [
+    ['input.', 'industry_date', ['industry_date', 'price_date', 'as_of_date', 'price_source', 'price_hierarchy']],
+    ['holdings.', 'group_by', ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'recover']],
+    ['h.security.', 'wind_level1_industry', ['issuer', 'currency', 'price', 'wind_level1_industry']],
+  ]) {
+    const start = original.indexOf(prefix + name) + prefix.length;
+    assert.ok(start >= prefix.length);
+    for (const fragment of ['', name.slice(0, 2), name]) {
+      open(original.slice(0, start) + fragment + original.slice(start + name.length));
+      const items = feature('completion', start + fragment.length).items;
+      for (const label of expected) assert.ok(items.some(i => i.label === label), `${prefix}${fragment}: ${label}`);
+      assert.ok(!items.some(i => i.label.startsWith('__')), 'recovery placeholders must stay internal');
+      if (prefix === 'input.') {
+        assert.match(items.find(i => i.label === 'industry_date').documentation, /industry date/);
+        assert.match(items.find(i => i.label === 'price_source').detail, /code<.*PriceSources>/);
+      }
+    }
+  }
+});
+
+test('actual FMC field calls offer signatures while parentheses and argument values are unfinished', () => {
+  const { original, open, feature } = fmcEditor();
+  for (const [needle, parameters] of [
+    ['holdings::at(', ['as_of_date']],
+    ['industry::at(', ['as_of_date', 'industry_type']],
+    ['wind_level1_industry::value(', ['as_of_date']],
+    ['market_value::value(', ['as_of_date', 'price_source', 'price_hierarchy']],
+  ]) {
+    const offset = original.indexOf(needle) + needle.length, end = original.indexOf(')', offset);
+    for (const closing of ['', ')']) {
+      for (const fragment of ['', 'as_of_date=', 'as_of_date=input.as_of_date, ']) {
+        open(original.slice(0, offset) + fragment + closing + original.slice(end + 1));
+        const cursor = offset + fragment.length;
+        const signature = feature('signatureHelp', cursor);
+        assert.ok(signature, `${needle}${fragment}${closing}`);
+        assert.deepEqual(signature.signatures[0].parameters.map(p => p.label.split(':')[0]), parameters);
+        if (!fragment.endsWith('=')) {
+          const expected = parameters.filter(p => !fragment.includes(p + '='));
+          assert.deepEqual(feature('completion', cursor).items.map(i => i.label), expected);
+          if (expected.length) assert.equal(signature.activeParameter, parameters.indexOf(expected[0]));
+        }
+      }
+    }
+  }
+});
+
+test('actual FMC calculated paths navigate across files and appear in reverse references', () => {
+  const { uri, original, service, feature } = fmcEditor();
+  for (const [use, file, declaration] of [
+    ['security.wind_level1_industry', 'holdings_entry.yambl', 'security: Security'],
+    ['wind_level1_industry::value', 'computations.yambl', 'wind_level1_industry: string'],
+    ['issuer.industry', 'security.yambl', 'issuer: Issuer'],
+    ['industry::at', 'issuer.yambl', 'industry: string'],
+    ['holdings::at', 'fund.yambl', 'holdings: collection<HoldingEntry>'],
+  ]) {
+    const offset = original.indexOf(use), target = feature('definition', offset);
+    assert.ok(target.uri.endsWith('/' + file));
+    const targetDoc = service.document(target.uri);
+    assert.deepEqual(target.range.start, position(targetDoc.text, targetDoc.text.indexOf(declaration)));
+    const references = service.feature('textDocument/references', { textDocument: { uri: target.uri }, position: target.range.start, context: { includeDeclaration: false } });
+    assert.ok(references.some(r => r.uri === uri && JSON.stringify(r.range.start) === JSON.stringify(position(original, offset))));
+  }
+});
 
 const source = `entity E {
     dimension prices { value source: string hierarchy hierarchy: Hierarchy = 'Local' fallback_days = self.days }
