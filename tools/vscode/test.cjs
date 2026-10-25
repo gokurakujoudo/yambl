@@ -88,6 +88,11 @@ async function main() {
   expectScope('attr x: Attr::type', '::', 'punctuation.accessor.yambl');
   expectScope('attr x: Attr::type', 'type', 'variable.language.yambl');
   expectScope('attr x: self.kind::value', 'value', 'variable.language.yambl');
+  expectScope('let x = self.price::value(as_of_date=input.day)', '::', 'punctuation.accessor.yambl');
+  expectScope('let x = self.price::value(as_of_date=input.day)', 'value', 'variable.language.yambl');
+  expectScope('let x = self.price::best_available()', 'best_available', 'variable.language.yambl');
+  assert.ok(!grammar.tokenizeLine('self.price::at()', textmate.INITIAL).tokens.some(t => t.scopes.includes('variable.language.yambl')));
+  checks++;
   expectScope('type selected<t: type<Entity>> = t', 'selected', 'support.type.yambl');
   expectScope('value quote {', 'value', 'storage.type.yambl');
   expectScope('value quote {', 'quote', 'support.type.yambl');
@@ -102,7 +107,7 @@ async function main() {
   assert.ok(grammar.tokenizeLine('value real {', markdownState).tokens.some(t => t.scopes.includes('storage.type.yambl'))); checks++;
 
   // A new language-server keyword must also have a TextMate scope in this release.
-  const vocabulary = require('../lsp/language/syntax.cjs');
+  const vocabulary = require('./lsp/language/syntax.cjs');
   for (const keyword of vocabulary.keywords) {
     const scope = ['entity', 'type'].includes(keyword) ? 'storage.type.yambl'
       : ['namespace', 'from', 'import', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'].includes(keyword) ? 'keyword.control.yambl' : 'keyword.declaration.yambl';
@@ -110,7 +115,7 @@ async function main() {
     expectScope(line, keyword, scope);
   }
   for (const annotation of vocabulary.annotations) expectScope(`@${annotation}('x')`, '@' + annotation, 'entity.name.function.yambl');
-  for (const name of Object.keys(require('../lsp/language/conversions.cjs').signatures)) expectScope(`${name}(1)`, name, 'support.function.yambl');
+  for (const name of Object.keys(require('./lsp/language/conversions.cjs').signatures)) expectScope(`${name}(1)`, name, 'support.function.yambl');
   expectScope("const OTHER_INDUSTRY: string = 'Other'", 'OTHER_INDUSTRY', 'constant.other.yambl');
   for (const constant of vocabulary.constants) expectScope(constant, constant, 'constant.language.yambl');
   for (const constant of Object.keys(vocabulary.resultConstants)) {

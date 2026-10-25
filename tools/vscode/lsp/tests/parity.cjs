@@ -8,7 +8,7 @@ const { parse, format } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json'), ...require('./computation-cases.json')];
 cases.push(...require('./literal-cases.json'));
-const workspace = path.resolve(__dirname, '../../../..');
+const workspace = path.resolve(__dirname, '../../../../..');
 const model = path.join(workspace, 'fmc-data-model');
 const files = require('../service.cjs').sources(model);
 cases.push(files.map(file => fs.readFileSync(file, 'utf8')));

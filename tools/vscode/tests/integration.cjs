@@ -143,11 +143,11 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     for (const name of constantNames) {
       assert.equal(constantsCompletion.items.find(item => item.label === name).kind, vscode.CompletionItemKind.Constant);
       const hover = await vscode.commands.executeCommand('vscode.executeHoverProvider', constantsUri, constantsDoc.positionAt(constantsText.indexOf(name)));
-      assert.ok(hover[0].contents[0].value.includes(new vscode.MarkdownString().appendText('Result constant').value));
+      assert.ok(hover[0].contents[0].value.includes(new vscode.MarkdownString().appendText('Calculation results support explicit recover').value));
     }
     assert.deepEqual(vscode.languages.getDiagnostics(constantsUri).map(d => d.message).sort(), constantNames.map(name => `result constant ${name} cannot be used in model expressions`).sort());
     const filteredUri = vscode.Uri.file(path.join(root, 'filtered-decorators.yambl'));
-    const filteredText = "namespace filtered entity Item { @title('Price') @dimension(source: string) @description snapshot attr price: decimal @title static attr currency: string }";
+    const filteredText = "namespace filtered entity Item { dimension prices { value source: string } @title('Price') @dimension(prices) @description snapshot attr price: decimal @title static attr currency: string }";
     fs.writeFileSync(filteredUri.fsPath, filteredText);
     const filteredDoc = await vscode.workspace.openTextDocument(filteredUri);
     await vscode.window.showTextDocument(filteredDoc);
@@ -157,10 +157,29 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
       assert.equal(labels.includes('title'), title);
       assert.ok(labels.includes('description'));
       assert.equal(labels.includes('temporal'), temporal);
-      assert.equal(labels.includes('dimension'), temporal);
+      assert.ok(labels.includes('dimension'));
       assert.ok(!labels.includes('flags') && !labels.includes('targets') && !labels.includes('allow_multiple'));
     }
-    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None', 'decorator signatures and named parameter navigation/completion'] }));
+    const computedUri = vscode.Uri.file(path.join(root, 'computed.yambl'));
+    const computedText = 'namespace computation entity E { snapshot attr price: decimal computed attr amount: decimal { return self.price::value() } computed attr twice: decimal { return self.amount::value() * 2 } }';
+    fs.writeFileSync(computedUri.fsPath, computedText);
+    const computedDoc = await vscode.workspace.openTextDocument(computedUri);
+    await vscode.window.showTextDocument(computedDoc);
+    for (const [needle, labels] of [['self.price::', ['value', 'best_available']], ['self.amount::', ['value']]]) {
+      const completed = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', computedUri, computedDoc.positionAt(computedText.indexOf(needle) + needle.length), ':');
+      assert.deepEqual(completed.items.map(item => item.label).sort(), [...labels].sort());
+    }
+    assert.deepEqual(vscode.languages.getDiagnostics(computedUri), []);
+    const removedUri = vscode.Uri.file(path.join(root, 'removed.yambl'));
+    const removedText = 'namespace migration entity E { static attr n: integer computed attr x: integer { return self.n::at() } computed attr y: integer { let x = self.n return x } }';
+    fs.writeFileSync(removedUri.fsPath, removedText);
+    const removedDoc = await vscode.workspace.openTextDocument(removedUri);
+    await vscode.window.showTextDocument(removedDoc);
+    await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', removedUri);
+    const messages = vscode.languages.getDiagnostics(removedUri).map(d => d.message);
+    assert.ok(messages.includes('::at(...) was removed; use ::value(...) instead'));
+    assert.ok(messages.includes('field retrieval requires ::value(...) or ::best_available(...)'));
+    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['unified value calls', 'double-colon completion', 'explicit read and at migration diagnostics', 'activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None', 'decorator signatures and named parameter navigation/completion'] }));
   } catch (error) {
     fs.writeFileSync(output, JSON.stringify({ ok: false, error: error.stack })); throw error;
   }

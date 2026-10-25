@@ -1,10 +1,9 @@
 'use strict';
 
 const vscode = require('vscode');
-const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const lspRoot = fs.existsSync(path.join(__dirname, 'lsp')) ? path.join(__dirname, 'lsp') : path.join(__dirname, '../lsp');
+const lspRoot = path.join(__dirname, 'lsp');
 const { encode, Reader } = require(path.join(lspRoot, 'protocol.cjs'));
 let client;
 const asRange = value => new vscode.Range(value.start.line, value.start.character, value.end.line, value.end.character);

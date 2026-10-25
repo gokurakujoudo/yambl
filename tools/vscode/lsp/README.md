@@ -5,7 +5,7 @@ lookup, references, semantic coloring, and document symbols for the current YAMB
 stdio using [LSP 3.17](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/)
 with UTF-8 message bodies and UTF-16 document positions.
 
-The [VS Code extension](../vscode/README.md) includes all server files and starts
+The [VS Code extension](../README.md) includes all server files and starts
 the server with VS Code's own Node runtime. Users do not need Python, a separate
 Node installation, npm packages, another extension, or a network connection.
 There are no runtime downloads or external service calls.
@@ -14,8 +14,8 @@ The seven result constants `NOT_DEFINED`, `NOT_APPLICABLE`, `EMPTY`, `NO_ENTRY`,
 `NO_DATA`, `ENTITY_NOT_FOUND`, and `ERROR` share their definitions with Python in
 `lang/builtins/result-constants.json`. Completion identifies them as constants;
 hover explains each result. Their declaration names are reserved, and using them
-in model expressions produces diagnostics. Explicit assignment, fallback,
-comparison, and operation propagation rules are not defined.
+in field defaults produces diagnostics. Calculation expressions support native
+results, lazy recover branches and Partial values.
 
 ## Model checking
 
@@ -83,12 +83,12 @@ Run the offline tests with VS Code's runtime from the `yambl` repository:
 .\tools\vscode\test.ps1
 ```
 
-For development with Node installed, the server can also run as `node tools/lsp/server.cjs`.
+For development with Node installed, the server can also run as `node tools/vscode/lsp/server.cjs`.
 Its stdin/stdout are protocol streams, not an interactive command prompt. Cross-check
 the JavaScript implementation against the sibling Python compiler:
 
 ```console
-node tools/lsp/tests/parity.cjs
+node tools/vscode/lsp/tests/parity.cjs
 ```
 
 The parity check uses the compiler's existing venv, or a Python executable supplied
@@ -154,9 +154,16 @@ Method hovers show the receiver, result type and operation contract. Completion 
 `holdings.` offers sequence methods; completion on `h.` and reference paths offers
 resolved fields. Field uses participate in definition navigation and reference search.
 
-`::at(...)`, `::best_available(...)` and `::value(...)` provide named parameter
+`::value(...)` and `::best_available(...)` provide named parameter
 completion and signature help. The editor inserts `name=` and preserves snippets.
 `input.` lists inferred and explicitly declared inputs, their types and defaults.
 `@extra_input_params` supplies optional input declarations and descriptions; `??`
 handles omitted inputs. The former `.default(...)` syntax is no longer supported.
 The formatter preserves multiline lambda bodies and chained recovery calls.
+
+The server is an internal component of `tools/vscode/`. Stored and computed field
+calls share `::value(...)`; `::best_available(...)` remains restricted to stored
+fields. Old `::at(...)` calls report migration errors. Terminal implicit field
+reads are rejected in value contexts, while intermediate scalar-reference paths
+remain navigable. Completion after `::` includes call snippets and works before
+parentheses have been entered.

@@ -10,15 +10,15 @@ entity Holding {
     static attr quantity: decimal
     static attr security: Security
     computed attr market_value: decimal {
-        return self.quantity * self.security.price::best_available()
+        return self.quantity::value() * self.security.price::best_available()
     }
 }
 ```
 
 表达式支持比较、布尔运算、加减乘除、`if ... then ... else ...`，不支持循环、
 修改赋值或任意代码执行。分支、布尔短路与 recover 只执行实际选中的表达式。
-普通引用的 `reference.field` 自动读取引用对象，无法解析时保留原生结果。
-集合不会隐式展开。
+中间引用路径透明导航，例如 `self.security.price::value()`；无法解析引用时保留原生结果。
+末端字段必须显式取值，集合不会隐式展开。
 
 ## 命名 dimension 与字段操作
 
@@ -28,7 +28,7 @@ entity Security {
     dimension price_source_dimension {
         value price_source: code<'PriceSources'>
         hierarchy price_hierarchy: Hierarchy = 'LocalHierarchy'
-        fallback_days = self.price_fallback_days
+        fallback_days = self.price_fallback_days::value()
     }
     @temporal(as_of_date: date)
     @dimension(price_source_dimension)
@@ -43,10 +43,23 @@ decorator。`dimension_ref` 只用于编译期元信息，不能作为存储字�
 
 | 写法 | 作用 |
 | --- | --- |
-| `field::at(...)` | 明确定位日期和全部维度；snapshot 精确到日，SCD 取当天有效期间 |
-| `field::best_available(...)` | 按声明的 Hierarchy 和回退规则选择 |
-| `computed_field::value(...)` | 绑定子计算参数 |
-| `self.field` | 值上下文中的字段读取简写 |
+| `field::value(...)` | 存储字段按日期和全部维度精确取值；计算字段绑定参数并求值 |
+| `field::best_available(...)` | 仅存储字段按声明的 Hierarchy 和回退规则选择 |
+
+`::value` 对 snapshot 只读取指定日期，对 SCD 读取当天有效期间；static 无日期，
+config 读取有效配置。它不自动使用 Hierarchy 或日期回退。计算字段的参数和省略默认关系
+继续从依赖推导；两类字段未显式绑定的参数均按名称传递。`::best_available` 的选择契约
+保持不变，不能直接用于计算字段。
+
+字段描述不能直接作为计算值。`let x = self.quantity`、`return self.quantity`、
+`self.quantity * 2` 均报错，须在末端加 `::value(...)` 或 `::best_available(...)`。
+同样要求适用于 lambda、参数、recover 接收者及 dimension 的 fallback_days 表达式。
+中间引用允许 `h.security.price::value()`；单独保存引用须写
+`let security = h.security::value()`。`input.name`、局部变量及已取得的结构化 value 成员
+不是实体字段描述，仍直接使用。类型表达式中的 `self.field::value` 保持原含义与写法。
+
+`::at(...)` 已移除，Python 与 LSP 提示改用 `::value(...)`，不保留兼容调用。
+这次统一不改变存储布局、非正常结果、默认值或批量读取规则。
 
 显式 value 优先于 hierarchy，显式 hierarchy 优先于声明默认值。没有可用 Hierarchy
 时必须提供 value；最多自动选择一个 Hierarchy，其余维度必须明确提供。
@@ -85,7 +98,7 @@ NO_ENTRY 视为不存在，EMPTY 与 NOT_APPLICABLE 跳过；无候选返回 NO_
 @extra_input_params(industry_date: date, 'Industry observation date')
 @extra_input_params(price_date: date = '2026-01-01', description='Price observation date')
 computed attr amount: money {
-    return self.price::at(as_of_date=input.price_date ?? input.as_of_date)
+    return self.price::value(as_of_date=input.price_date ?? input.as_of_date)
 }
 ```
 
@@ -155,7 +168,7 @@ when 只读取存储 static 字段并作等值 AND；非错误非正常值为不
 
 ## 产物、执行与边界
 
-IR 修订号 5，运行时契约 4，存储布局 5，JSONL 封装格式 1。旧产物须重新生成。
+IR 修订号 6，运行时契约 5，存储布局 5，JSONL 封装格式 1。旧产物须重新生成。
 IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
 生成包只依赖 Python 3.14+ 标准库，执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。
 

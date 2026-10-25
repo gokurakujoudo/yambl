@@ -10,7 +10,7 @@ const { pathToFileURL } = require('node:url');
 const { position } = require('../language/syntax.cjs');
 
 function fmcEditor() {
-  const filename = path.resolve(__dirname, '../../../../fmc-data-model/core/computations.yambl');
+  const filename = path.resolve(__dirname, '../../../../../fmc-data-model/core/computations.yambl');
   const uri = pathToFileURL(filename).href, original = fs.readFileSync(filename, 'utf8');
   const service = new Service(() => {});
   let text, version = 0;
@@ -52,10 +52,12 @@ entity E {
 test('descriptor completions use the receiver and reject invalid member contexts', () => {
   const service = new Service(() => {}), uri = 'untitled:descriptor-completions';
   for (const [text, marker, labels] of [
-    ['entity E { static attr n: integer computed attr c: integer { return self.n::at() } }', 'self.n::', ['at', 'best_available']],
+    ['entity E { static attr n: integer computed attr c: integer { return self.n::value() } }', 'self.n::', ['value', 'best_available']],
     ['entity E { computed attr n: integer { return 1 } computed attr c: integer { return self.n::value() } }', 'self.n::', ['value']],
     ['entity E { computed attr c: integer { let n = 1 return n::value() } }', 'n::', []],
     ['entity E { static attr n: integer static attr related: self.n::type }', 'self.n::', ['type', 'value', 'entity']],
+    ['entity E { static attr n: integer static attr related: self.n:: }', 'self.n::', ['type', 'value', 'entity']],
+    ['type fields<t: type<Entity>> = mapping<attrs<AttrCats.Static, t> as Attr, Attr::>', 'Attr::', ['type']],
     ['type fields<t: type<Entity>> = mapping<attrs<AttrCats.Static, t> as Attr, Attr::type>', 'Attr::', ['type']],
     ['entity E { computed attr c: integer { return unknown.member } }', 'unknown.', []],
   ]) {
@@ -111,8 +113,8 @@ test('actual FMC input hover shows the complete inferred input structure', () =>
 test('actual FMC field calls offer signatures while parentheses and argument values are unfinished', () => {
   const { original, open, feature } = fmcEditor();
   for (const [needle, parameters] of [
-    ['holdings::at(', ['as_of_date']],
-    ['industry::at(', ['as_of_date', 'industry_type']],
+    ['holdings::value(', ['as_of_date']],
+    ['industry::value(', ['as_of_date', 'industry_type']],
     ['wind_level1_industry::value(', ['as_of_date']],
     ['market_value::value(', ['as_of_date', 'price_source', 'price_hierarchy']],
   ]) {
@@ -140,8 +142,8 @@ test('actual FMC calculated paths navigate across files and appear in reverse re
     ['security.wind_level1_industry', 'holdings_entry.yambl', 'security: Security'],
     ['wind_level1_industry::value', 'computations.yambl', 'wind_level1_industry: string'],
     ['issuer.industry', 'security.yambl', 'issuer: Issuer'],
-    ['industry::at', 'issuer.yambl', 'industry: string'],
-    ['holdings::at', 'fund.yambl', 'holdings: collection<HoldingEntry>'],
+    ['industry::value', 'issuer.yambl', 'industry: string'],
+    ['holdings::value', 'fund.yambl', 'holdings: collection<HoldingEntry>'],
   ]) {
     const offset = original.indexOf(use), target = feature('definition', offset);
     assert.ok(target.uri.endsWith('/' + file));
@@ -153,7 +155,7 @@ test('actual FMC calculated paths navigate across files and appear in reverse re
 });
 
 const source = `entity E {
-    dimension prices { value source: string hierarchy hierarchy: Hierarchy = 'Local' fallback_days = self.days }
+    dimension prices { value source: string hierarchy hierarchy: Hierarchy = 'Local' fallback_days = self.days::value() }
     config attr days: integer = 2
     @dimension(prices) snapshot attr price: decimal
     computed attr value: decimal { return self.price::best_available() }
@@ -187,8 +189,8 @@ test('calculated descriptors, arguments, inferred hover and field navigation', (
     return service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: prefix.length - 1, character: prefix.at(-1).length } });
   };
   const labels = offset => request('completion', offset).items.map(i => i.label);
-  assert.deepEqual(labels(source.indexOf('::best_available') + 2), ['at', 'best_available']);
-  assert.deepEqual(labels(source.indexOf('::value') + 2), ['value']);
+  assert.deepEqual(labels(source.indexOf('::best_available') + 2), ['value', 'best_available']);
+  assert.deepEqual(labels(source.indexOf('self.value::value') + 'self.value::'.length), ['value']);
   assert.deepEqual(labels(source.indexOf('best_available(') + 'best_available('.length), ['as_of_date', 'source', 'hierarchy']);
   assert.ok(request('hover', source.indexOf('total:')).contents.value.includes('price_date: date = input.as_of_date'));
   assert.equal(request('definition', source.indexOf('self.price') + 5).range.start.line, 3);
@@ -196,7 +198,7 @@ test('calculated descriptors, arguments, inferred hover and field navigation', (
 });
 
 test('computed target filtering excludes storage metadata and descendant fields resolve', () => {
-  const doc = parse('entity E { computed attr value: integer { return self.child } } entity F inherits E { static attr child: integer }');
+  const doc = parse('entity E { computed attr value: integer { return self.child::value() } } entity F inherits E { static attr child: integer }');
   validate([doc]); assert.deepEqual(doc.diagnostics, []);
   for (const decorator of ['temporal(day: date)', 'dimension(p)', "sparse('x')", "dense('x')"]) {
     const invalid = parse(`entity E { @${decorator} computed attr value: integer { return 1 } }`);
@@ -209,7 +211,7 @@ test('computed target filtering excludes storage metadata and descendant fields 
 });
 
 test('immutable locals and lambda variables navigate to their declarations', () => {
-  const text = 'entity E { id key: string static attr children: collection<E> computed attr n: integer { let rows = self.children return rows.sum_by(child -> if child.key == \'x\' then 1 else 0) } }';
+  const text = "entity E { id key: string static attr children: collection<E> computed attr n: integer { let rows = self.children::value() return rows.sum_by(child -> if child.key::value() == 'x' then 1 else 0) } }";
   const service = new Service(() => {}), uri = 'untitled:locals';
   service.open.set(uri, { text, version: 1 }); service.refresh();
   for (const [use, declaration] of [['rows.sum_by', 'rows ='], ['child.key', 'child ->']]) {
@@ -224,10 +226,10 @@ entity HoldingEntry { static attr security: Security }
 entity Fund {
     snapshot attr holdings: collection<HoldingEntry>
     computed attr grouped: mapping<string, integer> {
-        let holdings = self.holdings::at()
+        let holdings = self.holdings::value()
         return holdings.group_by(h ->
             h.security.industry::value()
-        ).sum_by(h -> h.security.quantity)
+        ).sum_by(h -> h.security.quantity::value())
     }
 }`;
   const uri = 'untitled:typed-members', service = new Service(() => {});
@@ -250,8 +252,8 @@ entity Fund {
     const references = feature('references', text.indexOf(declaration));
     assert.ok(references.some(r => r.range.start.line === 7));
   }
-  const signature = feature('signatureHelp', text.indexOf('holdings::at(') + 'holdings::at('.length);
-  assert.match(signature.signatures[0].label, /at\(as_of_date: date\)/);
+  const signature = feature('signatureHelp', text.indexOf('holdings::value(') + 'holdings::value('.length);
+  assert.match(signature.signatures[0].label, /value\(as_of_date: date\)/);
   const incomplete = text.replace('h.security.industry', 'h.security.');
   open(incomplete);
   assert.ok(feature('completion', incomplete.indexOf('h.security.') + 'h.security.'.length, incomplete).items.some(i => i.label === 'industry'));
@@ -262,7 +264,7 @@ test('extra inputs merge, declared defaults win, descriptions and lambda layout 
     snapshot attr n: integer
     @extra_input_params(day: date = '2026-01-01', 'Optional date')
     computed attr x: integer {
-        return self.n::at(as_of_date=input.day ?? input.as_of_date)
+        return self.n::value(as_of_date=input.day ?? input.as_of_date)
     }
 }`;
   const doc = parse(text); validate([doc]);
@@ -272,8 +274,8 @@ test('extra inputs merge, declared defaults win, descriptions and lambda layout 
   const layout = `entity E {
     static attr entries: collection<E>
     computed attr n: integer {
-        return self.entries.map(h ->
-            h.n
+        return self.entries::value().map(h ->
+            h.n::value()
             .recover(case EMPTY -> 0)
         ).sum_by(v ->
             v
@@ -290,5 +292,25 @@ test('extra inputs merge, declared defaults win, descriptions and lambda layout 
   ]) {
     const bad = parse(`entity E { ${declaration} computed attr x: integer { return 0 } }`); validate([bad]);
     assert.ok(bad.diagnostics.some(d => d.severity === 1));
+  }
+});
+
+
+test('unfinished double-colon calls complete stored and computed FMC fields', () => {
+  const { original, open, feature } = fmcEditor();
+  for (const [needle, expected] of [
+    ['self.holdings::value()', ['value', 'best_available']],
+    ['h.market_value::value(as_of_date=input.price_date ?? input.as_of_date)', ['value']],
+    ['self.security.price::best_available()', ['value', 'best_available']],
+  ]) {
+    const start = original.indexOf(needle), end = start + needle.indexOf('::') + 2;
+    assert.ok(start >= 0);
+    for (const fragment of ['', 'v']) {
+      open(original.slice(0, end) + fragment + original.slice(start + needle.length));
+      const items = feature('completion', end + fragment.length).items;
+      assert.deepEqual(items.map(i => i.label), expected);
+      assert.equal(items[0].insertText, 'value($0)');
+      assert.match(items[0].detail, /stored coordinate or evaluate a computed field/);
+    }
   }
 });

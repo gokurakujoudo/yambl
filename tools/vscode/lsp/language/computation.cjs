@@ -148,12 +148,13 @@ function checkComputations(documents, symbols, report) {
     }
     parameters(value, operation, node) {
       const field = value.field;
+      if (operation === 'at') { this.issue(node, '::at(...) was removed; use ::value(...) instead'); operation = 'value'; }
       if (field.mode === 'computed') {
         if (operation !== 'value') this.issue(node, 'computed fields support ::value, not stored-field operations');
         this.dependencies.add(field);
         return [...analyze(field).inputs.values()];
       }
-      if (!['at', 'best_available'].includes(operation)) this.issue(node, 'stored fields support ::at or ::best_available');
+      if (!['value', 'best_available'].includes(operation)) this.issue(node, 'stored fields support ::value or ::best_available');
       const result = [];
       for (const call of field.metadata) {
         if (call.name === 'temporal') for (const pair of call.dimensions) result.push({ name: pair.token.value, type: type('date'), required: true, default: null, sites: [node.token], declaration: parameterDeclaration(field.doc, pair.token, type('date')) });
@@ -172,8 +173,11 @@ function checkComputations(documents, symbols, report) {
       if (['snapshot', 'scd'].includes(field.mode) && !field.metadata.some(c => c.name === 'temporal')) result.unshift({ name: 'as_of_date', type: type('date'), required: true, default: null, sites: [node.token] });
       return result;
     }
-    read(value, node) {
-      if (value.field) for (const parameter of this.parameters(value, value.field.mode === 'computed' ? 'value' : 'at', node)) this.addInput(parameter, node);
+    read(value, node, navigation = false) {
+      if (value.field) {
+        if (!(navigation && value.type.kind === 'reference')) this.issue(node, 'field retrieval requires ::value(...) or ::best_available(...)');
+        for (const parameter of this.parameters(value, 'value', node)) this.addInput(parameter, node);
+      }
       return { type: value.type };
     }
     infer(node, environment, expected = null) {
@@ -220,7 +224,7 @@ function checkComputations(documents, symbols, report) {
           const syntax = { token: receiver.token, name: receiver.value, accesses: [{ operator: { value: '.' }, token: node.memberToken }] };
           return { type: new Resolver(this.doc, report, symbols, this.owner).evaluate(syntax).type };
         }
-        const parent = this.read(this.infer(receiver, environment), receiver);
+        const parent = this.read(this.infer(receiver, environment), receiver, true);
         if (parent.type.kind === 'value') {
           const owner = symbols.get(parent.type.key), field = owner?.kind === 'value' && owner.fields.find(f => f.name.value === node.value);
           if (field) { this.doc.bindings.set(node.memberToken.start, field); return { type: new Resolver(field.doc, report, symbols, owner, true).resolve(field.type) }; }

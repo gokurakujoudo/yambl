@@ -44,7 +44,7 @@
       }
     },
     {
-      "match": "(::)(type|value|entity|at|best_available)\\b",
+      "match": "(::)(type|value|entity|best_available)\\b",
       "captures": {
         "1": {
           "name": "punctuation.accessor.yambl"

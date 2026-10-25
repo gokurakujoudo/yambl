@@ -1,6 +1,8 @@
 # VS Code 扩展
 
-本扩展提供 YAMBL 语法高亮和自包含 [LSP](../lsp/README.md)。安装包使用
+`tools/vscode/` 是唯一插件目录，`lsp/` 是其内部语言服务与测试，不再保留独立的 `tools/lsp/`。
+
+本扩展提供 YAMBL 语法高亮和自包含 [LSP](lsp/README.md)。安装包使用
 VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依赖、其他扩展，
 也不需要外部服务或联网下载组件。
 
@@ -12,7 +14,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.11.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.21.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -25,6 +27,8 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 - Problems 面板中的实时语法、类型及引用诊断；未定义的裸字典名称报错，带引号的外部字典不提示。
 - Format Document 格式化当前文档；存在语法错误时不提供修改。
 - 输入补全，包括关键字、注解、内置类型和当前文件可见的声明。
+- `::` 后按接收字段提示 `value(...)`，存储字段还提示 `best_available(...)`；支持未完成的调用、参数补全与签名提示。
+- 计算中的末端字段必须显式取值；旧 `::at(...)` 提示迁移到 `::value(...)`。
 - `@sparse` / `@dense` 提供 cat 参数补全、签名悬停和定义跳转；补全排除集合、
   非 static 属性以及与已有 sparse/dense/dimension 标记互斥的选项。
 - 七个非正常值常量 `NOT_DEFINED`、`NOT_APPLICABLE`、`EMPTY`、`NO_ENTRY`、`NO_DATA`、
@@ -81,7 +85,7 @@ TextMate 高亮检查。
 测试使用 VS Code 自带 TextMate、Oniguruma 和 Node，执行高亮、语言语义、
 格式化、源码发现及真实 stdio 协议测试。无需 npm 安装。
 
-开发时可使用 `node tools/lsp/tests/parity.cjs` 与同工作区 Python 编译器对照，
+开发时可使用 `node tools/vscode/lsp/tests/parity.cjs` 与同工作区 Python 编译器对照，
 核对语法接受结果、诊断和格式化。此步骤使用编译器已有 venv，仅是开发测试依赖。
 
 安装包的真实扩展宿主验证使用：
@@ -133,7 +137,7 @@ Method hovers show the receiver, result type and operation contract. Completion 
 `holdings.` offers sequence methods; completion on `h.` and reference paths offers
 resolved fields. Field uses participate in definition navigation and reference search.
 
-`::at(...)`, `::best_available(...)` and `::value(...)` provide named parameter
+`::value(...)`, `::best_available(...)` and `::value(...)` provide named parameter
 completion and signature help. The editor inserts `name=` and preserves snippets.
 `input.` lists inferred and explicitly declared inputs, their types and defaults.
 `@extra_input_params` supplies optional input declarations and descriptions; `??`

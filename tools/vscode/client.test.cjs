@@ -43,9 +43,9 @@ test('VS Code adapters retain snippets, named insertions and live signature help
   });
   try {
     await module.exports.activate({ subscriptions });
-    const text = 'entity E { snapshot attr n: integer computed attr x: integer { return self.n::at() } }';
+    const text = 'entity E { snapshot attr n: integer computed attr x: integer { return self.n::value() } }';
     const doc = { languageId: 'yambl', uri: { toString: () => 'untitled:client-test' }, version: 1, getText: () => text };
-    const position = { line: 0, character: text.indexOf('at(') + 3 };
+    const position = { line: 0, character: text.indexOf('::value(') + 8 };
     const completion = providers.get('registerCompletionItemProvider');
     assert.ok(completion.triggers.includes(':'));
     const items = await completion.provider.provideCompletionItems(doc, position);
@@ -72,7 +72,12 @@ test('VS Code adapters retain snippets, named insertions and live signature help
       assert.ok(offered.some(i => i.label === candidate));
       assert.ok(!offered.some(i => i.label === '__completion'));
     }
-    for (const needle of ['holdings::at(', 'market_value::value(']) {
+    current = original; fmc.version++;
+    const descriptorOffset = original.indexOf('self.holdings::') + 'self.holdings::'.length;
+    const descriptorItems = await completion.provider.provideCompletionItems(fmc, at(descriptorOffset));
+    assert.deepEqual(descriptorItems.map(i => i.label), ['value', 'best_available']);
+    assert.equal(descriptorItems[0].insertText.value, 'value($0)');
+    for (const needle of ['holdings::value(', 'market_value::value(']) {
       const offset = original.indexOf(needle) + needle.length;
       current = original.slice(0, offset) + original.slice(original.indexOf(')', offset) + 1); fmc.version++;
       const help = await providers.get('registerSignatureHelpProvider').provider.provideSignatureHelp(fmc, at(offset));

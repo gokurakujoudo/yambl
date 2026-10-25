@@ -17,7 +17,7 @@ Entity 不汇集所有业务字段。值类型没有继承关系。
 
 点号表示名称层次或字段选择，双冒号访问字段描述的 `::type`、`::value` 和 `::entity`。
 `::entity` 要求描述具有所属实体；`::value` 要求实例来源。单冒号保留给声明。
-计算中的 `::at(...)`、`::best_available(...)`、`::value(...)` 是字段操作，见
+计算中的 `::value(...)`、`::best_available(...)` 是字段操作，见
 [计算规则](computations.md)。
 
 ```yambl

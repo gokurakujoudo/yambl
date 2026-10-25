@@ -111,7 +111,6 @@ const help = {
   config: 'Time-independent parameter that configuration can override.',
   computed: 'Read-only derived field with immutable let bindings and a final return. Parameters are inferred from dependencies.',
   best_available: 'Select date before source priority within the effective per-instance fallback window.',
-  at: 'Read an exact snapshot date or the SCD interval active on the specified date.',
   recover: 'Replace explicitly matched non-normal results; unmatched states remain unchanged. Branches are lazy.',
   code: 'A Decodes code value. Dynamic dictionaries may be provided outside the model.',
   collection: 'Unordered unique entity references.', values: 'Unordered unique values.',
@@ -208,11 +207,15 @@ class Service {
   }
   calculationDocument(doc, offset) {
     const before = doc.text.slice(0, offset);
-    if (!doc.errors.length || !(/(?:\.|::)[a-z_0-9]*$/.test(before) || /\b[a-z][a-z_0-9]*\([^()]*$/.test(before))) return doc;
+    const descriptor = /::[a-z_0-9]*$/.test(before);
+    if ((!doc.errors.length && !descriptor) || !(/(?:\.|::)[a-z_0-9]*$/.test(before) || /\b[a-z][a-z_0-9]*\([^()]*$/.test(before))) return doc;
     let prefix = /(?:\.|::)[a-z_0-9]*$/.test(before) ? before.replace(/[a-z_0-9]*$/, '__completion') : before;
     if (/[=,]\s*$/.test(prefix)) prefix += '__completion';
     const balance = doc.tokens.reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
-    const recovered = Object.assign(parse(prefix + ')'.repeat(Math.max(0, balance)) + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
+    const suffix = ')'.repeat(Math.max(0, balance)) + doc.text.slice(offset);
+    let recovered = parse(prefix + suffix, doc.uri);
+    if (descriptor && !/^[a-z_0-9]*\s*\(/.test(doc.text.slice(offset)) && recovered.declarations.flatMap(d => d.fields).some(f => f.calculation && f.token.start <= offset && offset <= f.end)) recovered = parse(prefix + '()' + suffix, doc.uri);
+    Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
     if (recovered.errors.length) return doc;
     const root = rootFor(doc.uri);
     const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
@@ -298,8 +301,8 @@ class Service {
         const selected = calculationDoc.bindings.get(memberStart);
         const operator = /::[a-z_]*$/.exec(before);
         const receiver = calculationDoc.accessTerms?.get(operator.index);
-        const labels = computation ? selected ? selected.mode === 'computed' ? ['value'] : ['at', 'best_available'] : [] : receiver?.sort === 'field' ? ['type', ...(receiver.instance ? ['value'] : []), ...(receiver.source?.owner?.kind === 'entity' ? ['entity'] : [])] : [];
-        return { isIncomplete: false, items: labels.map(label => ({ label, kind: 10, detail: help[label] || help.self })) };
+        const labels = computation ? selected ? selected.mode === 'computed' ? ['value'] : ['value', 'best_available'] : [] : receiver?.sort === 'field' ? ['type', ...(receiver.instance ? ['value'] : []), ...(receiver.source?.owner?.kind === 'entity' ? ['entity'] : [])] : [];
+        return { isIncomplete: false, items: labels.map(label => computation ? { label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 } : { label, kind: 10, detail: help[label] || help.self }) };
       }
       if (/\binput\.[a-z_0-9]*$/.test(before) && computation) return { isIncomplete: false, items: (computation.inferredInputs || []).filter(p => p.name !== '__completion').map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
       const member = /\.([a-z_0-9]*)$/.exec(before);
@@ -334,7 +337,7 @@ class Service {
           return { isIncomplete: false, items: [...(owner?.effective || [])].map(([label, field]) => ({ label, kind: 5, detail: describe(field) })) };
         }
       }
-      const fieldCall = /\.([a-z][a-z0-9_]*)::(at|best_available|value)\(([^()]*)$/.exec(before);
+      const fieldCall = /\.([a-z][a-z0-9_]*)::(best_available|value)\(([^()]*)$/.exec(before);
       if (fieldCall && /(?:^|,)\s*[a-z_0-9]*$/.test(fieldCall[3])) {
         const field = calculationDoc.bindings.get(fieldCall.index + 1);
         const inputs = [];

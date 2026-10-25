@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const packagedRoot = path.join(__dirname, '../lang');
-const modelRoot = fs.existsSync(packagedRoot) ? packagedRoot : path.join(__dirname, '../../../lang');
+const modelRoot = fs.existsSync(packagedRoot) ? packagedRoot : path.join(__dirname, '../../../../lang');
 const resultConstants = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtins/result-constants.json'), 'utf8'));
 
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.

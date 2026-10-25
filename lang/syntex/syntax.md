@@ -258,7 +258,7 @@ entity Security {
     dimension prices {
         value price_source: code<'PriceSources'>
         hierarchy price_hierarchy: Hierarchy = 'LocalHierarchy'
-        fallback_days = self.price_fallback_days
+        fallback_days = self.price_fallback_days::value()
     }
     @temporal(as_of_date: date)
     @dimension(prices)
@@ -278,7 +278,7 @@ entity Position {
     static attr quantity: decimal
     static attr price: decimal
     computed attr market_value: decimal {
-        let amount = self.quantity * self.price
+        let amount = self.quantity::value() * self.price::value()
         return if amount > 0 then amount else 0
     }
 }
@@ -288,6 +288,15 @@ entity Position {
 提供目标类型，也可省略类型由初始化表达式推断。不支持循环、更新赋值和任意
 代码执行。lambda 写为 `item -> expression`。if、布尔运算和 recover 惰性执行；所有
 分支仍参与静态类型与参数推导。
+
+实体字段在计算值上下文中必须显式调用 `::value(...)`，存储与计算字段使用同一入口。
+存储字段按给定日期和全部维度精确读取；计算字段按推导参数求值。只有存储字段支持
+`::best_available(...)` 的 Hierarchy 选择和日期回退。旧 `::at(...)` 报迁移诊断。
+
+`let x = self.quantity` 不合法，应写 `let x = self.quantity::value()`。
+这也适用于 return、运算、lambda 和参数。`self.security.price::value()` 的中间引用
+可透明导航；`input.name`、局部变量、结构化 value 的成员继续直接使用。
+类型表达式中的无括号 `self.field::value` 仍表示实例依赖，不是计算字段调用。
 
 ## 运算符
 
@@ -352,7 +361,7 @@ integer 保持整数精度，与 decimal 混算得到 decimal；decimal 加减�
 | 字段描述 | `Attr::type` | 声明类型 |
 | 有实例的字段描述 | `self.field::value` | 实例字段值，可参与依赖类型 |
 | 有所属实体的字段描述 | `Attr::entity` | 实际声明实体 |
-| 存储字段 | `field::at(...)` | 按明确日期与维度定位 |
+| 存储字段 | `field::value(...)` | 按明确日期与维度定位 |
 | 存储字段 | `field::best_available(...)` | 按 dimension 和回退规则选择 |
 | 计算字段 | `field::value(...)` | 显式绑定子计算参数 |
 

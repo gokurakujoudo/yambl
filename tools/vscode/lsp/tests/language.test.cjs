@@ -63,7 +63,7 @@ test('built-in ConfigGroup schema matches the published model', () => {
   const fs = require('node:fs'), path = require('node:path');
   const { builtinEntities } = require('../language/relationships.cjs');
   const { formatType } = require('../language/validation.cjs');
-  const doc = parse(fs.readFileSync(path.join(__dirname, '../../../lang/models/config_group.yambl'), 'utf8'));
+  const doc = parse(fs.readFileSync(path.join(__dirname, '../../../../lang/models/config_group.yambl'), 'utf8'));
   assert.deepEqual(doc.errors, []);
   const canonical = doc.declarations[0], builtin = builtinEntities.get('ConfigGroup');
   const fields = decl => decl.fields.map(f => [f.mode, f.name.value, formatType(f.type)]);

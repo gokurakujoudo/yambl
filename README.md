@@ -19,7 +19,7 @@ including AttrCats and the field_mapping alias, are compiled from its source fil
 - [lang/models/](lang/models/README.md): built-in data models.
 - [tools/vscode/](tools/vscode/README.md): VS Code highlighting, language features,
   and local installation scripts.
-- [tools/lsp/](tools/lsp/README.md): a self-contained language server included in
+- [tools/vscode/lsp/](tools/vscode/lsp/README.md): a self-contained language server included in
   the VS Code extension, with no external runtime or service setup.
 
 Draft examples illustrate proposed notation. Their semantics remain open unless
