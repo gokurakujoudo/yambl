@@ -111,10 +111,28 @@ async function activate(context) {
       async provideCompletionItems(doc, position, token) {
         const result = await client.feature('textDocument/completion', doc, { position }, token);
         return (result?.items || []).map(item => {
-          const completion = new vscode.CompletionItem(item.label, item.kind - 1); completion.detail = item.detail; return completion;
+          const completion = new vscode.CompletionItem(item.label, item.kind - 1);
+          completion.detail = item.detail;
+          if (item.documentation) completion.documentation = new vscode.MarkdownString().appendText(item.documentation);
+          if (item.insertText) completion.insertText = item.insertTextFormat === 2 ? new vscode.SnippetString(item.insertText) : item.insertText;
+          return completion;
         });
       },
-    }, '.'),
+    }, '.', ':', '(', ','),
+    vscode.languages.registerSignatureHelpProvider(selector, {
+      async provideSignatureHelp(doc, position, token) {
+        const result = await client.feature('textDocument/signatureHelp', doc, { position }, token);
+        if (!result) return null;
+        const help = new vscode.SignatureHelp();
+        help.activeSignature = result.activeSignature; help.activeParameter = result.activeParameter;
+        help.signatures = result.signatures.map(item => {
+          const signature = new vscode.SignatureInformation(item.label, new vscode.MarkdownString().appendText(item.documentation || ''));
+          signature.parameters = item.parameters.map(p => new vscode.ParameterInformation(p.label, p.documentation));
+          return signature;
+        });
+        return help;
+      },
+    }, '(', ','),
     vscode.languages.registerHoverProvider(selector, {
       async provideHover(doc, position, token) {
         const result = await client.feature('textDocument/hover', doc, { position }, token);

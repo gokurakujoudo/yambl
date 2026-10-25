@@ -5,7 +5,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 修订与独立性
 
-当前 `format_revision` 为整数 `3`。格式尚未固化，不承诺修订间兼容；结构变化时递增
+当前 `format_revision` 为整数 `4`。格式尚未固化，不承诺修订间兼容；结构变化时递增
 修订号。读取器拒绝不支持的修订号，要求重新编译，不自动迁移。
 
 文件完整保存本次采用的内置声明、原语目录和七个无载荷结果常量及携带载荷的 PARTIAL的含义。独立校验仅依赖
@@ -167,3 +167,7 @@ decorator 使用绑定结果，忽略 arguments 的位置/命名拼写。JSON �
 加载先拒绝重复 key 和非标准数值，再进行 Schema、类型化解码与语义一致性校验。
 Schema 由 IR 数据类型生成；`yambl schema -o output ./build/ir.schema.json` 可导出同一契约。
 修订号 3 加入计算表达式、命名 dimension、推导参数和 PARTIAL；修订号 1、2 的产物需要从源码重新编译。
+
+修订号 4 在 decorator 调用的 Argument 中增加 `default: Expression | null`，保留 pair 默认值。
+隐含 description 仍是有绑定身份的普通元信息；输入说明通过 extra_input_params 的 pair key 关联。
+修订号 3 及之前的产物需重新编译。

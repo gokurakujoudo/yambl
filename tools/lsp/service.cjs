@@ -5,6 +5,7 @@ const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
 const { parse, format, range, position, keywords, annotations, values, generics, entities, structures, constants, resultConstants } = require('./language/syntax.cjs');
 const { validate, describe } = require('./language/validation.cjs');
+const { typeLabel, methodNames, methodHelp, nodes, defaultLabel } = require('./language/calculation-tools.cjs');
 
 const { sources, readPrefix, rootName, configError } = require('./repository.cjs');
 const { modelRoot } = require('./language/relationships.cjs');
@@ -125,6 +126,10 @@ const help = {
   decorator: 'Declare typed metadata with value parameters and caller-defined key/type pairs.',
   targets: 'Declare the allowed definition kinds and optional attribute categories for a decorator.',
   allow_multiple: 'Allow repeated uses of the decorated decorator on one definition.',
+  input: 'External computation input: input.name. Rename or bind with name=input.name; input.name ?? expression supplies a value only when omitted.',
+  '??': 'Omitted-input fallback. The left operand is input.name; the right operand is lazy. Caller values and declaration defaults take precedence. Native non-normal results require recover.',
+  input_type: 'Decorator pair constraint accepting non-collection value types or entity references. Not a runtime field type.',
+  extra_input_params: 'Declare one optional computed-field input, with an optional default and trailing description. Repeat for different names. Types merge with inferred dependencies; declaration defaults take precedence over ??.',
 };
 
 class Service {
@@ -216,6 +221,7 @@ class Service {
     if (params.position && doc.blocks.some(b => { const r = range(doc.text, b.start, b.end); return params.position.line >= r.start.line && params.position.line <= r.end.line; })) return null;
     const token = params.position && this.tokenAt(doc, params.position);
     const target = token && doc.bindings.get(token.start);
+    const expressionNodes = doc.declarations.flatMap(d => d.fields.flatMap(nodes));
     if (method === 'textDocument/definition') {
       const targets = token && doc.markerTargets.get(token.start);
       if (targets) return targets.map(field => ({ uri: field.doc.uri, range: field.name.range }));
@@ -237,15 +243,35 @@ class Service {
       return { data };
     }
     if (method === 'textDocument/hover') {
+      const invoked = token && expressionNodes.find(n => ['call', 'recover'].includes(n.kind) && n.operands[0].memberToken?.start === token.start);
+      if (invoked) return { contents: { kind: 'plaintext', value: methodHelp(token.value, invoked) || 'Unknown calculation method' }, range: token.range };
+      if (token && /\binput\.$/.test(doc.text.slice(0, token.start))) {
+        const field = doc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= token.start && token.end <= f.end);
+        const parameter = field?.inferredInputs?.find(p => p.name === token.value);
+        if (parameter) return { contents: { kind: 'plaintext', value: `input.${parameter.name}: ${typeLabel(parameter.type)}${parameter.default ? ' = ' + defaultLabel(parameter.default) : parameter.required ? ' (required)' : ' (optional)'}\n\nExternal computation input. Bind with name=input.name; defaults apply only when omitted.` }, range: token.range };
+      }
       const value = target ? describe(target) + (target.kind === 'decorator' && help[token.value] ? '\n\n' + help[token.value] : '') : token && (help[token.value] || (values.includes(token.value) ? `Built-in value type: ${token.value}` : null));
       return value ? { contents: { kind: 'plaintext', value }, range: token.range } : null;
+    }
+    if (method === 'textDocument/signatureHelp') {
+      const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
+      const call = expressionNodes.filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
+      if (!call) return null;
+      const name = call.operands[0].value;
+      const parameters = (call.parameters || []).map(p => ({ label: `${p.name}: ${typeLabel(p.type)}`, documentation: p.default ? 'Default: ' + defaultLabel(p.default) : p.required ? 'Unbound inputs are inferred into the caller.' : 'Optional selection parameter.' }));
+      const argument = call.arguments.find(a => a.expression.end >= offset) || call.arguments.at(-1);
+      const active = Math.max(0, call.parameters?.findIndex(p => p.name === argument?.name) ?? 0);
+      return { signatures: [{ label: call.parameters ? `${name}(${parameters.map(p => p.label).join(', ')}) -> ReadResult<${typeLabel(call.inferred?.type)}>` : methodHelp(name, call)?.split('\n')[0] || name, documentation: methodHelp(name, call), parameters }], activeSignature: 0, activeParameter: active };
     }
     if (method === 'textDocument/completion') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       const before = doc.text.slice(0, offset);
       let calculationDoc = doc;
-      if (doc.errors.length && /(?:\binput\.|::)[a-z_0-9]*$/.test(before)) {
-        const recovered = Object.assign(parse(before.replace(/[a-z_0-9]*$/, '__completion') + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
+      if (doc.errors.length && (/(?:\.|::)[a-z_0-9]*$/.test(before) || /::(?:at|best_available|value)\([^()]*$/.test(before))) {
+        let prefix = /(?:\.|::)[a-z_0-9]*$/.test(before) ? before.replace(/[a-z_0-9]*$/, '__completion') : before;
+        if (/[=,]\s*$/.test(prefix)) prefix += '__completion';
+        const balance = doc.tokens.reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
+        const recovered = Object.assign(parse(prefix + ')'.repeat(Math.max(0, balance)) + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
         if (!recovered.errors.length) {
           const root = rootFor(doc.uri);
           const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
@@ -260,12 +286,36 @@ class Service {
         const labels = computation ? selected?.mode === 'computed' ? ['value'] : ['at', 'best_available'] : ['type', 'value', 'entity'];
         return { isIncomplete: false, items: labels.map(label => ({ label, kind: 10, detail: help[label] || help.self })) };
       }
-      if (/\binput\.[a-z_0-9]*$/.test(before) && computation) return { isIncomplete: false, items: (computation.inferredInputs || []).map(p => ({ label: p.name, kind: 5, detail: p.type.name + (p.default ? ' (has call default)' : p.required ? ' (required)' : ' (optional)') })) };
+      if (/\binput\.[a-z_0-9]*$/.test(before) && computation) return { isIncomplete: false, items: (computation.inferredInputs || []).map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
+      const member = /\.([a-z_0-9]*)$/.exec(before);
+      if (member && computation) {
+        const expression = nodes(computation).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
+        const receiver = expression?.operands[0]?.inferred?.type;
+        if (receiver) {
+          const symbols = new Map([...this.documents.values(), calculationDoc].flatMap(d => [...d.scope.values()].map(s => [s.key, s])));
+          const owner = symbols.get(receiver.key);
+          const fields = new Map(owner?.effective || []);
+          // Descendant-only fields are legal reads and may yield NOT_DEFINED.
+          if (receiver.kind === 'reference' && owner) {
+            let root = owner; while (root.base) root = root.base;
+            for (const candidate of symbols.values()) if (candidate.kind === 'entity') {
+              let ancestor = candidate; while (ancestor.base) ancestor = ancestor.base;
+              if (ancestor === root) for (const [name, field] of candidate.effective || []) if (!fields.has(name)) fields.set(name, field);
+            }
+          }
+          const items = [...fields].map(([label, field]) => ({ label, kind: 5, detail: describe(field) }));
+          if (receiver.name === 'partial') items.push(...['value', 'issues'].map(label => ({ label, kind: 5, detail: label === 'value' ? typeLabel(receiver.args[0]) : 'Immutable issue details' })));
+          items.push(...methodNames(receiver).map(label => ({ label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 })));
+          return { isIncomplete: false, items };
+        }
+      }
       const fieldCall = /\.([a-z][a-z0-9_]*)::(at|best_available|value)\(([^()]*)$/.exec(before);
       if (fieldCall && /(?:^|,)\s*[a-z_0-9]*$/.test(fieldCall[3])) {
         const field = calculationDoc.bindings.get(fieldCall.index + 1);
         const inputs = [];
-        if (field?.mode === 'computed') inputs.push(...(field.inferredInputs || []).map(p => ({ name: p.name, detail: p.type.name })));
+        const analyzed = computation && nodes(computation).find(n => n.kind === 'call' && n.operands[0].operands[0]?.memberToken?.start === fieldCall.index + 1);
+        if (analyzed?.parameters) inputs.push(...analyzed.parameters.map(p => ({ name: p.name, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : ''), documentation: p.description })));
+        else if (field?.mode === 'computed') inputs.push(...(field.inferredInputs || []).map(p => ({ name: p.name, detail: typeLabel(p.type), documentation: p.description })));
         else if (field) {
           if (['snapshot', 'scd'].includes(field.mode)) inputs.push({ name: field.metadata.find(c => c.name === 'temporal')?.dimensions[0]?.token.value || 'as_of_date', detail: 'date' });
           for (const call of field.metadata.filter(c => c.name === 'dimension')) {
@@ -276,7 +326,7 @@ class Service {
           }
         }
         const used = new Set([...fieldCall[3].matchAll(/\b([a-z][a-z0-9_]*)\s*=/g)].map(m => m[1]));
-        return { isIncomplete: false, items: inputs.filter(p => !used.has(p.name)).map(p => ({ label: p.name, kind: 5, insertText: p.name + '=', detail: p.detail })) };
+        return { isIncomplete: false, items: inputs.filter(p => !used.has(p.name)).map(p => ({ label: p.name, kind: 5, insertText: p.name + '=', detail: p.detail, documentation: p.documentation })) };
       }
       const call = /@([a-z][a-z0-9_]*)\(([^@{}()]*)$/.exec(before);
       if (call && !/\bdecorator\s*$/.test(before.slice(0, call.index)) && /(?:^|,)\s*[a-z_0-9]*$/.test(call[2])) {
@@ -291,7 +341,9 @@ class Service {
           return { isIncomplete: false, items: [...dimensions].map(([label, d]) => ({ label, kind: 5, detail: describe(d) })) };
         }
         const used = new Set([...call[2].matchAll(/\b([a-z][a-z0-9_]*)\s*=/g)].map(m => m[1]));
-        return { isIncomplete: false, items: declaration?.kind === 'decorator' ? declaration.parameters.filter(p => !p.pair && !used.has(p.name.value)).map(p => ({ label: p.name.value, kind: 5, insertText: p.name.value + '=', detail: describe(p) })) : [] };
+        const items = declaration?.kind === 'decorator' ? declaration.parameters.filter(p => !p.pair && !used.has(p.name.value)).map(p => ({ label: p.name.value, kind: 5, insertText: p.name.value + '=', detail: describe(p) })) : [];
+        if (declaration?.kind === 'decorator' && !used.has('description')) items.push({ label: 'description', kind: 5, insertText: 'description=', detail: 'Optional trailing string metadata.' });
+        return { isIncomplete: false, items };
       }
       const decorator = /@[a-z_0-9]*$/.exec(before);
       if (decorator) {
@@ -343,6 +395,11 @@ class Service {
         return { isIncomplete: false, items: [...(owner?.effective || [])].map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
       }
       const items = [...keywords, ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: constants.includes(label) ? 21 : 14, detail: help[label] || 'YAMBL built-in' }));
+      if (computation) {
+        items.push({ label: 'input', kind: 6, detail: 'External input: input.name; omitted input fallback: input.name ?? expression', insertText: 'input.${1:name}', insertTextFormat: 2 });
+        const context = nodes(computation).filter(n => n.environment && n.token.start <= offset && offset <= n.end).sort((a, b) => (a.end - a.token.start) - (b.end - b.token.start))[0];
+        for (const [label, value] of context?.environment || []) items.push({ label, kind: 6, detail: typeLabel(value.type) });
+      }
       for (const [label, decl] of doc.scope) items.push({ label, kind: decl.kind === 'entity' ? 7 : 20, detail: describe(decl) });
       return { isIncomplete: false, items };
     }

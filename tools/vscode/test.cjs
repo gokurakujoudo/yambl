@@ -169,6 +169,17 @@ async function main() {
     expectScope(word, word, ['computed', 'dimension', 'hierarchy', 'fallback_days'].includes(word) ? 'keyword.declaration.yambl' : 'keyword.control.yambl');
   }
   expectScope('case PARTIAL as p -> p.value', 'PARTIAL', 'constant.language.yambl');
+  for (const line of ['h -> h.security', 'case EMPTY -> 0', 'input.day ?? input.as_of_date']) {
+    const operator = line.includes('->') ? '->' : '??';
+    const index = line.indexOf(operator);
+    const token = grammar.tokenizeLine(line, textmate.INITIAL).tokens.find(t => t.startIndex === index);
+    assert.equal(token.endIndex, index + 2, 'multi-character operator must be one token');
+    assert.ok(token.scopes.includes('keyword.operator.yambl'));
+    checks++;
+  }
+  expectScope("value price_source: code<'PriceSources'>", 'price_source', 'variable.other.property.yambl');
+  expectScope("hierarchy price_hierarchy: Hierarchy = 'LocalHierarchy'", 'price_hierarchy', 'variable.other.property.yambl');
+  expectScope('decorator @extra_input_params(*parameter: input_type)', 'input_type', 'support.type.yambl');
   expectScope('self.price::best_available()', '::', 'punctuation.accessor.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'HoldingEntry', 'entity.name.type.yambl');
   for (const type of ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'collection', 'values', 'mapping']) {

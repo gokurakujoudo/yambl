@@ -15,6 +15,11 @@ function argumentType(resolver, syntax, expected) {
   const literalKind = syntax.quoted ? 'STRING' : ['true', 'false'].includes(syntax.name) ? 'BOOLEAN' : /^-?\d+$/.test(syntax.name) ? 'INT' : 'NUMBER';
   const literalTypes = { string: ['STRING'], integer: ['INT'], snowflake_id: ['INT'], float: ['INT', 'NUMBER'], decimal: ['INT', 'NUMBER'], bool: ['BOOLEAN'] };
   if ((syntax.quoted || syntax.literal) && !syntax.args && !syntax.params && !syntax.accesses?.length && !syntax.operations?.length && literalTypes[expected.name]?.includes(literalKind)) actual = { ...expected, exact: actual.exact };
+  if (expected.name === 'date' && actual.name === 'string') {
+    const value = actual.exact;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) > 0 && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value) actual = { ...expected, exact: value };
+    else resolver.issue(syntax, 'date argument requires a valid YYYY-MM-DD string');
+  }
   if (expected.kind === 'reference' && actual.name === 'string') {
     const ids = [...(resolver.symbols.get(expected.key)?.effective || new Map()).values()].filter(f => f.mode === 'id');
     if (ids.length !== 1) resolver.issue(syntax, 'reference argument requires one identifiable ID field');
@@ -36,6 +41,7 @@ function checkParameters(declaration, issue, symbols) {
     const name = formal.name.value;
     declaration.doc.bindings.set(formal.name.start, formal);
     if (!snake(name)) resolver.issue(formal, 'decorator parameter names must use snake_case');
+    if (name === 'description') resolver.issue(formal, 'description is reserved decorator metadata');
     if (seen.has(name)) resolver.issue(formal, `duplicate decorator parameter: ${name}`);
     seen.add(name);
     if ((pairSeen && !formal.pair) || (optionalSeen && !formal.optional)) resolver.issue(formal, 'ordinary parameters precede pairs; optional pairs come last');
@@ -43,10 +49,31 @@ function checkParameters(declaration, issue, symbols) {
     pairSeen ||= formal.pair; optionalSeen ||= formal.optional;
     if (!hasSelf(formal.type)) {
       const expected = resolver.resolve(formal.type);
+      if (expected.name === 'input_type' && !formal.pair) resolver.issue(formal.type, 'input_type is only a decorator pair constraint');
       if (expected.kind === 'collection') resolver.issue(formal.type, 'decorator parameters cannot be collections');
       if (formal.default && !hasSelf(formal.default)) argumentType(resolver, formal.default, expected);
     }
   }
+}
+
+function callArguments(call, declaration, resolver) {
+  const ordinary = declaration.parameters.filter(p => !p.pair);
+  const args = [], supplied = new Set(); let description = null, position = 0, pairSeen = false;
+  for (const [i, argument] of call.arguments.entries()) {
+    const named = argument.mode === 'keyword' && argument.key.value === 'description';
+    const trailing = argument.mode === 'positional' && i === call.arguments.length - 1 && (pairSeen || ordinary.every(p => supplied.has(p.name.value))) && argument.type.quoted && !argument.type.accesses.length && !argument.type.operations?.length && !argument.type.args && !argument.type.params;
+    if (named || trailing) {
+      if (description) resolver.issue(argument, 'duplicate decorator description');
+      if (i !== call.arguments.length - 1) resolver.issue(argument, 'description must be the final decorator argument');
+      description = argument.type;
+    } else {
+      args.push(argument);
+      if (argument.mode === 'keyword') supplied.add(argument.key.value);
+      else if (argument.mode === 'positional' && position < ordinary.length) supplied.add(ordinary[position].name.value);
+      position += Number(argument.mode === 'positional'); pairSeen ||= argument.mode === 'pair';
+    }
+  }
+  return { args, description };
 }
 
 function bindCall(call, node, issue, symbols, values = null) {
@@ -55,12 +82,15 @@ function bindCall(call, node, issue, symbols, values = null) {
   const declaration = doc.scope.get(name);
   if (declaration?.kind !== 'decorator') { actualResolver.issue(call, `unknown decorator: ${name}`); return ''; }
   doc.bindings.set(call.markerToken.start, declaration);
+  const { args, description } = callArguments(call, declaration, actualResolver);
+  const descriptionType = description && argumentType(actualResolver, description, type('string', 'string'));
+  if (descriptionType) values?.set('description', descriptionType);
   if (name === 'dimension') return require('./dimensions.cjs').dimensionCall(call, node, issue, symbols) || '';
   const formalResolver = new Resolver(declaration.doc, issue, symbols, null, false, actualResolver.bindings);
   const ordinary = declaration.parameters.filter(p => !p.pair), pairs = declaration.parameters.filter(p => p.pair);
   const supplied = new Map(), keys = new Set();
   let position = 0, pairPosition = 0, keywordSeen = false, pairSeen = false;
-  for (const argument of call.arguments) {
+  for (const argument of args) {
     let formal;
     if (argument.mode === 'pair') {
       pairSeen = true;
@@ -80,7 +110,7 @@ function bindCall(call, node, issue, symbols, values = null) {
     else if (supplied.has(formal.name.value)) actualResolver.issue(argument, `duplicate decorator argument: ${formal.name.value}`);
     else supplied.set(formal.name.value, argument);
   }
-  const bound = [];
+  const bound = descriptionType ? [['description', '', canonical(descriptionType)]] : [];
   for (const formal of declaration.parameters) {
     const expected = formalResolver.resolve(formal.type), name = formal.name.value;
     if (expected.kind === 'collection') formalResolver.issue(formal.type, 'decorator parameters cannot be collections');
@@ -95,9 +125,14 @@ function bindCall(call, node, issue, symbols, values = null) {
     }
     if (formal.pair) {
       const actual = actualResolver.resolve(argument.type);
-      if (actual.kind === 'collection' || !accepts(expected, actual, symbols)) actualResolver.issue(argument.type, 'incompatible decorator pair type');
+      if (['collection', 'unknown'].includes(actual.kind) || ['attrs', 'dimension_ref', 'input_type'].includes(actual.name) || (expected.name !== 'input_type' && !accepts(expected, actual, symbols))) actualResolver.issue(argument.type, 'incompatible decorator pair type');
       bound.push([name, argument.key.value, canonical(actual)]);
       values?.set(name, actual);
+      if (argument.default) {
+        if (call.name !== 'extra_input_params') actualResolver.issue(argument, 'pair defaults are only supported by extra_input_params');
+        const value = argumentType(actualResolver, argument.default, actual);
+        bound.push(['parameter_default', argument.key.value, canonical(value)]); values?.set('parameter_default', value);
+      }
     } else {
       const actual = argumentType(actualResolver, argument.type, expected);
       bound.push([name, '', canonical(actual)]); values?.set(name, actual);
@@ -182,4 +217,4 @@ function checkDecorators(documents, issue, symbols) {
   }
 }
 
-module.exports = { capture, bindCall, checkDecorators, targetContract, allowsTarget, allowsMultiple };
+module.exports = { capture, bindCall, checkDecorators, targetContract, allowsTarget, allowsMultiple, callArguments };

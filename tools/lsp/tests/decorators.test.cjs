@@ -31,7 +31,7 @@ test('storage decorators complete, navigate and enforce mutually exclusive scala
     assert.match(request('hover', text.indexOf('@') + 1).contents.value, new RegExp('decorator @' + name + '\\(cat: string\\)'));
     assert.match(request('definition', text.indexOf('@') + 1).uri, /builtins\/decorators.yambl$/);
     assert.match(request('definition', text.indexOf('cat=')).uri, /builtins\/decorators.yambl$/);
-    assert.deepEqual(request('completion', text.indexOf('cat=')).items.map(i => i.label), ['cat']);
+    assert.deepEqual(request('completion', text.indexOf('cat=')).items.map(i => i.label), ['cat', 'description']);
   }
 });
 
@@ -72,7 +72,7 @@ test('incomplete decorator calls offer visible names and named value parameters'
   const text = prefix + '@tag() entity A {}';
   service.open.set(uri, { text, version: 2 }); service.refresh();
   const result = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: text.indexOf('@tag()') + 5 } });
-  assert.deepEqual(result.items.map(i => i.insertText), ['text=', 'rank=']);
+  assert.deepEqual(result.items.map(i => i.insertText), ['text=', 'rank=', 'description=']);
 });
 
 test('captured field owners and normalized metadata distinguish valid overrides', () => {
@@ -150,8 +150,8 @@ test('decorator completion filters all definition kinds and attribute categories
     ['value item { @| attr x: string }', [...common, 'value_field']],
     ['value item { @| static attr x: string }', [...common, 'value_field']],
     ['@|', [...common, 'allow_multiple', 'definition', 'flags', 'model', 'targets']],
-    ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'identity', 'overload', 'override', 'setting', 'temporal']],
-    ['entity A {} extend A { @| }', [...common, 'dense', 'sparse', 'dimension', 'overload', 'override', 'setting', 'temporal']],
+    ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'extra_input_params', 'identity', 'overload', 'override', 'setting', 'temporal']],
+    ['entity A {} extend A { @| }', [...common, 'dense', 'sparse', 'dimension', 'extra_input_params', 'overload', 'override', 'setting', 'temporal']],
     ['value item { @|', [...common, 'value_field']],
     ['entity A { @t| # misleading decodes {}\n @title(\'@flags }\') snapshot attr x: string }', [...common.filter(n => n !== 'title'), 'dimension', 'overload', 'override', 'temporal']],
     ['entity A { @tem|poral(day: date) snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],

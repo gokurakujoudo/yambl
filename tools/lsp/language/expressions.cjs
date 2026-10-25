@@ -245,6 +245,7 @@ class Resolver {
 function checkAliases(documents, issue, symbols) {
   for (const doc of documents) for (const declaration of doc.declarations.filter(d => d.kind === 'type_alias')) {
     const bindings = new Map(), resolver = new Resolver(doc, issue, symbols, null, true, bindings);
+    for (const token of doc.tokens) if (declaration.token.start <= token.start && token.end <= declaration.end && token.value === 'input_type') resolver.issue({ token }, 'input_type is only a decorator pair constraint');
     for (const formal of declaration.parameters) {
       const name = formal.token.value;
       if (bindings.has(name) || !/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name)) resolver.issue(formal, `duplicate or invalid type parameter: ${name}`);

@@ -8,6 +8,14 @@ const snake = name => /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name);
 
 function checkComputations(documents, symbols, report) {
   const completed = new Map(), active = new Set();
+  function parameterDeclaration(doc, token, resolvedType) {
+    let declaration = doc.bindings.get(token.start);
+    if (!declaration) {
+      declaration = { kind: 'calculation_binding', name: token, doc, resolvedType };
+      doc.bindings.set(token.start, declaration);
+    }
+    return declaration;
+  }
   function compatible(expected, actual) {
     if (numbers.includes(expected.name) && numbers.includes(actual.name)) return numbers.indexOf(actual.name) <= numbers.indexOf(expected.name);
     if (expected.name === actual.name && expected.args.length && expected.args.length === actual.args.length) return expected.args.every((t, i) => compatible(t, actual.args[i]));
@@ -19,11 +27,23 @@ function checkComputations(documents, symbols, report) {
     if (active.has(field)) { issue(field.calculation.result, `computed field dependency cycle: ${field.name.value}`); return { inputs: new Map() }; }
     active.add(field);
     const checker = new Checker(field.doc, field.owner, issue);
+    for (const call of field.metadata.filter(c => c.name === 'extra_input_params')) {
+      const values = new Map(); require('./decorators.cjs').bindCall(call, field, () => {}, symbols, values);
+      const pair = call.arguments.find(a => a.mode === 'pair'), constraint = values.get('parameter');
+      if (!pair || !constraint) continue;
+      const name = pair.key.value, defaultType = values.get('parameter_default');
+      if (checker.declared.has(name)) issue({ token: pair.key }, `duplicate extra input parameter: ${name}`);
+      const defaultValue = defaultType?.exact == null ? null : { kind: ['integer', 'snowflake_id'].includes(constraint.name) ? 'integer' : ['decimal', 'float'].includes(constraint.name) ? 'decimal' : constraint.name === 'bool' ? 'bool' : 'string', value: defaultType.exact, token: pair.default.token, end: pair.default.token.end, operands: [], arguments: [], cases: [] };
+      const parameter = { name, type: constraint, required: false, default: defaultValue, sites: [pair.key], description: values.get('description')?.exact || '' };
+      checker.addInput(parameter, { token: pair.key }); checker.declared.set(name, parameter);
+      const declaration = { kind: 'calculation_binding', name: pair.key, doc: field.doc, resolvedType: constraint };
+      field.doc.bindings.set(pair.key.start, declaration); parameter.declaration = declaration;
+    }
     const environment = new Map([['self', { type: type(field.owner.name.value, 'reference', { key: field.owner.key }) }]]);
     for (const binding of field.calculation.bindings) {
       if (!snake(binding.name) || environment.has(binding.name) || binding.name === 'input') issue(binding.expression, `duplicate or invalid local binding: ${binding.name}`);
       const value = checker.read(checker.infer(binding.expression, environment), binding.expression);
-      const declaration = { kind: 'calculation_binding', name: binding.token, doc: field.doc, resolvedType: value.type.name };
+      const declaration = { kind: 'calculation_binding', name: binding.token, doc: field.doc, resolvedType: value.type };
       field.doc.bindings.set(binding.token.start, declaration);
       environment.set(binding.name, { ...value, declaration });
     }
@@ -39,11 +59,13 @@ function checkComputations(documents, symbols, report) {
     return checker;
   }
   class Checker {
-    constructor(doc, owner, issue) { Object.assign(this, { doc, owner, issue, inputs: new Map(), dependencies: new Set() }); }
+    constructor(doc, owner, issue) { Object.assign(this, { doc, owner, issue, inputs: new Map(), declared: new Map(), dependencies: new Set() }); }
     addInput(parameter, node) {
       const name = parameter.name;
       if (!snake(name) || ['self', 'input', 'best_effort'].includes(name)) this.issue(node, `invalid or reserved calculation parameter: ${name}`);
       const prior = this.inputs.get(name);
+      const declared = this.declared.get(name);
+      if (declared) parameter = { ...parameter, required: false, default: declared.default || parameter.default };
       if (prior) {
         if (!equal(prior.type, parameter.type) || (prior.default && parameter.default && JSON.stringify(semantic(prior.default)) !== JSON.stringify(semantic(parameter.default)))) this.issue(node, `conflicting inferred parameter: ${name}`);
         parameter = { ...prior, required: prior.required || parameter.required, default: prior.default || parameter.default, sites: [...prior.sites, ...parameter.sites] };
@@ -52,14 +74,16 @@ function checkComputations(documents, symbols, report) {
     }
     bindInput(parameter, expression, environment) {
       let alias = expression, fallback = null;
-      if (expression.kind === 'call' && expression.operands[0].kind === 'member' && expression.operands[0].value === 'default') {
-        alias = expression.operands[0].operands[0];
-        if (expression.arguments.length !== 1 || expression.arguments[0].name) this.issue(expression, 'input.default requires one positional value');
-        else fallback = expression.arguments[0].expression;
-      }
+      if (expression.kind === 'binary' && expression.value === '??') [alias, fallback] = expression.operands;
       if (alias.kind === 'member' && alias.operands[0].kind === 'name' && alias.operands[0].value === 'input') {
+        const declaration = this.declared.get(alias.value)?.declaration;
+        if (declaration) this.doc.bindings.set(alias.memberToken.start, declaration);
         this.addInput({ ...parameter, name: alias.value, default: fallback || parameter.default, sites: [expression.token] }, expression);
-        if (fallback) this.bindInput({ ...parameter, default: null, required: true }, fallback, environment);
+        if (fallback) {
+          const saved = new Map(this.inputs);
+          this.bindInput({ ...parameter, default: null, required: true }, fallback, environment);
+          if (this.declared.get(alias.value)?.default) this.inputs = saved;
+        }
         return;
       }
       const actual = this.read(this.infer(expression, environment), expression).type;
@@ -88,16 +112,20 @@ function checkComputations(documents, symbols, report) {
       if (!['at', 'best_available'].includes(operation)) this.issue(node, 'stored fields support ::at or ::best_available');
       const result = [];
       for (const call of field.metadata) {
-        if (call.name === 'temporal') for (const pair of call.dimensions) result.push({ name: pair.token.value, type: type('date'), required: true, default: null, sites: [node.token] });
+        if (call.name === 'temporal') for (const pair of call.dimensions) result.push({ name: pair.token.value, type: type('date'), required: true, default: null, sites: [node.token], declaration: parameterDeclaration(field.doc, pair.token, type('date')) });
         if (call.name === 'dimension') {
           const dimension = call.dimension || resolveDimension(field.owner, call.arguments[0]?.type.name);
           if (!dimension) continue;
           const best = operation === 'best_available' && Boolean(dimension.hierarchy);
-          result.push({ name: dimension.value.value, type: new Resolver(dimension.doc, report, symbols, dimension.owner).resolve(dimension.type), required: !best, default: null, sites: [node.token] });
-          if (best) result.push({ name: dimension.hierarchy.value, type: type('Hierarchy', 'reference', { key: dimension.doc.scope.get('Hierarchy').key }), required: false, default: dimension.default || null, sites: [node.token] });
+          const valueType = new Resolver(dimension.doc, report, symbols, dimension.owner).resolve(dimension.type);
+          result.push({ name: dimension.value.value, type: valueType, required: !best, default: null, sites: [node.token], declaration: parameterDeclaration(dimension.doc, dimension.value, valueType) });
+          if (best) {
+            const hierarchyType = type('Hierarchy', 'reference', { key: dimension.doc.scope.get('Hierarchy').key });
+            result.push({ name: dimension.hierarchy.value, type: hierarchyType, required: false, default: dimension.default || null, sites: [node.token], declaration: parameterDeclaration(dimension.doc, dimension.hierarchy, hierarchyType) });
+          }
         }
       }
-      if (['snapshot', 'scd'].includes(field.mode) && !field.metadata.some(c => c.name === 'temporal')) result.push({ name: 'as_of_date', type: type('date'), required: true, default: null, sites: [node.token] });
+      if (['snapshot', 'scd'].includes(field.mode) && !field.metadata.some(c => c.name === 'temporal')) result.unshift({ name: 'as_of_date', type: type('date'), required: true, default: null, sites: [node.token] });
       return result;
     }
     read(value, node) {
@@ -105,6 +133,12 @@ function checkComputations(documents, symbols, report) {
       return { type: value.type };
     }
     infer(node, environment) {
+      const value = this.inferNode(node, environment);
+      node.inferred = value;
+      node.environment = new Map(environment);
+      return value;
+    }
+    inferNode(node, environment) {
       if (['string', 'integer', 'decimal', 'bool'].includes(node.kind)) return { type: type(node.kind, node.kind === 'string' ? 'string' : 'value', { exact: node.value }) };
       if (node.kind === 'name') {
         if (environment.has(node.value)) {
@@ -117,6 +151,11 @@ function checkComputations(documents, symbols, report) {
       }
       if (node.kind === 'member') {
         const receiver = node.operands[0], symbol = receiver.kind === 'name' && this.doc.scope.get(receiver.value);
+        if (receiver.kind === 'name' && receiver.value === 'input' && this.inputs.has(node.value)) {
+          const parameter = this.inputs.get(node.value);
+          if (parameter.declaration) this.doc.bindings.set(node.memberToken.start, parameter.declaration);
+          return { type: parameter.type };
+        }
         if (symbol?.kind === 'decodes') {
           const syntax = { token: receiver.token, name: receiver.value, accesses: [{ operator: { value: '.' }, token: node.memberToken }] };
           return { type: new Resolver(this.doc, report, symbols, this.owner).evaluate(syntax).type };
@@ -140,6 +179,14 @@ function checkComputations(documents, symbols, report) {
       }
       if (['call', 'recover'].includes(node.kind)) return this.invoke(node, environment);
       if (['binary', 'unary'].includes(node.kind)) {
+        if (node.value === '??') {
+          const left = node.operands[0];
+          if (left.kind === 'member' && left.operands[0].kind === 'name' && left.operands[0].value === 'input' && this.inputs.has(left.value)) {
+            const parameter = this.inputs.get(left.value);
+            this.bindInput(parameter, node, environment); return { type: parameter.type };
+          }
+          this.issue(node, '?? requires an input.name with an inferred or declared type'); return { type: unknown };
+        }
         const operands = node.operands.map(e => this.read(this.infer(e, environment), e).type);
         if (['and', 'or', 'not'].includes(node.value)) {
           if (operands.some(t => t.name !== 'bool' && t.kind !== 'unknown')) this.issue(node, 'boolean operators require bool operands');
@@ -171,8 +218,10 @@ function checkComputations(documents, symbols, report) {
         const explicit = new Map(node.arguments.map(a => [a.name, a.expression]));
         const substitute = expression => expression.kind === 'member' && expression.operands[0].kind === 'name' && expression.operands[0].value === 'input' ? explicit.get(expression.value) || expression : { ...expression, operands: expression.operands.map(substitute), arguments: expression.arguments.map(a => ({ ...a, expression: substitute(a.expression) })) };
         const parameters = this.parameters(value, method, node).map(p => p.default ? { ...p, default: substitute(p.default) } : p), requirements = new Map(parameters.map(p => [p.name, p])), supplied = new Set();
+        node.parameters = parameters;
         for (const argument of node.arguments) {
           if (!requirements.has(argument.name) || supplied.has(argument.name)) { this.issue(argument.expression, `unknown or duplicate field argument: ${argument.name}`); continue; }
+          if (requirements.get(argument.name).declaration) this.doc.bindings.set(argument.token.start, requirements.get(argument.name).declaration);
           supplied.add(argument.name); this.bindInput(requirements.get(argument.name), argument.expression, environment);
         }
         for (const parameter of parameters) if (!supplied.has(parameter.name)) this.addInput(parameter, node);
@@ -192,7 +241,8 @@ function checkComputations(documents, symbols, report) {
           const local = new Map(environment);
           if (branch.binding) {
             if (JSON.stringify(branch.statuses) !== '["PARTIAL"]' || local.has(branch.binding)) this.issue(branch.expression, 'recovery binding requires a unique PARTIAL case variable');
-            local.set(branch.binding, { type: type('partial', 'value', { args: [value.type] }) });
+            const resolved = type('partial', 'value', { args: [value.type] });
+            local.set(branch.binding, { type: resolved, declaration: parameterDeclaration(this.doc, branch.bindingToken, resolved) });
           }
           const alternative = this.read(this.infer(branch.expression, local), branch.expression);
           if (!compatible(base(value.type), alternative.type)) this.issue(branch.expression, 'incompatible recovery branch result');
@@ -206,7 +256,7 @@ function checkComputations(documents, symbols, report) {
       if (grouped && method !== 'sum_by') this.issue(node, 'grouped values support sum_by');
       const fn = node.arguments[0].expression;
       if (environment.has(fn.value) || !snake(fn.value)) this.issue(fn, 'lambda requires a unique snake_case parameter');
-      const local = new Map(environment); const declaration = { kind: 'calculation_binding', name: fn.token, doc: this.doc, resolvedType: value.type.args.at(-1).name }; this.doc.bindings.set(fn.token.start, declaration); local.set(fn.value, { type: value.type.args.at(-1), declaration });
+      const local = new Map(environment); const declaration = { kind: 'calculation_binding', name: fn.token, doc: this.doc, resolvedType: value.type.args.at(-1) }; this.doc.bindings.set(fn.token.start, declaration); local.set(fn.value, { type: value.type.args.at(-1), declaration });
       const returned = base(this.read(this.infer(fn.operands[0], local), fn.operands[0]).type);
       if (method === 'filter') {
         if (returned.name !== 'bool' && returned.kind !== 'unknown') this.issue(fn, 'filter predicate requires bool');

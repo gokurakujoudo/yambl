@@ -146,3 +146,17 @@ and named arguments complete and navigate to their definitions.
 Decorator calls navigate to declarations and named arguments to formal parameters.
 Override and overload calls retain their field-relationship navigation.
 `::entity` selects a concrete field descriptor's declaring entity.
+
+## Computation editing
+
+Hovers retain entity and collection types for local bindings and lambda parameters.
+Method hovers show the receiver, result type and operation contract. Completion on
+`holdings.` offers sequence methods; completion on `h.` and reference paths offers
+resolved fields. Field uses participate in definition navigation and reference search.
+
+`::at(...)`, `::best_available(...)` and `::value(...)` provide named parameter
+completion and signature help. The editor inserts `name=` and preserves snippets.
+`input.` lists inferred and explicitly declared inputs, their types and defaults.
+`@extra_input_params` supplies optional input declarations and descriptions; `??`
+handles omitted inputs. The former `.default(...)` syntax is no longer supported.
+The formatter preserves multiline lambda bodies and chained recovery calls.

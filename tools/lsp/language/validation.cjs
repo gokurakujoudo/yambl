@@ -115,6 +115,7 @@ function validate(documents) {
   for (const args of pendingTypes) {
     const kind = checkType(...args);
     if (args[1].name === 'dimension_ref') issue(args[0], args[1].token, 'dimension_ref is only valid in decorator metadata');
+    if (args[1].name === 'input_type') issue(args[0], args[1].token, 'input_type is only a decorator pair constraint');
     if (args[2]?.kind === 'value' && kind === 'collection') issue(args[0], args[1].token, 'value fields cannot be collections');
   }
   checkComputations(documents, symbols, issue);
@@ -142,18 +143,19 @@ function formatType(node) {
 }
 
 function describe(target) {
-  if (target.kind === 'calculation_binding') return `${target.name.value}: ${target.resolvedType}`;
+  const { typeLabel } = require('./calculation-tools.cjs');
+  if (target.kind === 'calculation_binding') return `${target.name.value}: ${typeLabel(target.resolvedType)}`;
   if (target.kind === 'decorator_parameter') return `${target.pair ? '*' : ''}${target.name.value}${target.optional ? '?' : ''}: ${formatType(target.type)}${target.default ? ' = ' + formatType(target.default) : ''}`;
   if (target.kind === 'decorator') {
     const targets = target.metadata.filter(a => a.name === 'targets').map(a => `@targets(${a.arguments.map(arg => (arg.mode === 'keyword' ? arg.key.value + '=' : '') + formatType(arg.type)).join(', ')})\n`).join('');
-    return `${targets}${target.metadata.some(a => a.name === 'allow_multiple') ? '@allow_multiple\n' : ''}decorator @${target.name.value}(${target.parameters.map(describe).join(', ')})`;
+    return `${targets}${target.metadata.some(a => a.name === 'allow_multiple') ? '@allow_multiple\n' : ''}decorator @${target.name.value}(${target.parameters.map(describe).join(', ')})\nOptional trailing metadata: description: string`;
   }
   if (target.kind === 'code') return `code ${target.name.value}${target.generated ? ' = ' + (target.name.value === 'None' ? '0' : 'all declared flags') + ' (generated)' : ': ' + stringValue(target.value.value) + ' (' + target.order.value + ')'}`;
   const details = ['title', 'description'].flatMap(name => (target.metadata || []).filter(a => a.name === name && a.value).map(a => `${name}: ${stringValue(a.value.value)}`));
   if (target.kind === 'dimension') return `dimension ${target.name.value} {\n    value ${target.value.value}: ${formatType(target.type)}${target.hierarchy ? '\n    hierarchy ' + target.hierarchy.value + ': Hierarchy' + (target.default ? ' = ' + target.default.token.value : '') : ''}\n}`;
   const mode = ['snapshot', 'scd', 'config', 'static', 'computed'].includes(target.mode) ? target.mode + ' attr' : target.mode;
   const signature = target.kind === 'type_alias' ? `type ${target.name.value}${target.parameters.length ? '<' + target.parameters.map(p => p.token.value + ': ' + formatType(p.type)).join(', ') + '>' : ''} = ${formatType(target.type)}` : target.kind ? `${target.kind} ${target.name.value}` : `${mode} ${target.name.value}: ${formatType(target.type)}`;
-  if (target.calculation) details.push('Inferred parameters:\n' + (target.inferredInputs || []).map(p => `${p.name}: ${p.type.name}${p.default ? ' = ' + (p.default.kind === 'member' ? 'input.' + p.default.value : p.default.token.value) : p.required ? ' (required)' : ' (optional)'}`).concat(['best_effort: bool = false']).join('\n'));
+  if (target.calculation) details.push('Inferred parameters:\n' + (target.inferredInputs || []).map(p => `${p.name}: ${typeLabel(p.type)}${p.default ? ' = ' + (p.default.kind === 'member' ? 'input.' + p.default.value : p.default.token.value) : p.required ? ' (required)' : ' (optional)'}${p.description ? '\n    ' + p.description : ''}`).concat(['best_effort: bool = false']).join('\n'));
   return [(target.kind === 'decodes' && isFlags(target) ? '@flags\n' : '') + signature, ...details].join('\n\n');
 }
 

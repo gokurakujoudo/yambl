@@ -9,7 +9,7 @@
       "end": "^[ \\t]*---[ \\t]*$"
     },
     {
-      "match": "\\b(value|type)\\s+([a-z][a-z0-9_]*)\\b",
+      "match": "\\b(value|type)\\s+([a-z][a-z0-9_]*)\\b(?!\\s*:)",
       "captures": {
         "1": {
           "name": "storage.type.yambl"
@@ -164,7 +164,7 @@
     },
     {
       "name": "support.type.yambl",
-      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|dimension_ref|collection|values|mapping|attrs|alias|exact|type|field_mapping)\\b"
+      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|dimension_ref|input_type|collection|values|mapping|attrs|alias|exact|type|field_mapping)\\b"
     },
     {
       "name": "variable.parameter.yambl",
@@ -185,6 +185,10 @@
     {
       "name": "constant.numeric.yambl",
       "match": "(?<![\\w.])-?(?:0b[01]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b"
+    },
+    {
+      "name": "keyword.operator.yambl",
+      "match": "->|\\?\\?|==|!=|<=|>="
     },
     {
       "name": "keyword.operator.assignment.yambl",

@@ -35,13 +35,14 @@ function resolveDimension(owner, name) {
 }
 
 function dimensionCall(call, field, issue, symbols) {
+  const { args, description } = require('./decorators.cjs').callArguments(call, field.doc.scope.get('dimension'), new Resolver(field.doc, () => {}, symbols, field.owner));
   if (call.arguments.some(a => a.mode === 'pair')) {
     issue(field.doc, call.token, 'inline @dimension is no longer supported; declare dimension name { ... } and use @dimension(name)'); return null;
   }
-  if (call.arguments.length !== 1 || field.kind) {
+  if (args.length !== 1 || field.kind) {
     issue(field.doc, call.token, '@dimension requires one named dimension reference on a field'); return null;
   }
-  const reference = call.arguments[0].type;
+  const reference = args[0].type;
   const dimension = !reference.args && !reference.accesses?.length && !reference.operations?.length && !reference.quoted && resolveDimension(field.owner, reference.name);
   if (!dimension) { issue(field.doc, reference.token, `unknown dimension: ${reference.name}`); return null; }
   field.doc.bindings.set(reference.token.start, dimension);
@@ -53,6 +54,7 @@ function dimensionCall(call, field, issue, symbols) {
   call.dimension = dimension;
   call.dimensions = [{ token: dimension.value, type: dimension.type }, ...(dimension.hierarchy ? [{ token: dimension.hierarchy, type: dimension.hierarchyType }] : [])];
   const bound = [['variation', dimension.value.value, canonical(value)]];
+  if (description) bound.push(['description', '', canonical(resolver.valueType(resolver.evaluate(description)))]);
   if (dimension.hierarchy) bound.push(['selector', dimension.hierarchy.value, canonical(type('Hierarchy', 'reference', { key: dimension.doc.scope.get('Hierarchy').key }))]);
   return JSON.stringify([field.doc.scope.get('dimension').key, bound, semantic(dimension.default), semantic(dimension.fallback)]);
 }

@@ -23,6 +23,26 @@ Type 按现有类型兼容规则检查。每个 `*` 参数只接收一个 pair�
 所有 pair 在普通实参之后；`*selector?: Hierarchy` 可省略，可选 pair 只能在末尾。
 同一次调用的 key 不可重复；temporal 与引用的命名 dimension 参数还须在同一字段内互不重复。
 
+每个 decorator 隐含一个可选 string `description` 元信息，不写入声明的形式参数列表。
+它位于全部显式实参之后，既可写成末尾字符串，也可写成 `description='说明'`。
+已有普通参数先正常绑定，只有剩余的末尾 string 才作为说明。例如
+`@title('标题', '说明')`、`@title(text='标题', '说明')` 与
+`@title('标题', description='说明')` 等价。description 为保留形式参数名，重复说明、
+非 string 说明以及说明后继续传参均报错。
+
+`input_type` 仅用于 decorator pair 的类型约束，接受非集合值类型和实体引用，拒绝
+集合、字段描述、dimension_ref 和 input_type 本身。内置声明为：
+
+```yambl
+@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Computed)
+@allow_multiple
+decorator @extra_input_params(*parameter: input_type)
+```
+
+只有 `@extra_input_params` 的调用 pair 可写默认值，如
+`@extra_input_params(day: date = '2026-01-01', '查询日期')`。
+输入合并与省略回退规则见 [计算字段](computations.md)。
+
 声明总是包含括号。无实参调用可写 `@flags` 或 `@flags()`；格式化保留这种选择，
 也保留位置/命名调用方式。调用中的等号写为 `text='Name'`，声明默认值写为
 `text: string = 'Name'`。声明和调用均不接受尾随逗号。

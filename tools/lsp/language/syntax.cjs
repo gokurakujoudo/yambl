@@ -11,7 +11,7 @@ const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend',
   'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as', 'decorator',
   'computed', 'dimension', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
 const annotations = ['title', 'description', 'temporal', 'dimension', 'sparse', 'dense', 'overload', 'override', 'flags', 'allow_multiple', 'targets'];
-const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'dimension_ref'];
+const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'dimension_ref', 'input_type'];
 const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
 const entities = [];
 const structures = [];
@@ -39,7 +39,7 @@ function parse(text, uri = '') {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, ' ') + masked.slice(end);
   }
   let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|->|==|!=|<=|>=|[{}\[\]()<>,:.=@+*?-]/y;
+  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|::|->|\?\?|==|!=|<=|>=|[{}\[\]()<>,:.=@+*?-]/y;
   while (offset < text.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(masked);
@@ -99,8 +99,9 @@ function parse(text, uri = '') {
           if (is('case')) {
             const token = take(), statuses = [name().value];
             while (is(',')) { take(); statuses.push(name().value); }
-            const binding = is('as') ? (take(), name().value) : '';
-            take('->'); cases.push({ token, statuses, binding, expression: calculation() });
+            const bindingToken = is('as') ? (take(), name()) : null;
+            const binding = bindingToken?.value || '';
+            take('->'); cases.push({ token, statuses, binding, bindingToken, expression: calculation() });
           } else {
             const token = peek(); let key = '';
             if (doc.tokens[index + 1]?.value === '=') { key = name().value; take('='); }
@@ -115,9 +116,9 @@ function parse(text, uri = '') {
           doc.tokens.splice(index, 1, { ...signed, value: '-', end: signed.start + 1, range: range(text, signed.start, signed.start + 1) },
             { ...signed, value: signed.value.slice(1), start: signed.start + 1, range: range(text, signed.start + 1, signed.end) });
         }
-        const precedence = { or: 1, and: 2, '==': 3, '!=': 3, '<': 3, '<=': 3, '>': 3, '>=': 3, '+': 4, '-': 4, '*': 5 }[peek().value];
+        const precedence = { '??': 0.5, or: 1, and: 2, '==': 3, '!=': 3, '<': 3, '<=': 3, '>': 3, '>=': 3, '+': 4, '-': 4, '*': 5 }[peek().value];
         if (!precedence || precedence < minimum) break;
-        const op = take(); node = expressionNode('binary', node.token, op.value, [node, calculation(precedence + 1)]);
+        const op = take(); node = expressionNode('binary', node.token, op.value, [node, calculation(precedence + (op.value === '??' ? 0 : 1))]);
       }
     }
     return node;
@@ -178,7 +179,8 @@ function parse(text, uri = '') {
           key = name(); mode = take().value === '=' ? 'keyword' : 'pair';
         }
         const expression = type();
-        const argument = { token: first, mode, key, type: expression };
+        const defaultValue = mode === 'pair' && is('=') ? (take(), type()) : null;
+        const argument = { token: first, mode, key, type: expression, default: defaultValue };
         node.arguments.push(argument);
         if (mode === 'pair') node.dimensions.push({ token: key, type: expression });
         if (!is(',')) break;
@@ -297,7 +299,22 @@ function parse(text, uri = '') {
 
 function format(doc) {
   if (doc.errors.length) return null;
-  const splitPieces = doc.pieces.flatMap(piece => {
+  const calculationPieces = doc.pieces.flatMap(piece => {
+    if (!piece.calculation || !['let', 'return'].includes(piece.tokens[0].value)) return [piece];
+    const groups = [];
+    for (const token of piece.tokens) {
+      if (!groups.length || groups.at(-1).at(-1).range.end.line !== token.range.start.line) groups.push([]);
+      groups.at(-1).push(token);
+    }
+    let depth = 0;
+    return groups.map(tokens => {
+      let closing = 0; for (const token of tokens) { if (token.value !== ')') break; closing++; }
+      const result = { ...piece, tokens, indent: piece.indent + Math.max(0, depth - closing) };
+      depth += tokens.filter(t => t.value === '(').length - tokens.filter(t => t.value === ')').length;
+      return result;
+    });
+  });
+  const splitPieces = calculationPieces.flatMap(piece => {
     const groups = []; let items = piece.tokens;
     for (const comment of doc.comments) {
       if (piece.indent > 1 && items[0]?.start < comment.start && comment.start < items.at(-1).end) {
@@ -310,7 +327,7 @@ function format(doc) {
   });
   const pieces = splitPieces.map(piece => {
     let text = '', previous = '', priorEquals = false;
-    const keywordEquals = new Set(piece.tokens.filter((t, i) => t.value === '=' && (piece.tokens[0].value === '@' || (piece.calculation && i !== 2 && piece.tokens[0].value === 'let') || (piece.calculation && !['let', 'hierarchy', 'fallback_days'].includes(piece.tokens[0].value))) && /^[A-Za-z_]/.test(piece.tokens[i - 1]?.value)).map(t => t.start));
+    const keywordEquals = new Set(piece.tokens.filter((t, i) => t.value === '=' && ((piece.tokens[0].value === '@' && piece.tokens[i - 2]?.value !== ':') || (piece.calculation && i !== 2 && piece.tokens[0].value === 'let') || (piece.calculation && !['let', 'hierarchy', 'fallback_days'].includes(piece.tokens[0].value))) && /^[A-Za-z_]/.test(piece.tokens[i - 1]?.value)).map(t => t.start));
     for (const token of piece.tokens) {
       const value = token.value;
       const noBefore = piece.calculation ? ['?', '.', '::', ':', ',', ')', ']', '(', '['] : ['?', '.', '::', ':', ',', ')', '>', ']', '(', '[', '<'];
@@ -323,7 +340,8 @@ function format(doc) {
   for (const token of doc.comments) {
     const nearby = doc.pieces.find(p => p.indent === 2 && p.tokens[0].start <= token.start && token.start < p.tokens.at(-1).end);
     const nested = doc.pieces.filter(p => p.indent === 1 && ['{', '}'].includes(p.tokens.at(-1).value) && p.tokens[0].start < token.start).at(-1);
-    const indent = nearby || nested?.tokens.at(-1).value === '{' ? 2 : Number(doc.declarations.some(d => token.start >= d.bodyStart && token.end < d.end));
+    let indent = nearby || nested?.tokens.at(-1).value === '{' ? 2 : Number(doc.declarations.some(d => token.start >= d.bodyStart && token.end < d.end));
+    if (nearby?.calculation && ['let', 'return'].includes(nearby.tokens[0].value)) indent += nearby.tokens.filter(t => t.end <= token.start).reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
     pieces.push({ ...token, text: '# ' + token.value.slice(1).trim(), indent, comment: true });
   }
   pieces.push(...doc.blocks.map(block => ({ ...block, indent: 0 })));

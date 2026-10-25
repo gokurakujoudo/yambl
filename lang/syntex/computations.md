@@ -63,12 +63,37 @@ NO_ENTRY 视为不存在，EMPTY 与 NOT_APPLICABLE 跳过；无候选返回 NO_
 
 未绑定依赖按参数名合并，类型、约束及默认关系须兼容。不同名称保持独立。
 用 `input.name` 引入或重命名外部参数；未知普通名字不是隐式参数。
-`input.price_date.default(input.as_of_date)` 只处理调用时省略参数，不处理 EMPTY 等数据结果。
+`input.price_date ?? input.as_of_date` 只处理调用时省略参数，不处理 EMPTY 等数据结果。
+旧 `.default(...)` 调用已移除。`??` 低于布尔 `or`，按右结合解析；左侧必须是
+已有推导类型或显式声明类型的 `input.name`。右侧按左侧类型检查，仅在输入未提供时求值。
+`0`、`false`、空字符串和显式提供的值都不触发省略回退。数据结果使用 `recover`。
 省略使用独立内部标记，不使用 None。默认依赖图、计算依赖图出现循环时报错。
 所有分支参与静态推导，但运行时只执行实际使用的分支。
 
 常量或内部字段表达式绑定某个依赖后，该依赖不再贡献外部参数。只有全部依赖均已绑定，
 同名参数才从对外签名消失。对子计算的显式绑定只影响该子树。
+
+`@extra_input_params` 在计算字段上显式声明可省略的输入，并可提供默认值和说明：
+
+```yambl
+@extra_input_params(industry_date: date, 'Industry observation date')
+@extra_input_params(price_date: date = '2026-01-01', description='Price observation date')
+computed attr amount: money {
+    return self.price::at(as_of_date=input.price_date ?? input.as_of_date)
+}
+```
+
+每次调用接收一个 pair；可重复声明不同输入，同名声明报错。声明参与类型检查、补全、
+悬停、IR 和生成文档；与自动推导的同名输入合并时，类型与约束必须一致。
+调用者提供的值优先，其次为声明默认值，再次为使用处的 `??`。声明默认值使后备分支
+不再贡献外部参数，但该分支仍接受类型检查。无默认值的显式输入可省略；若使用处也
+没有回退，运行时实际需要它时返回 ERROR，不把省略解释为 EMPTY 或 NO_ENTRY。
+默认值使用现有 decorator 值表达式，不能包含实例读取或非正常结果常量。date 默认值
+使用有效的 `YYYY-MM-DD` 字符串；引用默认值按目标 ID 约束检查，不查询实例是否存在。
+
+格式化保留计算体内已有的换行，不强制将 lambda 或方法链合并成一行。括号内续行
+每层增加四空格，行首闭括号回退一级；lambda 体中的 receiver 与随后单独一行的
+`.recover(...)` 使用同一级缩进。短的字段操作参数列表可以保持同行，去除行末空白。
 
 FMC 的完整案例位于 `core/computations.yambl`：
 
@@ -122,7 +147,7 @@ when 只读取存储 static 字段并作等值 AND；非错误非正常值为不
 
 ## 产物、执行与边界
 
-IR 修订号 3，运行时契约 2，存储布局 5，JSONL 封装格式 1。旧产物须重新生成。
+IR 修订号 4，运行时契约 3，存储布局 5，JSONL 封装格式 1。旧产物须重新生成。
 IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
 生成包只依赖 Python 3.14+ 标准库，执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。
 
