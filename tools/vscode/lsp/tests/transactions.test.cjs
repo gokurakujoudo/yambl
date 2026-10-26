@@ -9,6 +9,7 @@ const { parse, format } = require('../transactions/syntax.cjs');
 const { number } = require('../transactions/writing.cjs');
 const { Service } = require('../service.cjs');
 const cases = require('./transaction-cases.json');
+const typeCases = require('./transaction-type-cases.json');
 
 for (const item of cases) test('shared transaction syntax: ' + item.name, () => {
   const doc = parse(item.text);
@@ -135,4 +136,78 @@ entity A {
   assert.ok(!complete('replace core.A.').includes('core.A.doubled'));
   assert.deepEqual(complete("replace core.A.price scope (source='unfinished"), []);
   assert.deepEqual(complete('# update core.A ('), []);
+});
+
+test('shared runtime/editor type cases use aliases, exact constraints and reference IDs', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-types-'));
+  t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
+  fs.writeFileSync(path.join(root, 'model.yambl'), typeCases.model);
+  const service = new Service(() => {}), uri = 'untitled:type-plan';
+  service.bindModel(uri, root);
+  for (const item of typeCases.cases) {
+    const text = cases[0].text.replace('group first {', `group first {\nupdate ${item.entity} (id, ${item.field}) {\n1, ${item.literal}\n}`);
+    service.open.set(uri, { text, languageId: 'yaplan', version: 1 }); service.refresh();
+    const doc = service.document(uri);
+    assert.equal(doc.diagnostics.length === 0, item.valid, JSON.stringify(item) + ': ' + JSON.stringify(doc.diagnostics));
+    assert.ok(format(doc), 'type errors must not block formatting');
+  }
+});
+
+test('FMC static plan passes model-bound type checks', () => {
+  const root = path.resolve(__dirname, '../../../../../fmc-data-model'), uri = 'untitled:typed-fmc';
+  const service = new Service(() => {});
+  service.open.set(uri, { text: fs.readFileSync(path.join(root, 'examples/demo.yaplan'), 'utf8'), languageId: 'yaplan', version: 1 });
+  service.bindModel(uri, root);
+  assert.deepEqual(service.document(uri).diagnostics, []);
+});
+
+test('operation and scope diagnostics validate final syntax without looking up instances', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-scopes-'));
+  t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
+  fs.writeFileSync(path.join(root, 'model.yambl'), typeCases.model + `
+extend Item {
+    dimension sources { value source: string }
+    @dimension(sources)
+    @temporal(day: date)
+    snapshot attr price: money
+    @temporal(day: date)
+    scd attr rating: string
+    static attr members: collection<Item>
+    computed attr doubled: money { return self.amount::value * 2 }
+}`);
+  const service = new Service(() => {}), uri = 'untitled:scope-plan';
+  service.bindModel(uri, root);
+  const diagnose = operation => {
+    const text = cases[0].text.replace('group first {', 'group first {\n' + operation);
+    service.open.set(uri, { text, languageId: 'yaplan', version: 1 }); service.refresh();
+    return service.document(uri).diagnostics;
+  };
+  for (const operation of [
+    "update core.Item (id, amount) {\n99999999, NO_ENTRY\n}",
+    "replace core.Item.price scope (id=1, source='manual', day in ['2026-01-01', '2026-02-01')) columns (day, value) {\n'2026-01-05', 1.50\n}",
+    "replace core.Item.rating scope (id=1) columns (valid_from, valid_to, value) {\n'2026-01-01', '2026-02-01', 'A'\n}",
+    'replace core.Item.members scope (id=1) columns (value) {\n[2, 3]\n}',
+    'delete core.Item.price scope (id=1)',
+  ]) assert.deepEqual(diagnose(operation), [], operation);
+  for (const [operation, message] of [
+    ['insert missing.Item (id) {\n1\n}', /unknown entity/],
+    ['update core.Item (missing) {\n1\n}', /unknown field/],
+    ['update core.Item (amount) {\n1\n}', /ID column/],
+    ['delete core.Item (id, amount) {\n1, 2\n}', /not writable/],
+    ['update core.Item (id, doubled) {\n1, 2\n}', /not writable/],
+    ['update core.Item (id, members) {\n1, [2]\n}', /scope/],
+    ['update core.Item.amount (id, value) {\n1, 2\n}', /field operations/],
+    ['delete core.Item.id scope (id=1)', /not writable/],
+    ['delete core.Item scope (id=1)', /field target/],
+    ['delete core.Item.price scope (source=1)', /owner ID/],
+    ["delete core.Item.price scope (id=1, day='2026-01-01')", /half-open/],
+    ["delete core.Item.price scope (id=1, day in ['2026-02-01', '2026-01-01'))", /half-open/],
+    ['delete core.Item.price scope (id=1, source=2)', /string literal/],
+    ['delete core.Item.price scope (id=1, unknown=2)', /scope coordinate/],
+    ['replace core.Item.price scope (id=1) columns (value) {\n2\n}', /missing replacement column/],
+    ['replace core.Item.amount scope (id=1) columns (value, extra) {\n2, 3\n}', /unknown replacement column/],
+    ["replace core.Item.members scope (id=1) columns (value) {\n['2']\n}", /integer literal/],
+  ]) assert.ok(diagnose(operation).some(d => message.test(d.message)), operation + ': ' + JSON.stringify(diagnose(operation)));
 });

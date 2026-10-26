@@ -177,6 +177,7 @@ function parse(text, uri = '') {
     if (!(error instanceof DocumentError)) throw error;
     doc.diagnostics.push({ range: range(text, error.token.start, error.token.end), severity: 1, source: 'yambl', message: error.message });
   }
+  doc.syntaxErrors = doc.diagnostics.length;
   return doc;
 }
 
@@ -191,7 +192,7 @@ function join(tokens) {
 }
 
 function format(doc) {
-  if (doc.diagnostics.length || !doc.ast) return null;
+  if (doc.syntaxErrors || !doc.ast) return null;
   const parser = doc.parser, output = []; let pending = [], depth = 0, base = 0, previousLine = 0;
   function flush(comment) {
     if (pending.length || comment !== undefined) {

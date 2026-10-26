@@ -13,6 +13,7 @@ const { Resolver } = require('./language/expressions.cjs');
 const { codeEntries } = require('./language/decodes.cjs');
 const transactions = require('./transactions/syntax.cjs');
 const transactionModels = require('./transactions/model.cjs');
+const transactionValidation = require('./transactions/validation.cjs');
 const isTransaction = (uri, item) => /\.(yaplan|yatran)$/i.test(uri) || ['yaplan', 'yatran'].includes(item?.languageId);
 const { targetContract, allowsTarget, allowsMultiple } = require('./language/decorators.cjs');
 
@@ -197,7 +198,7 @@ class Service {
     for (const [uri, item] of this.open) if (isTransaction(uri, item)) {
       const doc = transactions.parse(item.text, uri), root = this.modelRoots.get(uriKey(uri));
       const catalog = root && catalogs.get(uriKey(pathToFileURL(root).href));
-      if (catalog && !catalog.readError) transactionModels.bind(doc, catalog.symbols);
+      if (catalog && !catalog.readError) { transactionModels.bind(doc, catalog.symbols); transactionValidation.validate(doc); }
       if (catalog?.readError) doc.diagnostics.push({ range: range(doc.text, 0, 0), severity: 1, source: 'yambl', message: `Cannot read bound model: ${catalog.readError.message}` });
       this.documents.set(uri, doc);
     }
