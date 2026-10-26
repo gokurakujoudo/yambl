@@ -94,6 +94,12 @@ Generated packages expose a model-specific data interface, such as `FmcData`.
 `await FmcData.open(config_path)` opens an existing one and restores pending
 transaction exports. Both reject configuration or model mismatches.
 
+Creation rejects an existing target. It prepares and checks the initial data at a
+temporary location in the destination directory, closes its resources, then renames
+it to the configured path. An interruption before that rename leaves the target
+absent; an interruption afterward leaves a complete repository that can be opened.
+An abrupt process exit can leave an unpublished temporary preparation directory.
+
 The `.lclcfg` entry requires `backend: 'sqlite'` or `backend: 'files'` and a
 nonempty `path` string. lclang loads and evaluates the configuration. Relative
 repository paths resolve from the entry configuration's directory.
