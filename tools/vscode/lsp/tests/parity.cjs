@@ -15,7 +15,7 @@ cases.push(files.map(file => fs.readFileSync(file, 'utf8')));
 const modelRoot = require('../language/relationships.cjs').modelRoot;
 cases.push(require('../service.cjs').sources(modelRoot).map(file => fs.readFileSync(file, 'utf8')));
 const python = process.argv[2] || path.join(workspace, 'yambl-compiler/venv/Scripts/python.exe');
-const grammar = fs.readFileSync(path.join(workspace, 'yambl-compiler/src/yambl_compiler/syntax/grammar.lark'), 'utf8');
+const grammar = fs.readFileSync(path.join(workspace, 'yambl-compiler/src/yambl_compiler/grammars/yambl.lark'), 'utf8');
 const vocabulary = require('../language/syntax.cjs');
 for (const name of ['NOT_DEFINED', 'NOT_APPLICABLE', 'EMPTY', 'NO_ENTRY', 'NO_DATA', 'ENTITY_NOT_FOUND', 'ERROR']) {
   for (const text of [
@@ -39,9 +39,9 @@ for (const line of grammar.split('\n')) {
 const source = `
 import json, sys
 from pathlib import Path
-from yambl_compiler.syntax.parser import parse, Diagnostic
-from yambl_compiler.semantics.validation import check
-from yambl_compiler.formatting.formatter import format_document
+from yambl_compiler.languages.yambl.syntax.parser import parse, Diagnostic
+from yambl_compiler.languages.yambl.semantics.validation import check
+from yambl_compiler.languages.yambl.formatting.formatter import format_document
 results = []
 for group in json.load(sys.stdin):
     docs = [parse(text, Path(str(i))) for i, text in enumerate(group)]
