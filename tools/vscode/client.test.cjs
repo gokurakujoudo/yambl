@@ -117,6 +117,11 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     const planPosition = { line: prefix.length - 1, character: prefix.at(-1).length };
     const definition = providers.get('registerDefinitionProvider').provider;
     assert.ok((await definition.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/fund.yambl'));
+    await module.exports.deactivate();
+    subscriptions.splice(0).forEach(s => s.dispose?.());
+    vscode.workspace.textDocuments = [planDoc];
+    await module.exports.activate({ subscriptions, workspaceState: { get: (key, fallback) => saved.get(key) || fallback, update: async (key, value) => saved.set(key, { ...value }) } });
+    assert.ok((await providers.get('registerDefinitionProvider').provider.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/fund.yambl'));
     await commands.get('yambl.clearTransactionModel')();
     assert.equal(saved.get('transactionModelBindings')[planDoc.uri.toString()], undefined);
     assert.equal(await definition.provideDefinition(planDoc, planPosition), null);

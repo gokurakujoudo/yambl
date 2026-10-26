@@ -2,7 +2,7 @@
   "name": "yambl",
   "displayName": "YAMBL",
   "description": "YAMBL highlighting and a self-contained language server.",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "publisher": "gokurakujoudo",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages"],

@@ -211,3 +211,54 @@ extend Item {
     ["replace core.Item.members scope (id=1) columns (value) {\n['2']\n}", /integer literal/],
   ]) assert.ok(diagnose(operation).some(d => message.test(d.message)), operation + ': ' + JSON.stringify(diagnose(operation)));
 });
+
+test('ConfigGroup maps check field categories, payload types and known target trees', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-config-'));
+  t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
+  fs.writeFileSync(path.join(root, 'model.yambl'), typeCases.model + 'extend Item { config attr limit: integer } entity Other { id id: string config attr limit: integer }');
+  const service = new Service(() => {}), uri = 'untitled:config-plan';
+  service.bindModel(uri, root);
+  const diagnose = (field, value) => {
+    const body = `insert builtins.ConfigGroup (config_group_id, priority, entity_type) {\n'g', 1, core.Item\n}\nreplace builtins.ConfigGroup.${field} scope (config_group_id='g') columns (value) {\n${value}\n}`;
+    service.open.set(uri, { text: cases[0].text.replace('group first {', 'group first {\n' + body), languageId: 'yaplan', version: 1 }); service.refresh();
+    return service.document(uri).diagnostics;
+  };
+  for (const [field, value] of [['when', '{core.Item.count: 2}'], ['then_set', "{'core.Item.limit': 3}"], ['when', '{}']]) assert.deepEqual(diagnose(field, value), []);
+  for (const [field, value, error] of [
+    ['when', '{core.Item.limit: 2}', /static fields/],
+    ['then_set', '{core.Item.count: 2}', /config fields/],
+    ['then_set', "{core.Item.limit: '2'}", /integer literal/],
+    ['then_set', '{core.Other.limit: 2}', /inheritance tree/],
+    ['when', '{core.Item.count: 2, core.Item.count: 3}', /unique field names/],
+    ['when', '[]', /mapping object/],
+  ]) assert.ok(diagnose(field, value).some(d => error.test(d.message)), JSON.stringify([field, value, diagnose(field, value)]));
+});
+
+test('sealed transaction images validate their types and navigate field coordinates', t => {
+  const fixture = require('./transaction-image-cases.json');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-images-'));
+  t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
+  fs.writeFileSync(path.join(root, 'model.yambl'), fixture.model);
+  const service = new Service(() => {}), uri = 'untitled:images';
+  service.bindModel(uri, root);
+  for (const item of fixture.cases) {
+    service.open.set(uri, { text: item.text, languageId: 'yatran', version: 1 }); service.refresh();
+    const doc = service.document(uri);
+    assert.equal(doc.syntaxErrors, 0, item.name);
+    if (item.error) assert.ok(doc.diagnostics.some(d => d.message.includes(item.error)), JSON.stringify(doc.diagnostics));
+    else {
+      assert.deepEqual(doc.diagnostics, []);
+      for (const [needle, skip, definition] of [['day in', 0, 'day: date'], ['before core.Item.price', 17, 'price: money'], ['(id, day, value)', 5, 'day: date'], ['(id, day, value)', 10, 'price: money']]) {
+        const lines = item.text.slice(0, item.text.indexOf(needle) + skip).split('\n');
+        const location = service.feature('textDocument/definition', { textDocument: { uri }, position: { line: lines.length - 1, character: lines.at(-1).length } });
+        assert.ok(location, needle);
+        const source = fixture.model.split('\n')[location.range.start.line].slice(location.range.start.character);
+        assert.ok(source.startsWith(definition), source);
+      }
+    }
+    const formatted = format(doc);
+    assert.equal(parse(formatted).ast.digest, doc.ast.digest);
+  }
+});

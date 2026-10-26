@@ -20,6 +20,14 @@ function bind(doc, symbols) {
     site(token, field, token.start + split + 1);
     return { entity: owner, field };
   }
+  function literal(value, key = false) {
+    if (value.kind === 'name' || (key && value.kind === 'string')) {
+      const quoted = value.kind === 'string';
+      target({ ...value.token, text: value.value, start: value.token.start + Number(quoted), end: value.token.end - Number(quoted) });
+    }
+    if (value.kind === 'collection') for (const item of value.items) literal(item);
+    if (value.kind === 'object') for (const [name, item] of value.items) { literal(name, true); literal(item); }
+  }
   const plan = doc.ast?.kind === 'transaction' ? doc.ast.plan : doc.ast;
   for (const group of plan?.groups || []) for (const op of group.operations) {
     const { entity, field } = target(op.target);
@@ -28,13 +36,17 @@ function bind(doc, symbols) {
     for (const column of op.columns) site(column, field ? (column.text === 'value' ? field : rowCoordinates.get(column.text)) : entity.effective.get(column.text));
     const scopeCoordinates = field ? coordinates(entity, field) : entity.effective;
     for (const condition of op.scope) site(condition.name, scopeCoordinates.get(condition.name.text));
+    for (const row of op.rows) for (const value of row) literal(value);
   }
   if (doc.ast?.kind === 'transaction') for (const group of doc.ast.groups) for (const change of group.changes) {
-    const { entity } = target(change.target);
-    for (const condition of change.scope) site(condition.name, entity?.effective.get(condition.name.text));
+    const { entity, field } = target(change.target);
+    const scopeCoordinates = field ? coordinates(entity, field) : entity?.effective;
+    for (const condition of change.scope) site(condition.name, scopeCoordinates?.get(condition.name.text));
     for (const image of [...change.before, ...change.after]) {
       const { entity: owner, field } = target(image.target);
-      for (const column of image.columns) site(column, column.text === 'value' && field ? field : owner?.effective.get(column.text));
+      const rowCoordinates = field ? coordinates(owner, field, true) : owner?.effective;
+      for (const column of image.columns) site(column, column.text === 'value' && field ? field : rowCoordinates?.get(column.text));
+      for (const row of image.rows) for (const value of row) literal(value);
     }
   }
 }

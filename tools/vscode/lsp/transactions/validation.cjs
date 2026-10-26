@@ -70,6 +70,25 @@ function checkValue(expected, value, symbols) {
   return error;
 }
 
+function configMapping(field, value, doc, issue, ownerType) {
+  if (value.kind !== 'object') { issue(value.token, 'expected ConfigGroup mapping object'); return; }
+  const seen = new Set(), category = field.name.value === 'when' ? 'static' : 'config';
+  const fields = new Map();
+  for (const entity of doc.entities.values()) for (const candidate of entity.effective.values()) {
+    const identity = candidate.identity || candidate;
+    if (identity.qualifiedName) fields.set(identity.qualifiedName, identity);
+  }
+  for (const [key, item] of value.items) {
+    if (!['name', 'string'].includes(key.kind) || seen.has(key.value)) { issue(key.token, 'mapping keys must be unique field names'); continue; }
+    seen.add(key.value);
+    const candidate = fields.get(key.value);
+    if (!candidate || candidate.mode !== category) { issue(key.token, `ConfigGroup mapping requires ${category} fields`); continue; }
+    if (ownerType && (candidate.owner.ancestors.at(-1) || candidate.owner).key !== (ownerType.ancestors.at(-1) || ownerType).key) { issue(key.token, 'ConfigGroup field is outside its target inheritance tree'); continue; }
+    const error = checkValue(resolve(candidate, doc.modelSymbols), item, doc.modelSymbols);
+    if (error) issue(item.token, error);
+  }
+}
+
 function validate(doc) {
   if (!doc.ast || doc.syntaxErrors || !doc.entities) return;
   const issue = (token, message) => doc.diagnostics.push({ range: token.range, severity: 1, source: 'yambl', message });
@@ -78,7 +97,31 @@ function validate(doc) {
     const error = checkValue(type, value, doc.modelSymbols); if (error) issue(value.token, error);
   };
   const plan = doc.ast.kind === 'transaction' ? doc.ast.plan : doc.ast;
-  for (const group of plan.groups) for (const op of group.operations) {
+  const operations = plan.groups.flatMap(group => group.operations), configTypes = new Map();
+  for (const op of operations) {
+    if (op.target.text === 'builtins.ConfigGroup') {
+      const owner = op.columns.findIndex(c => c.text === 'config_group_id'), type = op.columns.findIndex(c => c.text === 'entity_type');
+      if (owner >= 0 && type >= 0) for (const row of op.rows) configTypes.set(row[owner].value, doc.entities.get(row[type].value));
+    } else if (op.target.text === 'builtins.ConfigGroup.entity_type') {
+      const owner = op.scope.find(c => c.name.text === 'config_group_id'), type = op.columns.findIndex(c => c.text === 'value');
+      if (owner && type >= 0 && op.rows.length === 1) configTypes.set(owner.value.value, doc.entities.get(op.rows[0][type].value));
+    }
+  }
+  if (doc.ast.kind === 'transaction') for (const group of doc.ast.groups) for (const change of group.changes) {
+    // Images use the same typed row contract as writes; no instance lookup is needed.
+    for (const images of [change.before, change.after]) {
+      const imageTypes = new Map();
+      for (const image of images) if (image.target.text === 'builtins.ConfigGroup.entity_type') {
+        const owner = image.columns.findIndex(c => c.text === 'config_group_id'), value = image.columns.findIndex(c => c.text === 'value');
+        if (owner >= 0 && value >= 0) for (const row of image.rows) imageTypes.set(row[owner].value, doc.entities.get(row[value].value));
+      }
+      for (const image of images) {
+        const entity = doc.entities.has(image.target.text);
+        operations.push({ ...image, kind: entity ? 'insert' : 'replace', scope: entity ? [] : change.scope, configTypes: imageTypes });
+      }
+    }
+  }
+  for (const op of operations) {
     const split = op.target.text.lastIndexOf('.'), entity = doc.entities.get(op.target.text) || doc.entities.get(op.target.text.slice(0, split));
     if (!entity) { issue(op.target, `unknown entity: ${op.target.text}`); continue; }
     const field = doc.entities.has(op.target.text) ? null : entity.effective.get(op.target.text.slice(split + 1));
@@ -127,7 +170,13 @@ function validate(doc) {
     for (const name of rowTypes.keys()) if (!constants.has(name) && !op.columns.some(c => c.text === name)) issue(op.target, `missing replacement column: ${name}`);
     for (const [index, column] of op.columns.entries()) {
       if (!rowTypes.has(column.text)) { issue(column, `unknown replacement column: ${column.text}`); continue; }
-      for (const row of op.rows) check(rowTypes.get(column.text), row[index], column.text === 'value');
+      for (const row of op.rows) {
+        const value = row[index];
+        if (column.text === 'value' && qualified(entity) === 'builtins.ConfigGroup' && ['when', 'then_set'].includes(field.name.value) && !(value.kind === 'name' && states.has(value.value))) {
+          const owner = op.scope.find(c => c.name.text === id.name.value)?.value.value;
+          configMapping(field, value, doc, issue, (op.configTypes || configTypes).get(owner));
+        } else check(rowTypes.get(column.text), value, column.text === 'value');
+      }
     }
   }
 }

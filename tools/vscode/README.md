@@ -14,7 +14,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.21.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.22.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -54,8 +54,9 @@ YAMBL 模型文件支持：
 执行 `YAMBL: Clear Transaction Model Binding` 可清除当前文档的绑定。
 静态诊断检查操作适用性、列名、scope、引用 ID 类型、基础字面量、Decimal 精度、
 日期、字典 code、别名和 exact 约束。实体补丁不能写入 computed、集合或带坐标字段。
-集合及结构值按模型定义检查成员类型；ConfigGroup 动态字段映射和事务 before/after
-镜像的完整类型校验仍待实现。数据实例是否存在及回滚冲突由执行阶段检查。
+集合及结构值按模型定义检查成员类型；ConfigGroup 映射检查字段类别和值类型，
+目标实体类型在文件中明确给出时还检查所属继承树。before/after 镜像使用相同的行类型规则。
+数据实例是否存在、文件之外的配置实例上下文及回滚冲突由执行阶段检查。
 
 语言服务读取未保存的编辑内容，并按最近的 `yambl-root.lclcfg` 查找同仓库文件；
 没有根标记时只检查当前文件。根标记仅用于定位，不执行其配置。打开的不同仓库
