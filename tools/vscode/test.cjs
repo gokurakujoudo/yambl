@@ -20,14 +20,17 @@ async function main() {
   assert.ok(language.extensions.includes('.yambl'));
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, language.configuration), 'utf8'));
   assert.equal(config.comments.lineComment, '#');
-  const grammarFile = path.join(__dirname, manifest.contributes.grammars[0].path);
   const registry = new textmate.Registry({
     onigLib: Promise.resolve({
       createOnigScanner: patterns => new oniguruma.OnigScanner(patterns),
       createOnigString: content => new oniguruma.OnigString(content),
     }),
-    loadGrammar: async scope => scope === 'source.yambl'
-      ? textmate.parseRawGrammar(fs.readFileSync(grammarFile, 'utf8'), grammarFile) : null,
+    loadGrammar: async scope => {
+      const entry = manifest.contributes.grammars.find(item => item.scopeName === scope);
+      if (!entry) return null;
+      const file = path.join(__dirname, entry.path);
+      return textmate.parseRawGrammar(fs.readFileSync(file, 'utf8'), file);
+    },
   });
   const contribution = manifest.contributes.grammars[0];
   const grammar = await registry.loadGrammarWithConfiguration('source.yambl', 1, {
@@ -37,6 +40,24 @@ async function main() {
   assert.ok(grammar);
 
   let checks = 0;
+  for (const id of ['yaplan', 'yatran']) {
+    assert.ok(manifest.contributes.languages.find(item => item.id === id).extensions.includes('.' + id));
+    const transactionGrammar = await registry.loadGrammar('source.' + id);
+    for (const [line, fragment, scope] of [
+      ['replace core.Security.price scope (id=12345678901234567890)', 'replace', 'keyword.control.yaplan'],
+      ['replace core.Security.price scope (id=12345678901234567890)', '12345678901234567890', 'constant.numeric.yaplan'],
+      ["'a#b', EMPTY # preserved", '#b', 'string.quoted.single.yaplan'],
+      ["'a#b', EMPTY # preserved", '# preserved', 'comment.line.number-sign.yaplan'],
+      ['-1.2500e-20, NOT_APPLICABLE', '-1.2500e-20', 'constant.numeric.yaplan'],
+      ['-1.2500e-20, NOT_APPLICABLE', 'NOT_APPLICABLE', 'constant.language.yaplan'],
+      ["'don\\'t'", "\\'", 'constant.character.escape.yaplan'],
+    ]) {
+      const offset = line.indexOf(fragment);
+      const token = transactionGrammar.tokenizeLine(line, textmate.INITIAL).tokens.find(t => t.startIndex <= offset && offset < t.endIndex);
+      assert.ok(token?.scopes.includes(scope), `${id}: ${fragment}: ${JSON.stringify(token)}`);
+      checks++;
+    }
+  }
   function expectBracketMetadata(line, offset, length, balanced, state = textmate.INITIAL) {
     const encoded = grammar.tokenizeLine2(line, state).tokens;
     for (let column = offset; column < offset + length; column++) {

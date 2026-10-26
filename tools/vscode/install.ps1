@@ -13,7 +13,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $stream = [IO.File]::Open($vsixPath, [IO.FileMode]::Create, [IO.FileAccess]::ReadWrite)
 $archive = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Create)
 try {
-    foreach ($file in @('package.json', 'language-configuration.json', 'syntaxes/yambl.tmLanguage.json', 'README.md', 'extension.cjs')) {
+    foreach ($file in @('package.json', 'language-configuration.json', 'transaction-configuration.json', 'syntaxes/yambl.tmLanguage.json', 'syntaxes/yaplan.tmLanguage.json', 'syntaxes/yatran.tmLanguage.json', 'README.md', 'extension.cjs')) {
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
             $archive, (Join-Path $PSScriptRoot $file), "extension/$file"
         ) | Out-Null
@@ -25,6 +25,9 @@ try {
         ) | Out-Null
     }
     $modelsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../lang'))
+    foreach ($relative in @('transactions/syntax.cjs', 'transactions/writing.cjs')) {
+        [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $lspRoot $relative), "extension/lsp/$relative") | Out-Null
+    }
     foreach ($model in Get-ChildItem -LiteralPath $modelsRoot -File -Recurse | Where-Object { $_.Extension -in '.yambl', '.lclcfg', '.json' }) {
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $model.FullName, "extension/lsp/lang/$([IO.Path]::GetRelativePath($modelsRoot, $model.FullName).Replace('\', '/'))") | Out-Null
     }

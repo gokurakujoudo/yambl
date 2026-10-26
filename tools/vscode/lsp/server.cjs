@@ -37,7 +37,7 @@ function receive(message) {
       const prior = service.open.get(params.textDocument.uri);
       if (prior && params.textDocument.version > prior.version) {
         const content = params.contentChanges.at(-1);
-        if (content && !content.range) service.open.set(params.textDocument.uri, { ...params.textDocument, text: content.text });
+        if (content && !content.range) service.open.set(params.textDocument.uri, { ...prior, ...params.textDocument, text: content.text });
         schedule();
       }
       return;

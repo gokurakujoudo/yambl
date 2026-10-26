@@ -26,7 +26,7 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     languages: new Proxy({ createDiagnosticCollection: () => ({ ...disposable(), clear() {}, set() {} }) }, {
       get(target, name) {
         return target[name] || ((selector, provider, ...triggers) => {
-          providers.set(name, { provider, triggers }); return disposable();
+          providers.set(name, { provider, triggers, selector }); return disposable();
         });
       },
     }),
@@ -47,6 +47,7 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     const doc = { languageId: 'yambl', uri: { toString: () => 'untitled:client-test' }, version: 1, getText: () => text };
     const position = { line: 0, character: text.indexOf('::value(') + 8 };
     const completion = providers.get('registerCompletionItemProvider');
+    assert.deepEqual(Array.from(completion.selector, s => s.language), ['yambl', 'yambl', 'yaplan', 'yaplan', 'yatran', 'yatran']);
     assert.ok(completion.triggers.includes(':'));
     const items = await completion.provider.provideCompletionItems(doc, position);
     assert.equal(items.find(i => i.label === 'as_of_date').insertText, 'as_of_date=');
@@ -54,6 +55,12 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     assert.match(signature.signatures[0].label, /as_of_date: date/);
     const localItems = await completion.provider.provideCompletionItems(doc, { line: 0, character: text.indexOf('return') + 7 });
     assert.equal(localItems.find(i => i.label === 'input').insertText.value, 'input.${1:name}');
+    for (const languageId of ['yaplan', 'yatran']) {
+      const entry = require('./lsp/tests/transaction-cases.json').find(c => c.name === (languageId === 'yaplan' ? 'empty plan' : 'sealed transaction'));
+      const document = { languageId, uri: { toString: () => 'untitled:client-' + languageId }, version: 1, getText: () => entry.text };
+      const items = await completion.provider.provideCompletionItems(document, { line: 0, character: 0 });
+      assert.ok(items.some(item => item.label === 'scope'));
+    }
 
     // Drive the shipped client against the real FMC repository and LSP process.
     const filename = path.resolve(__dirname, '../../../fmc-data-model/core/computations.yambl');

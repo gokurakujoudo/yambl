@@ -4,6 +4,7 @@ const vscode = require('vscode');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const lspRoot = path.join(__dirname, 'lsp');
+const languages = ['yambl', 'yaplan', 'yatran'];
 const { encode, Reader } = require(path.join(lspRoot, 'protocol.cjs'));
 let client;
 const asRange = value => new vscode.Range(value.start.line, value.start.character, value.end.line, value.end.character);
@@ -67,9 +68,9 @@ class Client {
     } else if (message.method === 'window/logMessage') this.output.appendLine(message.params.message);
   }
   sync(document) {
-    if (document.languageId !== 'yambl' && path.basename(document.fileName || '') !== 'yambl-root.lclcfg') return;
+    if (!languages.includes(document.languageId) && path.basename(document.fileName || '') !== 'yambl-root.lclcfg') return;
     const uri = document.uri.toString(); const prior = this.versions.get(uri);
-    if (prior === undefined) this.notify('textDocument/didOpen', { textDocument: { uri, languageId: 'yambl', version: document.version, text: document.getText() } });
+    if (prior === undefined) this.notify('textDocument/didOpen', { textDocument: { uri, languageId: document.languageId, version: document.version, text: document.getText() } });
     else if (prior !== document.version) this.notify('textDocument/didChange', { textDocument: { uri, version: document.version }, contentChanges: [{ text: document.getText() }] });
     this.versions.set(uri, document.version);
   }
@@ -89,7 +90,7 @@ async function activate(context) {
   await client.request('initialize', { processId: process.pid, capabilities: { general: { positionEncodings: ['utf-16'] } },
     workspaceFolders: (vscode.workspace.workspaceFolders || []).map(f => ({ uri: f.uri.toString(), name: f.name })) });
   client.notify('initialized', {});
-  const selector = [{ language: 'yambl', scheme: 'file' }, { language: 'yambl', scheme: 'untitled' }];
+  const selector = languages.flatMap(language => [{ language, scheme: 'file' }, { language, scheme: 'untitled' }]);
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument(doc => client.sync(doc)),
     vscode.workspace.onDidChangeTextDocument(event => client.sync(event.document)),
@@ -98,7 +99,7 @@ async function activate(context) {
       if (client.versions.delete(uri)) client.notify('textDocument/didClose', { textDocument: { uri } });
     }),
     vscode.workspace.onDidSaveTextDocument(doc => {
-      if (doc.languageId === 'yambl') client.notify('textDocument/didSave', { textDocument: { uri: doc.uri.toString() } });
+      if (languages.includes(doc.languageId)) client.notify('textDocument/didSave', { textDocument: { uri: doc.uri.toString() } });
     }),
     vscode.languages.registerDocumentFormattingEditProvider(selector, {
       async provideDocumentFormattingEdits(doc, options, token) {
@@ -168,7 +169,7 @@ async function activate(context) {
       },
     }),
   );
-  for (const pattern of ['**/*.yambl', '**/yambl-root.lclcfg']) {
+  for (const pattern of ['**/*.yambl', '**/*.yaplan', '**/*.yatran', '**/yambl-root.lclcfg']) {
     const watcher = vscode.workspace.createFileSystemWatcher(pattern);
     const send = (uri, type) => client.notify('workspace/didChangeWatchedFiles', { changes: [{ uri: uri.toString(), type }] });
     context.subscriptions.push(watcher, watcher.onDidCreate(uri => send(uri, 1)), watcher.onDidChange(uri => send(uri, 2)), watcher.onDidDelete(uri => send(uri, 3)));

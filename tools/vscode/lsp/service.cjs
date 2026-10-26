@@ -11,6 +11,8 @@ const { sources, readPrefix, rootName, configError } = require('./repository.cjs
 const { modelRoot } = require('./language/relationships.cjs');
 const { Resolver } = require('./language/expressions.cjs');
 const { codeEntries } = require('./language/decodes.cjs');
+const transactions = require('./transactions/syntax.cjs');
+const isTransaction = (uri, item) => /\.(yaplan|yatran)$/i.test(uri) || ['yaplan', 'yatran'].includes(item?.languageId);
 const { targetContract, allowsTarget, allowsMultiple } = require('./language/decorators.cjs');
 
 // Use lexer tokens so comments, strings and Markdown cannot invent a surrounding declaration.
@@ -137,6 +139,7 @@ class Service {
     const buffers = new Map([...this.open].map(([uri, item]) => [uriKey(uri), { uri, text: item.text }]));
     const groups = new Map();
     for (const uri of this.open.keys()) {
+      if (isTransaction(uri, this.open.get(uri))) continue;
       const root = rootFor(uri); const identity = root ? uriKey(pathToFileURL(root).href) : uriKey(uri);
       if (!groups.has(identity)) groups.set(identity, { root, uri });
     }
@@ -157,6 +160,7 @@ class Service {
         }
       } catch (error) { readError = error; }
       for (const [openUri, item] of this.open) {
+        if (isTransaction(openUri, item)) continue;
         if (openUri.endsWith('/' + rootName)) continue;
         const openRoot = rootFor(openUri);
         const belongs = root ? openRoot && uriKey(pathToFileURL(openRoot).href) === uriKey(pathToFileURL(root).href) : openUri === uri;
@@ -177,6 +181,7 @@ class Service {
         this.documents.set(doc.uri, doc);
       }
     }
+    for (const [uri, item] of this.open) if (isTransaction(uri, item)) this.documents.set(uri, transactions.parse(item.text, uri));
     const current = new Set(this.documents.keys());
     for (const uri of new Set([...this.published, ...current])) {
       this.notify('textDocument/publishDiagnostics', {
@@ -200,7 +205,7 @@ class Service {
     }
     Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
     const root = rootFor(doc.uri);
-    const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
     validate([...siblings, recovered]);
     onRecovered?.(recovered);
     return recovered.scope;
@@ -218,7 +223,7 @@ class Service {
     Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
     if (recovered.errors.length) return doc;
     const root = rootFor(doc.uri);
-    const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
     validate([...siblings, recovered]);
     return recovered;
   }
@@ -234,6 +239,16 @@ class Service {
   }
   feature(method, params) {
     const doc = this.document(params.textDocument.uri); if (!doc) return null;
+    if (doc.transactionLanguage) {
+      if (method === 'textDocument/formatting') {
+        const newText = transactions.format(doc);
+        return newText === null || newText === doc.text ? [] : [{ range: range(doc.text, 0, doc.text.length), newText }];
+      }
+      if (method === 'textDocument/completion') return { isIncomplete: false, items: transactions.keywords.map(label => ({ label, kind: 14 })) };
+      if (method === 'textDocument/semanticTokens/full') return { data: [] };
+      if (method === 'textDocument/documentSymbol') return (doc.ast?.groups || []).map(g => ({ name: g.name.text, kind: 3, range: g.name.range, selectionRange: g.name.range, children: [] }));
+      return null;
+    }
     if (params.position && doc.blocks.some(b => { const r = range(doc.text, b.start, b.end); return params.position.line >= r.start.line && params.position.line <= r.end.line; })) return null;
     const token = params.position && this.tokenAt(doc, params.position);
     const target = token && doc.bindings.get(token.start);
@@ -404,7 +419,7 @@ class Service {
           const recovered = Object.assign(parse(prefix + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
           if (!recovered.errors.length) {
             const root = rootFor(doc.uri);
-            const siblings = [...this.documents.values()].filter(d => d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+            const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
             validate([...siblings, recovered]); completionDoc = recovered;
           }
         }

@@ -1,0 +1,5 @@
+{
+  "name": "YATRAN",
+  "scopeName": "source.yatran",
+  "patterns": [{ "include": "source.yaplan" }]
+}

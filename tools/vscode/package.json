@@ -7,7 +7,7 @@
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages"],
   "main": "./extension.cjs",
-  "activationEvents": ["onLanguage:yambl"],
+  "activationEvents": ["onLanguage:yambl", "onLanguage:yaplan", "onLanguage:yatran"],
   "extensionKind": ["workspace"],
   "capabilities": { "untrustedWorkspaces": { "supported": true }, "virtualWorkspaces": false },
   "repository": {
@@ -33,7 +33,9 @@
         "aliases": ["YAMBL", "yambl"],
         "extensions": [".yambl"],
         "configuration": "./language-configuration.json"
-      }
+      },
+      { "id": "yaplan", "aliases": ["YAPLAN", "yaplan"], "extensions": [".yaplan"], "configuration": "./transaction-configuration.json" },
+      { "id": "yatran", "aliases": ["YATRAN", "yatran"], "extensions": [".yatran"], "configuration": "./transaction-configuration.json" }
     ],
     "grammars": [
       {
@@ -41,7 +43,9 @@
         "scopeName": "source.yambl",
         "unbalancedBracketScopes": ["keyword.operator"],
         "path": "./syntaxes/yambl.tmLanguage.json"
-      }
+      },
+      { "language": "yaplan", "scopeName": "source.yaplan", "path": "./syntaxes/yaplan.tmLanguage.json" },
+      { "language": "yatran", "scopeName": "source.yatran", "path": "./syntaxes/yatran.tmLanguage.json" }
     ]
   }
 }
