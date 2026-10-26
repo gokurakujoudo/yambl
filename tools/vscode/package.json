@@ -15,6 +15,10 @@
     "url": "https://github.com/gokurakujoudo/yambl.git"
   },
   "contributes": {
+    "commands": [
+      { "command": "yambl.selectTransactionModel", "title": "YAMBL: Select Transaction Model Directory", "enablement": "editorLangId == yaplan || editorLangId == yatran" },
+      { "command": "yambl.clearTransactionModel", "title": "YAMBL: Clear Transaction Model Binding", "enablement": "editorLangId == yaplan || editorLangId == yatran" }
+    ],
     "configurationDefaults": {
       "[yambl]": {
         "editor.semanticHighlighting.enabled": true,

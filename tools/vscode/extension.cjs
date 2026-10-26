@@ -11,6 +11,7 @@ const asRange = value => new vscode.Range(value.start.line, value.start.characte
 
 class Client {
   constructor(context) {
+    this.context = context; this.modelBindings = context.workspaceState.get('transactionModelBindings', {}); this.modelWatchers = new Map();
     this.pending = new Map(); this.versions = new Map(); this.sequence = 0; this.stopping = false;
     this.output = vscode.window.createOutputChannel('YAMBL');
     this.diagnostics = vscode.languages.createDiagnosticCollection('yambl');
@@ -29,6 +30,24 @@ class Client {
       this.fail(new Error(`YAMBL language server exited (${code}). Reload the window to restart it.`));
     });
     context.subscriptions.push(this.output, this.diagnostics, this.semanticChanges, { dispose: () => this.process.kill() });
+  }
+  watchModels() {
+    const roots = new Set(Object.values(this.modelBindings));
+    for (const [root, watcher] of this.modelWatchers) if (!roots.has(root)) { watcher.dispose(); this.modelWatchers.delete(root); }
+    for (const root of roots) if (!this.modelWatchers.has(root)) {
+      const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, '**/*.{yambl,lclcfg}'));
+      const send = uri => this.notify('workspace/didChangeWatchedFiles', { changes: [{ uri: uri.toString(), type: 2 }] });
+      this.context.subscriptions.push(watcher, watcher.onDidCreate(send), watcher.onDidChange(send), watcher.onDidDelete(send));
+      this.modelWatchers.set(root, watcher);
+    }
+  }
+  async bindModel(document, root) {
+    this.sync(document);
+    const uri = document.uri.toString();
+    await this.request('yambl/bindModel', { uri, root });
+    if (root === null) delete this.modelBindings[uri]; else this.modelBindings[uri] = root;
+    await this.context.workspaceState.update('transactionModelBindings', this.modelBindings);
+    this.watchModels();
   }
   fail(error) {
     this.dead = true;
@@ -70,7 +89,10 @@ class Client {
   sync(document) {
     if (!languages.includes(document.languageId) && path.basename(document.fileName || '') !== 'yambl-root.lclcfg') return;
     const uri = document.uri.toString(); const prior = this.versions.get(uri);
-    if (prior === undefined) this.notify('textDocument/didOpen', { textDocument: { uri, languageId: document.languageId, version: document.version, text: document.getText() } });
+    if (prior === undefined) {
+      if (this.modelBindings[uri]) this.notify('yambl/bindModel', { uri, root: this.modelBindings[uri] });
+      this.notify('textDocument/didOpen', { textDocument: { uri, languageId: document.languageId, version: document.version, text: document.getText() } });
+    }
     else if (prior !== document.version) this.notify('textDocument/didChange', { textDocument: { uri, version: document.version }, contentChanges: [{ text: document.getText() }] });
     this.versions.set(uri, document.version);
   }
@@ -90,8 +112,21 @@ async function activate(context) {
   await client.request('initialize', { processId: process.pid, capabilities: { general: { positionEncodings: ['utf-16'] } },
     workspaceFolders: (vscode.workspace.workspaceFolders || []).map(f => ({ uri: f.uri.toString(), name: f.name })) });
   client.notify('initialized', {});
+  client.watchModels();
   const selector = languages.flatMap(language => [{ language, scheme: 'file' }, { language, scheme: 'untitled' }]);
   context.subscriptions.push(
+    vscode.commands.registerCommand('yambl.selectTransactionModel', async () => {
+      const document = vscode.window.activeTextEditor?.document;
+      if (!document || !['yaplan', 'yatran'].includes(document.languageId)) return;
+      const selected = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel: 'Select model directory' });
+      if (!selected?.length) return;
+      try { await client.bindModel(document, selected[0].fsPath); }
+      catch (error) { await vscode.window.showErrorMessage(error.message); }
+    }),
+    vscode.commands.registerCommand('yambl.clearTransactionModel', async () => {
+      const document = vscode.window.activeTextEditor?.document;
+      if (document && ['yaplan', 'yatran'].includes(document.languageId)) await client.bindModel(document, null);
+    }),
     vscode.workspace.onDidOpenTextDocument(doc => client.sync(doc)),
     vscode.workspace.onDidChangeTextDocument(event => client.sync(event.document)),
     vscode.workspace.onDidCloseTextDocument(doc => {

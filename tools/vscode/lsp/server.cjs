@@ -32,6 +32,7 @@ function receive(message) {
       return;
     }
     if (method === 'shutdown') { shutdown = true; clearTimeout(timer); timer = null; send({ id, result: null }); return; }
+    if (method === 'yambl/bindModel') { service.bindModel(params.uri, params.root); if (request) send({ id, result: null }); return; }
     if (method === 'textDocument/didOpen') { service.open.set(params.textDocument.uri, params.textDocument); schedule(); return; }
     if (method === 'textDocument/didChange') {
       const prior = service.open.get(params.textDocument.uri);

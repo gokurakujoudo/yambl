@@ -21,8 +21,8 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1 -PackageOnly
 ```
 
-安装后执行 `Developer: Reload Window`，打开 `.yambl` 文件即可启动语言服务。
-在 VS Code 中可以使用：
+安装后执行 `Developer: Reload Window`，打开 `.yambl`、`.yaplan` 或 `.yatran` 文件即可启动语言服务。
+YAMBL 模型文件支持：
 
 - Problems 面板中的实时语法、类型及引用诊断；未定义的裸字典名称报错，带引号的外部字典不提示。
 - Format Document 格式化当前文档；存在语法错误时不提供修改。
@@ -43,6 +43,16 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 - Ctrl+Click `@overload` 查看其他分支实现，`@override` 跳转最近的父类声明。
 - `self.<字段>` 可引用任意已定义的 `type<...>` 字段，支持跳转及 `self.` 后补全。
 - Outline 查看实体、字段和字典条目；扩展属性显示为 `Entity.field`。
+
+`.yaplan` 和 `.yatran` 支持高亮、语法诊断、关键字补全、分组 Outline 和格式化。
+格式化保留数据行顺序、注释及字面量拼写；事务文件会校验语义完整性摘要。
+
+在事务文件中执行 `YAMBL: Select Transaction Model Directory`，选择包含
+`yambl-root.lclcfg` 的模型源码目录。绑定按文档保存在当前 VS Code 工作区状态中。
+绑定后，Ctrl+Click 可跳转操作目标、字段列和 scope 坐标的定义；字段补全按操作过滤，
+支持继承、extend、维度和时间坐标。模型的未保存修改和绑定切换会重新解析。
+执行 `YAMBL: Clear Transaction Model Binding` 可清除当前文档的绑定。
+事务数据的静态类型校验尚未实现；数据实例是否存在及回滚冲突由执行阶段检查。
 
 语言服务读取未保存的编辑内容，并按最近的 `yambl-root.lclcfg` 查找同仓库文件；
 没有根标记时只检查当前文件。根标记仅用于定位，不执行其配置。打开的不同仓库

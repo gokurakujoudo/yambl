@@ -8,13 +8,15 @@ const vm = require('node:vm');
 const { pathToFileURL, fileURLToPath } = require('node:url');
 
 test('VS Code adapters retain snippets, named insertions and live signature help', async () => {
-  const providers = new Map(), disposable = () => ({ dispose() {} });
+  const providers = new Map(), commands = new Map(), saved = new Map(), disposable = () => ({ dispose() {} });
   class MarkdownString { appendText(value) { this.value = value; return this; } }
   class CompletionItem { constructor(label, kind) { Object.assign(this, { label, kind }); } }
   class SnippetString { constructor(value) { this.value = value; } }
   class Information { constructor(label, documentation) { Object.assign(this, { label, documentation }); } }
   const vscode = {
     MarkdownString, CompletionItem, SnippetString,
+    commands: { registerCommand: (name, handler) => { commands.set(name, handler); return disposable(); } },
+    RelativePattern: class { constructor(base, pattern) { Object.assign(this, { base, pattern }); } },
     SignatureHelp: class {}, SignatureInformation: Information, ParameterInformation: Information,
     Range: class { constructor(...coordinates) { this.coordinates = coordinates; } },
     Location: class { constructor(uri, range) { Object.assign(this, { uri, range }); } },
@@ -42,7 +44,7 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     module, __dirname, process, console, setTimeout, clearTimeout, Buffer,
   });
   try {
-    await module.exports.activate({ subscriptions });
+    await module.exports.activate({ subscriptions, workspaceState: { get: (key, fallback) => saved.get(key) || fallback, update: async (key, value) => saved.set(key, { ...value }) } });
     const text = 'entity E { snapshot attr n: integer computed attr x: integer { return self.n::value() } }';
     const doc = { languageId: 'yambl', uri: { toString: () => 'untitled:client-test' }, version: 1, getText: () => text };
     const position = { line: 0, character: text.indexOf('::value(') + 8 };
@@ -103,6 +105,21 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     const [line, character] = target.range.coordinates;
     const references = await providers.get('registerReferenceProvider').provider.provideReferences(owner, { line, character }, { includeDeclaration: false });
     assert.ok(references.some(r => r.uri === fmc.uri.toString() && r.range.coordinates[0] === use.line && r.range.coordinates[1] === use.character));
+    const root = path.resolve(__dirname, '../../../fmc-data-model');
+    const planText = fs.readFileSync(path.join(root, 'examples/demo.yaplan'), 'utf8');
+    const planDoc = { languageId: 'yaplan', uri: { toString: () => 'untitled:bound-client' }, version: 1, getText: () => planText };
+    vscode.window.activeTextEditor = { document: planDoc };
+    vscode.window.showOpenDialog = async () => [{ fsPath: root }];
+    vscode.window.showErrorMessage = async message => assert.fail(message);
+    await commands.get('yambl.selectTransactionModel')();
+    assert.equal(saved.get('transactionModelBindings')[planDoc.uri.toString()], root);
+    const prefix = planText.slice(0, planText.indexOf('core.Portfolio')).split('\n');
+    const planPosition = { line: prefix.length - 1, character: prefix.at(-1).length };
+    const definition = providers.get('registerDefinitionProvider').provider;
+    assert.ok((await definition.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/fund.yambl'));
+    await commands.get('yambl.clearTransactionModel')();
+    assert.equal(saved.get('transactionModelBindings')[planDoc.uri.toString()], undefined);
+    assert.equal(await definition.provideDefinition(planDoc, planPosition), null);
   } finally {
     await module.exports.deactivate();
     subscriptions.forEach(s => s.dispose?.());

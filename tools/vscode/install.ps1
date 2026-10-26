@@ -25,7 +25,7 @@ try {
         ) | Out-Null
     }
     $modelsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../lang'))
-    foreach ($relative in @('transactions/syntax.cjs', 'transactions/writing.cjs')) {
+    foreach ($relative in @('transactions/syntax.cjs', 'transactions/writing.cjs', 'transactions/model.cjs')) {
         [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $lspRoot $relative), "extension/lsp/$relative") | Out-Null
     }
     foreach ($model in Get-ChildItem -LiteralPath $modelsRoot -File -Recurse | Where-Object { $_.Extension -in '.yambl', '.lclcfg', '.json' }) {

@@ -12,6 +12,7 @@ const { modelRoot } = require('./language/relationships.cjs');
 const { Resolver } = require('./language/expressions.cjs');
 const { codeEntries } = require('./language/decodes.cjs');
 const transactions = require('./transactions/syntax.cjs');
+const transactionModels = require('./transactions/model.cjs');
 const isTransaction = (uri, item) => /\.(yaplan|yatran)$/i.test(uri) || ['yaplan', 'yatran'].includes(item?.languageId);
 const { targetContract, allowsTarget, allowsMultiple } = require('./language/decorators.cjs');
 
@@ -134,12 +135,23 @@ const help = {
 };
 
 class Service {
-  constructor(notify) { this.notify = notify; this.open = new Map(); this.documents = new Map(); this.published = new Set(); }
+  constructor(notify) { this.notify = notify; this.open = new Map(); this.documents = new Map(); this.published = new Set(); this.modelRoots = new Map(); }
+  bindModel(uri, root) {
+    if (root !== null) {
+      if (typeof root !== 'string' || !path.isAbsolute(root) || !fs.statSync(path.join(root, rootName)).isFile()) throw new Error('Select a model directory containing yambl-root.lclcfg');
+      this.modelRoots.set(uriKey(uri), path.resolve(root));
+    } else this.modelRoots.delete(uriKey(uri));
+    this.refresh();
+  }
   refresh() {
     const buffers = new Map([...this.open].map(([uri, item]) => [uriKey(uri), { uri, text: item.text }]));
-    const groups = new Map();
+    const groups = new Map(), catalogs = new Map();
     for (const uri of this.open.keys()) {
-      if (isTransaction(uri, this.open.get(uri))) continue;
+      if (isTransaction(uri, this.open.get(uri))) {
+        const root = this.modelRoots.get(uriKey(uri));
+        if (root) groups.set(uriKey(pathToFileURL(root).href), { root, uri: pathToFileURL(path.join(root, rootName)).href });
+        continue;
+      }
       const root = rootFor(uri); const identity = root ? uriKey(pathToFileURL(root).href) : uriKey(uri);
       if (!groups.has(identity)) groups.set(identity, { root, uri });
     }
@@ -168,7 +180,8 @@ class Service {
       }
       const docs = [...texts.values()].map(item => Object.assign(parse(item.text, item.uri), { prefix, repository: !builtin && root ? uriKey(pathToFileURL(root).href) : '', builtin }));
       for (const doc of docs) if (builtin && doc.namespace !== 'builtins') doc.errors.push({ range: range(doc.text, 0, 0), severity: 1, message: 'built-in models must declare namespace builtins', source: 'yambl' });
-      validate(docs);
+      const symbols = validate(docs);
+      if (root) catalogs.set(uriKey(pathToFileURL(root).href), { symbols, readError });
       if (readError?.uri) {
         const errorDoc = parse('', readError.uri);
         errorDoc.diagnostics = [{ range: { start: { line: readError.line, character: 0 }, end: { line: readError.line, character: 1 } }, severity: 1, message: readError.message, source: 'yambl' }];
@@ -181,7 +194,13 @@ class Service {
         this.documents.set(doc.uri, doc);
       }
     }
-    for (const [uri, item] of this.open) if (isTransaction(uri, item)) this.documents.set(uri, transactions.parse(item.text, uri));
+    for (const [uri, item] of this.open) if (isTransaction(uri, item)) {
+      const doc = transactions.parse(item.text, uri), root = this.modelRoots.get(uriKey(uri));
+      const catalog = root && catalogs.get(uriKey(pathToFileURL(root).href));
+      if (catalog && !catalog.readError) transactionModels.bind(doc, catalog.symbols);
+      if (catalog?.readError) doc.diagnostics.push({ range: range(doc.text, 0, 0), severity: 1, source: 'yambl', message: `Cannot read bound model: ${catalog.readError.message}` });
+      this.documents.set(uri, doc);
+    }
     const current = new Set(this.documents.keys());
     for (const uri of new Set([...this.published, ...current])) {
       this.notify('textDocument/publishDiagnostics', {
@@ -240,11 +259,12 @@ class Service {
   feature(method, params) {
     const doc = this.document(params.textDocument.uri); if (!doc) return null;
     if (doc.transactionLanguage) {
+      if (method === 'textDocument/definition') return transactionModels.definition(doc, params.position);
       if (method === 'textDocument/formatting') {
         const newText = transactions.format(doc);
         return newText === null || newText === doc.text ? [] : [{ range: range(doc.text, 0, doc.text.length), newText }];
       }
-      if (method === 'textDocument/completion') return { isIncomplete: false, items: transactions.keywords.map(label => ({ label, kind: 14 })) };
+      if (method === 'textDocument/completion') return { isIncomplete: false, items: transactionModels.completion(doc, params.position) ?? transactions.keywords.map(label => ({ label, kind: 14 })) };
       if (method === 'textDocument/semanticTokens/full') return { data: [] };
       if (method === 'textDocument/documentSymbol') return (doc.ast?.groups || []).map(g => ({ name: g.name.text, kind: 3, range: g.name.range, selectionRange: g.name.range, children: [] }));
       return null;
