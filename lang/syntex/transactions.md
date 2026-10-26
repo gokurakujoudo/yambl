@@ -87,12 +87,20 @@ identify conflicts without duplicating those payloads.
 
 ## Python document tools
 
-`yambl_compiler.transactions.syntax.parse(text)` returns a typed `Plan` or
-`Transaction`. Invalid documents raise `DocumentError`, which includes one-based
-line and column coordinates. `format_document(text)` in `transactions.formatting`
-validates and formats either document. `dumps(document)` in `transactions.writing`
-validates the serialized document before returning it; `seal(transaction)` fills
-the integrity digest of a newly constructed record.
+`yambl_compiler.languages.yaplan.syntax.parse(text)` returns a typed `Plan`;
+`yambl_compiler.languages.yatran.syntax.parse(text)` returns a verified `Transaction`.
+Both use Lark. Their grammars and shared lexical rules live in `grammars/`.
+`languages.shared.documents.parse(text)` selects the language from the document
+header. Invalid documents raise `languages.shared.syntax.DocumentError`, which
+includes one-based line and column coordinates.
+
+`languages.shared.formatting.format_document(text)` validates and formats either
+document. `transactions.writing.dumps(document)` validates serialized contents
+before returning them; `languages.yatran.writing.seal(transaction)` fills the
+integrity digest of a newly constructed record. These module paths are relative
+to `yambl_compiler`, or to the generated data package when using its copies.
+Generated packages declare both lclang and Lark dependencies, using the versions
+declared by the compiler, and include the data-language grammar files.
 
 ## Configured data operations
 
