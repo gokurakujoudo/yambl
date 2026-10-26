@@ -31,6 +31,16 @@ test('exact numeric canonicalization never passes payloads through Number', () =
   ]) assert.equal(number(input), expected);
 });
 
+test('oversized transaction numeric expansion reports a diagnostic without stopping parsing', () => {
+  const original = cases.find(item => !item.invalid && item.text.startsWith('transaction')).text;
+  const oversized = original.replace('1.25', '1e999999999999999999');
+  assert.notEqual(oversized, original);
+  const doc = parse(oversized);
+  assert.match(doc.diagnostics[0].message, /numeric representation exceeds runtime limits/);
+  assert.equal(format(doc), null);
+  assert.deepEqual(parse(original).diagnostics, []);
+});
+
 test('FMC static plan parses and retains its canonical layout', () => {
   const text = fs.readFileSync(path.resolve(__dirname, '../../../../../fmc-data-model/examples/demo.yaplan'), 'utf8');
   const doc = parse(text);

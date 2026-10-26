@@ -54,6 +54,12 @@ class Parser {
     if (['number', 'name'].includes(token.kind)) {
       this.take();
       if (token.kind === 'number' && /^-?\d+$/.test(token.text) && token.text.replace('-', '').length > 4300) this.fail('invalid numeric literal');
+      if (token.kind === 'number' && /[.eE]/.test(token.text)) {
+        const [, whole, fraction = '', power = '0'] = /^-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(token.text);
+        const exponent = BigInt(power) - BigInt(fraction.length);
+        const digits = (whole + fraction).replace(/^0+/, '') || '0';
+        if (exponent < -1999999999999999997n || exponent + BigInt(digits.length - 1) > 999999999999999999n) this.fail('invalid numeric literal');
+      }
       return { kind: token.kind, value: token.text, token };
     }
     if (['[', '{'].includes(token.text)) {
@@ -140,7 +146,11 @@ class Parser {
     this.take('time'); const time = this.string(); this.line(); let source = '';
     if (this.current.text === 'source') { this.take(); source = this.string(); this.line(); }
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-    if (!uuid.test(id) || (source && !uuid.test(source)) || !time.endsWith('Z') || !Number.isFinite(Date.parse(time))) this.fail('invalid transaction metadata');
+    const parts = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?Z$/.exec(time);
+    const [year, month, day, hour, minute, second] = parts ? parts.slice(1).map(Number) : [];
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (!uuid.test(id) || (source && !uuid.test(source)) || !parts || year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1] || hour > 23 || minute > 59 || second > 59) this.fail('invalid transaction metadata');
     this.take('digest'); const digest = this.digest(), plan = this.plan(), groups = [];
     while (this.current.text !== '}') {
       this.take('group'); const name = this.name();
@@ -174,6 +184,7 @@ function parse(text, uri = '') {
     doc.parser = new Parser(text); doc.tokens = doc.parser.tokens; doc.ast = doc.parser.document();
     if (doc.ast.kind === 'transaction' && semanticDigest(doc.ast) !== doc.ast.digest) throw new DocumentError('transaction integrity digest does not match', doc.tokens[0]);
   } catch (error) {
+    if (error instanceof RangeError) error = new DocumentError('numeric representation exceeds runtime limits', doc.tokens[0]);
     if (!(error instanceof DocumentError)) throw error;
     doc.diagnostics.push({ range: range(text, error.token.start, error.token.end), severity: 1, source: 'yambl', message: error.message });
   }

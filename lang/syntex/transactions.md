@@ -66,6 +66,13 @@ A transaction envelope contains a UUID, version, UTC `time`, integrity `digest`,
 the original `plan` block and result `group` blocks. A rollback also includes the
 source transaction UUID in `source`.
 
+`time` uses `YYYY-MM-DDTHH:MM:SS[.fraction]Z`, with a valid calendar date,
+year 0001–9999, hour 00–23 and minute/second 00–59. Fractional seconds are optional.
+The writer records UTC; offsets and alternative date separators are not accepted.
+Numeric values preserve exact precision within the runtime's integer and Decimal
+limits. If expanding a number for an integrity digest exceeds runtime resources,
+the document is rejected with a diagnostic.
+
 Each result group contains `change` blocks and any `warning` strings. A change
 names its target and resolved `scope`, followed by `before` and `after` images.
 Each image uses a qualified business target, a column list and one record per
