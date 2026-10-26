@@ -1,9 +1,11 @@
-# 双存储后端与惰性 Python 读取
+# 数据存储技术参考
 
 `yambl generate` 从已校验的 JSON IR 生成 SQLite DDL、`schema.md` 表结构参考、
 `storage-manifest.json`、JSONL 仓库模板和带 `py.typed` 的自包含 Python 包。
 关系图与 Python API 参考一并生成。生成只接受新目录或空目录；
-`--dryrun` 完成校验和渲染，不创建目录。不执行数据库迁移，不提供生产写入 API。
+`--dryrun` 完成校验和渲染，不创建目录。不执行数据库迁移。
+日常初始化、读取、应用及回滚统一通过生成 Data 接口，配置及操作见 [事务参考](transactions.md)。
+本页说明该接口使用的物理存储和读取规则。
 
 ```console
 yambl compile -o path ../fmc-data-model -o output ./build/model.yambl-ir.json
@@ -62,7 +64,7 @@ VALUE 记录存在但无成员表示正常空集合。实体引用不建立强�
 Decimal、整数和相应 ID 使用 TEXT，避免 SQLite 数值精度限制。bool 使用 0/1，
 date 使用 ISO 日期。本地字典代码校验成员身份，外部字典只保存带字典类型的字符串。
 不执行任意正则，不生成 Snowflake ID。数据库保存布局修订号和模型摘要，读取器要求匹配。
-当前布局修订号为 5；IR 为修订号 6，运行时契约为 5。旧产物须重新生成，不提供迁移。
+当前布局和运行时契约修订号均为 6，IR 修订号为 6，文件格式为 2。旧产物须重新生成，不提供迁移。
 内部元数据表为 `tb_yambl_metadata`，也使用统一前缀。
 
 `schema.md` 包含全部表、列、主键、CHECK、外键、索引、逻辑字段映射和各表 DDL。
@@ -166,7 +168,7 @@ description（如有），不推断元信息继承。attr 的点查询和区间�
 | 显式解析的引用目标不存在 | ENTITY_NOT_FOUND |
 | 明确不适用的存储状态 | NOT_APPLICABLE |
 | 参数、读取或单条解码失败 | ERROR |
-| 无满足条件的数据 | NO_DATA 保留；本阶段直接读取不自动产生 |
+| 无满足条件的数据 | NO_DATA 保留；直接读取不自动产生 |
 
 区间结果为 `ReadResult[list[tuple[date, ReadResult[T]]]]`。整体查询失败返回外层 ERROR，
 不返回部分结果；可定位到单条记录的解码问题返回内层 ERROR。
@@ -215,20 +217,28 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 
 ## 自包含包与 JSONL 仓库
 
-生成包只依赖 Python 3.14+ 标准库，携带公共运行时的同源副本、IR 和专用
+生成包要求 Python 3.14+，运行依赖在生成项目的 `pyproject.toml` 中声明，版本约束来自编译器项目。
+包携带公共运行时的同源副本、IR 和专用
 `runtime-contract.json`。运行时核对生成代码固定的契约 SHA-256，严格解码版本与结构；
 契约包含生成阶段已校验的类型、映射、实现、默认值和字典，不在读取时重编译 IR。
-`open_sqlite(path)`、`open_files(path)` 均返回 `ReadResult[Reader]`；`open(path)` 保留为 SQLite 别名。
+业务入口为 `await FmcData.open(config_path)` 和 `await FmcData.create(config_path)`，
+由 `.lclcfg` 选择后端；`data.read()` 返回固定快照。独立读取器的
+`open_sqlite(path)`、`open_files(path)` 是底层快照入口，不负责管理事务仓库。
 
 生成目录的 `repository/` 是 JSONL 空仓库模板，已初始化内置字典。元数据为
-`repository.json`，包括文件格式修订号 1、布局修订号 5、模型摘要和所有表文件的 SHA-256。
+`repository.json`，包括文件格式修订号 2、布局修订号 6、模型摘要和所有表文件的 SHA-256。
 每张表对应 `tables/<表名>.jsonl`，包括空表；每行必须提供完整物理列。
 整数、Decimal、日期及引用 ID 使用精确文本，bool 使用整数 0/1。
 
-打开只检查元数据和文件状态。表首次访问才读取、核对摘要、检查行并建立会话内索引。
-每次新增后端读取前检查全部文件状态，首次读取前后均检查；发现变化后禁止继续补充数据，
-已有字段缓存仍可使用。仓库更新后须重新打开。不支持会话中原地改写。
+文件仓库入口清单指向 `versions/<UUID>/` 中的不可变快照，每个版本包含上述元数据和表文件。
+提交时准备完整新版本，再原子切换入口；旧版本的数据文件在不再需要后清理，历史事务保留。
+统一接口创建读取会话时加载完整快照，已有会话不受后续提交或文件清理影响。
+底层文件读取器逐表加载并核对摘要、行形状和文件状态；该实现细节不改变统一接口的会话语义。
 重复 JSON key、非标准数值、未知列、重复主键、错误状态及载荷组合均拒绝，诊断带文件和行号。
+
+运行时契约修订号为 6。SQLite 布局元数据、文件快照元数据与生成包必须匹配；
+旧版本需要重新生成，不自动迁移。SQLite 的事务记录与业务数据同一原生事务提交，
+文件后端在入口切换前准备 `.yatran`，导出失败由仓库恢复逻辑重新发布。
 
 `schema-relations.puml` 使用 PlantUML 展示全部表及字段，包含 SQL 类型、可空性和主键列顺序。
 连线连接具体字段：实线为实际外键，虚线为逻辑归属或实体引用；复合外键的各列使用同一分组标签。

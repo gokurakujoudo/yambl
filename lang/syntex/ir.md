@@ -167,19 +167,16 @@ decorator 使用绑定结果，忽略 arguments 的位置/命名拼写。JSON �
 [ir.schema.json](ir.schema.json) 使用 Draft 2020-12，随编译器分发且只包含本地引用。
 加载先拒绝重复 key 和非标准数值，再进行 Schema、类型化解码与语义一致性校验。
 Schema 由 IR 数据类型生成；`yambl schema -o output ./build/ir.schema.json` 可导出同一契约。
-修订号 3 加入计算表达式、命名 dimension、推导参数和 PARTIAL；修订号 1、2 的产物需要从源码重新编译。
-
-修订号 4 在 decorator 调用的 Argument 中增加 `default: Expression | null`，保留 pair 默认值。
+当前 IR 修订号为 6，包含计算表达式、命名 dimension、推导参数和 PARTIAL。
+Decorator 调用的 Argument 使用 `default: Expression | null` 保留 pair 默认值。
 隐含 description 仍是有绑定身份的普通元信息；输入说明通过 extra_input_params 的 pair key 关联。
-修订号 5 增加 constant 声明、结构化初始化表达式和声明作用域 references。
+Constant 声明保留结构化初始化表达式和声明作用域 references。
 计算表达式增加 sequence、object 节点；object 的 operands 按 key/value 交替保存。
 全局转换函数使用 call 节点，callee 为已校验的函数名；不保存可执行 Python 或源码片段。
 let 的 annotation 保存显式类型，表达式 annotation 保存推断出的字面量目标类型或结构值接收者类型。
 TypeHint 包含名称、泛型实参、参数约束、成员访问、flags 运算、绑定、目标身份和源码位置。
 独立读取重新检查常量纯度、依赖、类型和求值结果，并核对派生计算信息。
-运行时契约为 5，存储布局仍为 5。此前修订的产物须重新编译。
-
-修订号 6 将 CalculationAccess.operation 限定为 `value` 与 `best_available`。
+CalculationAccess.operation 限定为 `value` 与 `best_available`。
 `value` 同时读取存储字段和计算字段，具体行为由已解析的字段定义决定。
 导出前拒绝隐式末端字段读取与旧 `::at(...)`；中间引用导航仍记录为显式的 value 访问节点。
-加载旧修订号要求重新编译，不自动转换旧计算计划。对应运行时契约为 5；存储布局不变。
+加载旧修订号要求重新编译，不自动转换旧计算计划。运行时契约和存储布局均为 6，文件格式为 2。
