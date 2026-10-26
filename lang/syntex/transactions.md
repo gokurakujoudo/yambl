@@ -111,6 +111,12 @@ count and conflict warnings. `data.export(id)` republishes a committed transacti
 file. Close readers and data interfaces when finished; the data interface also
 supports `with`.
 
+Rollback compares typed values using unordered collection and mapping semantics,
+including collections nested in ConfigGroup mappings. Reordering those values
+does not create a conflict. A conflicting field or scope is skipped with a warning;
+other eligible changes commit together, and the new transaction records both the
+changes and the skipped conflicts.
+
 Generated packages provide the same operations through lclang workflows:
 
 ```sh
