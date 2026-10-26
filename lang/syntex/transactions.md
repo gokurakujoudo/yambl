@@ -86,3 +86,42 @@ line and column coordinates. `format_document(text)` in `transactions.formatting
 validates and formats either document. `dumps(document)` in `transactions.writing`
 validates the serialized document before returning it; `seal(transaction)` fills
 the integrity digest of a newly constructed record.
+
+## Configured data operations
+
+Generated packages expose a model-specific data interface, such as `FmcData`.
+`await FmcData.create(config_path)` initializes a new repository;
+`await FmcData.open(config_path)` opens an existing one and restores pending
+transaction exports. Both reject configuration or model mismatches.
+
+The `.lclcfg` entry requires `backend: 'sqlite'` or `backend: 'files'` and a
+nonempty `path` string. lclang loads and evaluates the configuration. Relative
+repository paths resolve from the entry configuration's directory.
+
+`data.read()` creates a consistent typed reader. `data.apply(plan_path)` commits
+an entire Plan. `data.rollback(transaction_path, groups=None)` reverses all groups
+or the selected names. Both return a transaction ID, managed file path, change
+count and conflict warnings. `data.export(id)` republishes a committed transaction
+file. Close readers and data interfaces when finished; the data interface also
+supports `with`.
+
+Generated packages provide the same operations through lclang workflows:
+
+```sh
+python -m fmc_model create -o config sqlite.lclcfg
+python -m fmc_model apply -o config sqlite.lclcfg -o source demo.yaplan
+python -m fmc_model check-data -o config sqlite.lclcfg
+python -m fmc_model rollback -o config sqlite.lclcfg -o source transaction.yatran -o groups "LCL[['prices']]"
+```
+
+The backend is selected by the repository configuration. CLI overrides follow
+lclang syntax; `LCL[...]` marks an expression, including a list of group names.
+`--dryrun` checks configuration and input syntax without committing, recovering
+exports or cleaning files. It does not validate a candidate write against stored
+data. `check-data --dryrun` performs read-only data validation.
+
+A `publication_pending` result means the data commit succeeded and its `.yatran`
+export needs recovery. Opening the repository or starting another write restores
+the export. Do not reapply the Plan to recover a committed transaction. Skipped
+rollback conflicts are reported as `committed_with_warnings`; the other changes
+in that rollback have committed.
