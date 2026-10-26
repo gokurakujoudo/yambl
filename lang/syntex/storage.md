@@ -240,18 +240,18 @@ SQL、JSONL、manifest、文档及关系图共用存储模型。
 ## 显式实例校验
 
 `reader.validate()` 返回 `ReadResult[ValidationReport]`，报告及问题列表不可变。
-普通打开和取数不会扫描整个仓库。包内命令为：
+统一数据接口通过 `data.read()` 创建固定快照，包内校验命令读取仓库配置：
 
 ```console
-python -m fmc_model check-data --backend sqlite --path example.db
-python -m fmc_model check-data --backend files --path example-repository
+python -m fmc_model check-data -o config repository.lclcfg
 ```
 
-有效数据退出 0，数据违规或读取失败退出 1，用法错误退出 2。读取失败为外层 ERROR。
+配置文件选择后端及路径。有效数据退出 0；数据违规、配置或读取失败返回非零退出码。
 引用环按继承根与逻辑 attr 分别检查，单引用和引用集合均参与，override/overload 共用身份。
 不同 attr 不合并，跨根引用不参与；维度按相同组合、snapshot 按同日、SCD 按共同有效期间检查。
 非正常状态和悬空引用不产生有效环边；不存在目标仍由 resolve 返回 ENTITY_NOT_FOUND。
 每个成环分量给出确定性的一个闭合 ID 路径，并报告字段、维度及日期或期间，不枚举全部环。
 
-FMC 示例初始化器从同一份数据创建 SQLite 或 JSONL，并在结束前显式校验；只接受新目标。
-本阶段仍无生产写入、迁移、SQLite 导出命令或通用查询语言，计算执行范围见 [计算字段](computations.md)，不提供汇率换算或多 Hierarchy 自动组合。
+FMC 示例使用两份配置，通过同一数据接口创建仓库并应用静态 `demo.yaplan`；创建只接受新目标。
+应用和回滚参见 [事务操作](transactions.md)。不提供数据库迁移、SQLite 导出命令或通用查询语言。
+计算执行范围见 [计算字段](computations.md)，不提供汇率换算或多 Hierarchy 自动组合。
