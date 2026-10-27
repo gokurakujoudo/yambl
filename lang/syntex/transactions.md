@@ -6,9 +6,9 @@ without a BOM, LF line endings, four-space indentation and one final newline.
 
 ## Plans
 
-A plan has a name, format version, model semantic digest and named groups.
-Names use ASCII identifiers. Entity and attribute references use fully qualified
-model names. The digest identifies the compiled model used to interpret the data.
+A plan has a name, format version and named groups. An optional model semantic
+digest binds it to a particular compiled model. Names use ASCII identifiers.
+Entity and attribute references use fully qualified model names.
 
 ```text
 plan settings {
@@ -23,10 +23,19 @@ plan settings {
 }
 ```
 
-The digest above is illustrative. Executable plans use their model's actual digest.
+The digest above is illustrative. If supplied, it must match the actual model;
+otherwise the plan is checked against the model selected at execution time.
+Generated Python packages expose the model digest as `MODEL_DIGEST`.
 Group names are unique within a plan. Columns are declared once per operation;
 every data row has exactly that many values and occupies one physical line.
 Nested collection and object literals stay on the same line as their record.
+
+Operations identify entities by ID, including entities inserted earlier in the
+same plan. A logical attribute of the same entity can be changed only once per
+plan, even when operations select disjoint dates or dimensions; values supplied
+in an insert count as changes. Different entities or different attributes may
+be changed independently. Non-ID lookup of an entity inserted or modified earlier
+in a plan is not allowed; the current operation syntax only supports ID selection.
 
 | Operation | Form |
 | --- | --- |
@@ -66,10 +75,9 @@ insert core.Security (security_id, currency) {
     'S1', 'CNY'
     'S2', 'USD'
 }
-replace core.Security.currency expect one scope (security_id='S1') columns (value) {
-    'USD'
+replace core.Security.price scope (security_id='S1') columns (as_of_date, value) {
+    '2026-01-01', 100
 }
-delete core.Security.price expect any scope (security_id='S1')
 ```
 
 ## Data literals
@@ -93,8 +101,9 @@ calls are not data literals.
 ## Transaction records
 
 A transaction envelope contains a UUID, version, UTC `time`, integrity `digest`,
-the original `plan` block and result `group` blocks. A rollback also includes the
-source transaction UUID in `source`.
+the executed `plan` block and result `group` blocks. A rollback also includes the
+source transaction UUID in `source`. The embedded plan always has the actual model
+digest, including when the submitted plan omitted it.
 
 `time` uses `YYYY-MM-DDTHH:MM:SS[.fraction]Z`, with a valid calendar date,
 year 0001–9999, hour 00–23 and minute/second 00–59. Fractional seconds are optional.
@@ -135,21 +144,22 @@ declared by the compiler, and include the data-language grammar files.
 ## Plan validation
 
 `FmcData.validate_plan_syntax(plan_path)` checks the document syntax and structure,
-model digest, entity and writable field names, coordinates, and model-bound literal
-types. It uses the generated package's bundled contract and does not open a business
+an optional model digest, independent write targets, entity and writable field names,
+coordinates, and model-bound literal types. It uses the generated package's bundled contract and does not open a business
 repository. IDs and references are checked for type compatibility, not existence.
 
 `data.validate_plan_expectations(plan_path)` performs the first check, then checks
-explicit `expect one` and `expect any` clauses against one consistent snapshot of
-the current repository. Every expectation sees that same unchanged snapshot;
-earlier Plan operations are not simulated. Neither method writes data, recovers
-exports, or creates a Transaction. Both return the parsed Plan on success and raise
-`ValueError` for invalid contents or failed checks; file I/O errors propagate.
+explicit `expect one` and `expect any` clauses against one consistent repository
+snapshot. It also tracks identities inserted and row coordinates created by earlier
+ID-based writes in the Plan, without building a full candidate. A newly inserted
+entity's static identity row can satisfy an expectation; its temporal field has no
+records until data is written. Neither method writes data, recovers exports, or
+creates a Transaction. Both return the parsed Plan on success and raise `ValueError`
+for invalid contents or failed checks; file I/O errors propagate.
 
 These checks do not reserve data or guarantee a later commit. `apply` still checks
-the actual candidate state, including effects of earlier Plan operations, storage
-constraints and final data validation. A Plan that first inserts a row and then
-expects it to exist can therefore fail snapshot validation and succeed on apply.
+the actual candidate state, storage constraints and final data validation. ID-based
+operations may target an entity inserted earlier in the same plan.
 
 ## Configured data operations
 
@@ -196,8 +206,11 @@ lclang syntax; `LCL[...]` marks an expression, including a list of group names.
 exports or cleaning files. It does not validate a candidate write against stored
 data. `check-data --dryrun` performs read-only data validation.
 
-A `publication_pending` result means the data commit succeeded and its `.yatran`
+A `TransactionStatus.EXPORT_PENDING` (`export_pending`) result means the data commit succeeded and its `.yatran`
 export needs recovery. Opening the repository or starting another write restores
 the export. Do not reapply the Plan to recover a committed transaction. Skipped
-rollback conflicts are reported as `committed_with_warnings`; the other changes
-in that rollback have committed.
+rollback conflicts are reported as `TransactionStatus.CONFLICTS` (`conflicts`);
+the other changes in that rollback have committed. `TransactionStatus.COMMITTED`
+(`committed`) indicates a commit without conflicts. The earlier status spellings
+`publication_pending` and `committed_with_warnings` are replaced by `export_pending`
+and `conflicts`, respectively.

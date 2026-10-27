@@ -14,7 +14,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.25.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.26.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -47,7 +47,8 @@ YAMBL 模型文件支持：
 - Outline 查看实体、字段和字典条目；扩展属性显示为 `Entity.field`。
 
 `.yaplan` 和 `.yatran` 支持高亮、语法诊断、关键字补全、分组 Outline 和格式化。
-格式化保留数据行顺序、注释及字面量拼写；事务文件会校验语义完整性摘要。
+格式化保留数据行顺序、注释及字面量拼写；Plan 可省略模型摘要，事务文件仍须包含
+模型摘要并校验语义完整性摘要。
 
 在事务文件中执行 `YAMBL: Select Transaction Model Directory`，选择包含
 `yambl-root.lclcfg` 的模型源码目录。绑定按文档保存在当前 VS Code 工作区状态中。
@@ -58,6 +59,8 @@ YAMBL 模型文件支持：
 日期、字典 code、别名和 exact 约束。实体补丁不能写入 computed、集合或带坐标字段。
 集合及结构值按模型定义检查成员类型；ConfigGroup 映射检查字段类别和值类型，
 目标实体类型在文件中明确给出时还检查所属继承树。before/after 镜像使用相同的行类型规则。
+Plan 在同一实体的同一逻辑属性上重复写入时会报错；按 ID 插入实体后写入其他属性或
+时态字段仍然允许。
 数据实例是否存在、文件之外的配置实例上下文及回滚冲突由执行阶段检查。
 
 语言服务读取未保存的编辑内容，并按最近的 `yambl-root.lclcfg` 查找同仓库文件；

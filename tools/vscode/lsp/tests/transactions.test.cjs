@@ -77,7 +77,7 @@ test('explicit model bindings navigate inherited and extended fields and track u
     return root;
   });
   const service = new Service(() => {}), uri = 'untitled:bound-plan';
-  const text = cases[0].text.replace('group first {', "group first {\nupdate fmc.core.Child (id, amount, label) {\n'x', 2.5, 'label'\n}\ndelete fmc.core.Child.label scope (id='x')");
+  const text = cases[0].text.replace('group first {', "group first {\nupdate fmc.core.Child (id, amount, label) {\n'x', 2.5, 'label'\n}\ndelete fmc.core.Child.label scope (id='y')");
   service.open.set(uri, { text, languageId: 'yaplan', version: 1 });
   const at = (needle, skip = 0) => {
     const offset = text.indexOf(needle) + skip, lines = text.slice(0, offset).split('\n');
@@ -90,7 +90,7 @@ test('explicit model bindings navigate inherited and extended fields and track u
   assert.ok(definition('amount').uri.endsWith('/first/base.yambl'));
   assert.ok(definition('label').uri.endsWith('/first/extra.yambl'));
   assert.ok(definition('Child.label', 6).uri.endsWith('/first/extra.yambl'));
-  assert.ok(definition("id='x'").uri.endsWith('/first/base.yambl'));
+  assert.ok(definition("id='y'").uri.endsWith('/first/base.yambl'));
   const extraUri = pathToFileURL(path.join(roots[0], 'extra.yambl')).href;
   service.open.set(extraUri, { text: 'namespace core extend Child { static attr renamed: string }', version: 2 }); service.refresh();
   assert.equal(definition('label'), null);
@@ -170,6 +170,30 @@ test('FMC static plan passes model-bound type checks', () => {
   service.open.set(uri, { text: fs.readFileSync(path.join(root, 'examples/demo.yaplan'), 'utf8'), languageId: 'yaplan', version: 1 });
   service.bindModel(uri, root);
   assert.deepEqual(service.document(uri).diagnostics, []);
+});
+
+test('bound plans permit ID-based inserted entities and reject repeated field writes', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-plan-independence-'));
+  t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
+  fs.writeFileSync(path.join(root, 'model.yambl'), 'namespace core entity A { id id: integer static attr name: string static attr count: integer }');
+  const service = new Service(() => {}), uri = 'untitled:independent-plan';
+  service.bindModel(uri, root);
+  function diagnostics(body) {
+    const text = `plan p {\nversion 1\ngroup a {\n${body[0]}\n}\ngroup b {\n${body[1]}\n}\n}\n`;
+    service.open.set(uri, { text, languageId: 'yaplan', version: 1 }); service.refresh();
+    return service.document(uri).diagnostics;
+  }
+  const insert = 'insert core.A (id, name) {\n1, \'first\'\n}';
+  const update = 'update core.A (id, count) {\n1, 2\n}';
+  const first = "replace core.A.name scope (id=1) columns (value) {\n'new'\n}";
+  const second = 'delete core.A.name scope (id=1)';
+  for (const body of [[insert, first], [first, second]]) {
+    assert.ok(diagnostics(body).some(item => /overlapping operations/.test(item.message)), JSON.stringify(body));
+  }
+  assert.deepEqual(diagnostics([insert, update]), []);
+  assert.deepEqual(diagnostics([update, first]), []);
+  assert.deepEqual(diagnostics([insert, update.replace('1, 2', '2, 2')]), []);
 });
 
 test('operation and scope diagnostics validate final syntax without looking up instances', t => {

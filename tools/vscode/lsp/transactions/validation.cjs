@@ -98,6 +98,42 @@ function validate(doc) {
   };
   const plan = doc.ast.kind === 'transaction' ? doc.ast.plan : doc.ast;
   const operations = plan.groups.flatMap(group => group.operations), configTypes = new Map();
+  if (doc.ast.kind === 'plan') {
+    const claims = new Map();
+    const claim = (entity, id, field, token) => {
+      if (!id || !['string', 'number'].includes(id.kind)) return;
+      if (id.kind === 'number' && !/^-?\d+$/.test(id.value)) return;
+      const root = (entity.ancestors.at(-1) || entity).key;
+      const value = id.kind === 'number' ? number(id.value) : id.value;
+      const key = root + '\0' + id.kind + '\0' + value, fields = claims.get(key) || new Set();
+      if (fields.has(field) || fields.has('*') || (field === '*' && fields.size)) {
+        issue(token, `overlapping operations for ${token.text}`);
+      }
+      fields.add(field); claims.set(key, fields);
+    };
+    for (const op of operations) {
+      const split = op.target.text.lastIndexOf('.');
+      const entity = doc.entities.get(op.target.text) || doc.entities.get(op.target.text.slice(0, split));
+      if (!entity) continue;
+      const id = [...entity.effective.values()].find(field => field.mode === 'id');
+      if (!id) continue;
+      if (op.scope.length) {
+        const owner = op.scope.find(condition => condition.name.text === id.name.value && !condition.end);
+        const field = entity.effective.get(op.target.text.slice(split + 1));
+        if (field && owner) claim(entity, owner.value, field.identity || field, op.target);
+      } else {
+        const index = op.columns.findIndex(column => column.text === id.name.value);
+        if (index < 0) continue;
+        for (const row of op.rows) {
+          if (['insert', 'delete'].includes(op.kind)) claim(entity, row[index], op.kind === 'insert' ? '+' : '*', op.target);
+          if (op.kind !== 'delete') for (const column of op.columns) {
+            const field = entity.effective.get(column.text);
+            if (field && field.mode !== 'id') claim(entity, row[index], field.identity || field, op.target);
+          }
+        }
+      }
+    }
+  }
   for (const op of operations) {
     if (op.target.text === 'builtins.ConfigGroup') {
       const owner = op.columns.findIndex(c => c.text === 'config_group_id'), type = op.columns.findIndex(c => c.text === 'entity_type');

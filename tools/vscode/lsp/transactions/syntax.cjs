@@ -134,8 +134,9 @@ class Parser {
   revision() { this.line(); this.take('version'); if (this.current.text !== '1') this.fail('unsupported document version; expected 1'); this.take(); this.line(); }
   digest() { const value = this.string(); if (!/^[0-9a-f]{64}$/.test(value)) this.fail('expected lowercase SHA-256 digest'); this.line(); return value; }
   plan() {
-    this.line(); this.take('plan'); const name = this.name(); this.open(); this.revision(); this.take('model');
-    const model = this.digest(), groups = [];
+    this.line(); this.take('plan'); const name = this.name(); this.open(); this.revision();
+    let model = null; if (this.current.text === 'model') { this.take(); model = this.digest(); }
+    const groups = [];
     while (this.current.text !== '}') {
       this.take('group'); const name = this.name();
       if (groups.some(g => g.name.text === name.text)) this.fail(`duplicate group: ${name.text}`);
@@ -157,6 +158,7 @@ class Parser {
     const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     if (!uuid.test(id) || (source && !uuid.test(source)) || !parts || year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1] || hour > 23 || minute > 59 || second > 59) this.fail('invalid transaction metadata');
     this.take('digest'); const digest = this.digest(), plan = this.plan(), groups = [];
+    if (plan.model === null) this.fail('transaction plan requires a model digest');
     while (this.current.text !== '}') {
       this.take('group'); const name = this.name();
       if (!plan.groups.some(g => g.name.text === name.text) || groups.some(g => g.name.text === name.text)) this.fail('unknown or duplicate transaction group');

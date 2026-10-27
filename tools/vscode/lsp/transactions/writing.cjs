@@ -30,7 +30,8 @@ function rows(header, image, depth) {
 }
 function planLines(plan, depth = 0) {
   const indent = '    '.repeat(depth);
-  const lines = [indent + 'plan ' + plan.name.text + ' {', indent + '    version 1', indent + '    model ' + quote(plan.model)];
+  const lines = [indent + 'plan ' + plan.name.text + ' {', indent + '    version 1'];
+  if (plan.model !== null) lines.push(indent + '    model ' + quote(plan.model));
   for (const group of plan.groups) {
     lines.push(indent + '    group ' + group.name.text + ' {');
     for (const op of group.operations) {
