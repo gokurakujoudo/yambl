@@ -4,7 +4,7 @@
   "patterns": [
     { "name": "string.quoted.single.yaplan", "begin": "'", "end": "'", "patterns": [{ "name": "constant.character.escape.yaplan", "match": "\\\\." }] },
     { "name": "comment.line.number-sign.yaplan", "match": "#.*$" },
-    { "name": "keyword.control.yaplan", "match": "\\b(plan|transaction|version|model|group|insert|update|delete|replace|scope|columns|owned_data|delete_all|in|time|source|digest|change|before|after|warning)\\b" },
+    { "name": "keyword.control.yaplan", "match": "\\b(plan|transaction|version|model|group|insert|update|delete|replace|expect|one|any|scope|columns|owned_data|delete_all|in|time|source|digest|change|before|after|warning)\\b" },
     { "name": "constant.language.yaplan", "match": "\\b(true|false|NO_ENTRY|EMPTY|NOT_APPLICABLE)\\b" },
     { "name": "constant.numeric.yaplan", "match": "(?<![\\w.])-?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?(?![\\w.])" },
     { "name": "entity.name.type.yaplan", "match": "\\b[A-Z][A-Za-z_0-9]*\\b" },

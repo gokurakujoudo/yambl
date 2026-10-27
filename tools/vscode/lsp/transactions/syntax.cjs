@@ -2,7 +2,7 @@
 
 const { range } = require('../language/syntax.cjs');
 const { semanticDigest } = require('./writing.cjs');
-const keywords = ['plan', 'transaction', 'version', 'model', 'group', 'insert', 'update', 'delete', 'replace', 'scope', 'columns', 'owned_data', 'delete_all', 'in', 'time', 'source', 'digest', 'change', 'before', 'after', 'warning', 'true', 'false', 'NO_ENTRY', 'EMPTY', 'NOT_APPLICABLE'];
+const keywords = ['plan', 'transaction', 'version', 'model', 'group', 'insert', 'update', 'delete', 'replace', 'expect', 'one', 'any', 'scope', 'columns', 'owned_data', 'delete_all', 'in', 'time', 'source', 'digest', 'change', 'before', 'after', 'warning', 'true', 'false', 'NO_ENTRY', 'EMPTY', 'NOT_APPLICABLE'];
 const pattern = /(?<space>[ \t]+)|(?<newline>\n)|(?<comment>#[^\n]*)|(?<string>'(?:[^'\\\n]|\\[^\n])*')|(?<number>-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)|(?<name>[A-Za-z_][A-Za-z_0-9]*(?:\.[A-Za-z_][A-Za-z_0-9]*)*)|(?<punct>[{}\[\](),:=])/y;
 
 class DocumentError extends Error {
@@ -112,7 +112,12 @@ class Parser {
   operation() {
     this.line(); const token = this.take(), kind = token.text;
     if (!['insert', 'update', 'delete', 'replace'].includes(kind)) this.fail('expected insert, update, delete or replace');
-    const target = this.name(true); let owned = false, scope = [];
+    const target = this.name(true); let owned = false, scope = [], expect = null;
+    if (this.current.text === 'expect') {
+      if (!['replace', 'delete'].includes(kind)) this.fail('expect is only valid for replace or delete');
+      this.take(); expect = this.take().text;
+      if (!['one', 'any'].includes(expect)) this.fail('expected one or any');
+    }
     if (this.current.text === 'owned_data') {
       if (kind !== 'delete') this.fail('owned_data is only valid for entity deletion');
       this.take(); this.take('delete_all'); owned = true;
@@ -120,11 +125,11 @@ class Parser {
     if (this.current.text === 'scope') {
       if (!['replace', 'delete'].includes(kind) || owned) this.fail('scope requires replace or field delete');
       scope = this.scope();
-      if (kind === 'delete') return { kind, target, scope, columns: [], rows: [], token };
+      if (kind === 'delete') return { kind, target, scope, expect, columns: [], rows: [], token };
       this.take('columns');
     } else if (kind === 'replace') this.fail('replace requires scope');
     const columns = this.columns(), rows = this.rows(columns.length);
-    return { kind, target, scope, owned, columns, rows, token };
+    return { kind, target, scope, expect, owned, columns, rows, token };
   }
   revision() { this.line(); this.take('version'); if (this.current.text !== '1') this.fail('unsupported document version; expected 1'); this.take(); this.line(); }
   digest() { const value = this.string(); if (!/^[0-9a-f]{64}$/.test(value)) this.fail('expected lowercase SHA-256 digest'); this.line(); return value; }

@@ -136,7 +136,7 @@ function validate(doc) {
         const candidate = entity.effective.get(column.text);
         if (!candidate) { issue(column, `unknown field: ${column.text}`); continue; }
         const type = resolve(candidate, doc.modelSymbols);
-        if (candidate.mode !== 'id' && (op.kind === 'delete' || !['static', 'config'].includes(candidate.mode) || candidate.metadata.some(m => m.name === 'dimension') || ['collection', 'values', 'mapping'].includes(type.name))) { issue(column, 'field requires a scope or is not writable'); continue; }
+        if (candidate.mode !== 'id' && (op.kind === 'delete' || !['static', 'config'].includes(candidate.mode) || candidate.metadata.some(m => m.name === 'dimension') || (op.kind !== 'insert' && ['collection', 'values', 'mapping'].includes(type.name)))) { issue(column, 'field requires a scope or is not writable'); continue; }
         for (const row of op.rows) check(type, row[index], candidate.mode !== 'id');
       }
       continue;

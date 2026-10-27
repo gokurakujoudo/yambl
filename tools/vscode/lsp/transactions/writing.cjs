@@ -34,7 +34,7 @@ function planLines(plan, depth = 0) {
   for (const group of plan.groups) {
     lines.push(indent + '    group ' + group.name.text + ' {');
     for (const op of group.operations) {
-      let header = op.kind + ' ' + op.target.text + (op.owned ? ' owned_data delete_all' : '');
+      let header = op.kind + ' ' + op.target.text + (op.expect ? ' expect ' + op.expect : '') + (op.owned ? ' owned_data delete_all' : '');
       if (op.scope.length) {
         header += ' ' + scope(op.scope);
         if (op.kind === 'delete') { lines.push(indent + '        ' + header); continue; }

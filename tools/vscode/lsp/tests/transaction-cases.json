@@ -168,5 +168,45 @@
     "name": "decimal exponent 1e-1999999999999999997",
     "text": "plan daily {\nversion 1\nmodel 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\ngroup first {\ninsert core.A (id) {\n1e-1999999999999999997\n}\n}\n}\n",
     "formatted": "plan daily {\n    version 1\n    model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n    group first {\n        insert core.A (id) {\n            1e-1999999999999999997\n        }\n    }\n}\n"
+  },
+  {
+    "name": "replace A.x expect one scope (id=1) columns (value) {",
+    "text": "plan p {\nversion 1\nmodel 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\ngroup g {\nreplace A.x expect one scope (id=1) columns (value) {\n2\n}\n}\n}\n",
+    "formatted": "plan p {\n    version 1\n    model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n    group g {\n        replace A.x expect one scope (id=1) columns (value) {\n            2\n        }\n    }\n}\n"
+  },
+  {
+    "name": "delete A.x expect any scope (id=1)",
+    "text": "plan p {\nversion 1\nmodel 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\ngroup g {\ndelete A.x expect any scope (id=1)\n}\n}\n",
+    "formatted": "plan p {\n    version 1\n    model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n    group g {\n        delete A.x expect any scope (id=1)\n    }\n}\n"
+  },
+  {
+    "name": "delete A expect one owned_data delete_all (id) {",
+    "text": "plan p {\nversion 1\nmodel 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\ngroup g {\ndelete A expect one owned_data delete_all (id) {\n1\n}\n}\n}\n",
+    "formatted": "plan p {\n    version 1\n    model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n    group g {\n        delete A expect one owned_data delete_all (id) {\n            1\n        }\n    }\n}\n"
+  },
+  {
+    "name": "invalid insert A expect one (id) {",
+    "text": "plan p {\nversion 1\nmodel 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\ngroup g {\ninsert A expect one (id) {\n1\n}\n}\n}\n",
+    "invalid": true
+  },
+  {
+    "name": "invalid update A expect any (id) {",
+    "text": "plan p {\nversion 1\nmodel 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\ngroup g {\nupdate A expect any (id) {\n1\n}\n}\n}\n",
+    "invalid": true
+  },
+  {
+    "name": "invalid delete A.x expect none scope (id=1)",
+    "text": "plan p {\nversion 1\nmodel 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\ngroup g {\ndelete A.x expect none scope (id=1)\n}\n}\n",
+    "invalid": true
+  },
+  {
+    "name": "invalid delete A.x expectone scope (id=1)",
+    "text": "plan p {\nversion 1\nmodel 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\ngroup g {\ndelete A.x expectone scope (id=1)\n}\n}\n",
+    "invalid": true
+  },
+  {
+    "name": "sealed transaction retains expectation in digest",
+    "text": "transaction '12345678-1234-1234-1234-123456789abc' {\n    version 1\n    time '2026-10-27T00:00:00Z'\n    digest 'a9f615b5da87dfe6d61d7b94f01a13680331221a0d7dd6477281cee452280795'\n    plan p {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group g {\n            delete A.x expect any scope (id=1)\n        }\n    }\n    group g {\n    }\n}\n",
+    "formatted": "transaction '12345678-1234-1234-1234-123456789abc' {\n    version 1\n    time '2026-10-27T00:00:00Z'\n    digest 'a9f615b5da87dfe6d61d7b94f01a13680331221a0d7dd6477281cee452280795'\n    plan p {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group g {\n            delete A.x expect any scope (id=1)\n        }\n    }\n    group g {\n    }\n}\n"
   }
 ]

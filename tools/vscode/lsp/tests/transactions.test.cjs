@@ -136,7 +136,7 @@ entity A {
     return service.feature('textDocument/completion', { textDocument: { uri }, position: { line: lines.length - 1, character: lines.at(-1).length } }).items.map(i => i.label);
   }
   assert.deepEqual(complete('update core.A ('), ['id', 'name', 'limit']);
-  assert.deepEqual(complete('insert core.A (id, '), ['name', 'limit']);
+  assert.deepEqual(complete('insert core.A (id, '), ['name', 'limit', 'members']);
   assert.deepEqual(complete('delete core.A ('), ['id']);
   assert.deepEqual(complete('replace core.A.price scope ('), ['id', 'source', 'day']);
   assert.deepEqual(complete('replace core.A.price scope (id=1, '), ['source', 'day']);
@@ -200,6 +200,8 @@ extend Item {
     "replace core.Item.rating scope (id=1) columns (valid_from, valid_to, value) {\n'2026-01-01', '2026-02-01', 'A'\n}",
     'replace core.Item.members scope (id=1) columns (value) {\n[2, 3]\n}',
     'delete core.Item.price scope (id=1)',
+    'insert core.Item (id, members) {\n1, [2, 3]\n4, []\n}',
+    'delete core.Item.price expect any scope (id=1)',
   ]) assert.deepEqual(diagnose(operation), [], operation);
   for (const [operation, message] of [
     ['insert missing.Item (id) {\n1\n}', /unknown entity/],

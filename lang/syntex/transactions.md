@@ -44,6 +44,34 @@ an omitted condition includes all corresponding data for that owner and field.
 Dimension and temporal coordinate names come from the model. A scope has no
 duplicate coordinate names. Replacement rows describe its complete target data.
 
+`replace` and `delete` accept `expect one` or `expect any` immediately after the
+target, before `scope` or `owned_data`. `expect one` requires exactly one existing
+record; `expect any` requires at least one. A mismatch fails the entire Plan before
+commit. Omitting `expect` accepts any match count, including zero. Entity deletion
+skips absent IDs and counts the existing requested entities. Other type and
+owned-data checks still apply.
+
+Field operations count records matched before replacement or deletion, including
+intersecting SCD records before splitting. A collection is one field record;
+its members do not increase the count. Replacement rows are the new contents and
+do not determine the expected count.
+
+An `insert Entity` block accepts multiple instances, one per line. Include the ID
+and supplied non-temporal, non-dimension fields in the same row, including static
+collections. Unspecified fields remain `NO_ENTRY`. Temporal and dimension records
+use separate field operations. For example:
+
+```text
+insert core.Security (security_id, currency) {
+    'S1', 'CNY'
+    'S2', 'USD'
+}
+replace core.Security.currency expect one scope (security_id='S1') columns (value) {
+    'USD'
+}
+delete core.Security.price expect any scope (security_id='S1')
+```
+
 ## Data literals
 
 Strings, booleans, numbers, collections and objects use YAMBL notation:

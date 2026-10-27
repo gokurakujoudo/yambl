@@ -94,7 +94,7 @@ function completion(doc, position) {
   const split = target.lastIndexOf('.'), entity = doc.entities.get(target) || doc.entities.get(target.slice(0, split));
   if (!entity) return [];
   const field = doc.entities.has(target) ? null : entity.effective.get(target.slice(split + 1));
-  const columnList = /(?:^\s*(?:owned_data\s+delete_all\s*)?|\bcolumns\s*)\(([^()]*)$/.exec(tail);
+  const columnList = /(?:^\s*(?:expect\s+(?:one|any)\s*)?(?:owned_data\s+delete_all\s*)?|\bcolumns\s*)\(([^()]*)$/.exec(tail);
   const scopeList = /\bscope\s*\((.*)$/s.exec(tail);
   let choices, used;
   if (columnList) {
@@ -107,7 +107,7 @@ function completion(doc, position) {
       if (candidate.mode === 'id') return true;
       if (kind === 'delete' || !['static', 'config'].includes(candidate.mode) || candidate.metadata.some(m => m.name === 'dimension')) return false;
       const resolved = new Resolver(candidate.doc, () => {}, doc.modelSymbols, candidate.owner, true).resolve(candidate.type);
-      return !['collection', 'values', 'mapping'].includes(resolved.name);
+      return kind === 'insert' || !['collection', 'values', 'mapping'].includes(resolved.name);
     }));
   } else if (scopeList && /(?:^|,)\s*[a-z_0-9]*$/i.test(scopeList[1]) && field) {
     choices = coordinates(entity, field);
