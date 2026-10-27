@@ -157,9 +157,11 @@ records until data is written. Neither method writes data, recovers exports, or
 creates a Transaction. Both return the parsed Plan on success and raise `ValueError`
 for invalid contents or failed checks; file I/O errors propagate.
 
-These checks do not reserve data or guarantee a later commit. `apply` still checks
-the actual candidate state, storage constraints and final data validation. ID-based
-operations may target an entity inserted earlier in the same plan.
+These checks do not reserve data or guarantee a later commit. `apply` checks the
+changed candidate rows, ownership, SCD intervals, configuration and affected
+reference cycles. It assumes unchanged stored data was already valid; use
+`check-data` for a full repository scan. ID-based operations may target an entity
+inserted earlier in the same plan.
 
 ## Configured data operations
 
@@ -205,6 +207,16 @@ lclang syntax; `LCL[...]` marks an expression, including a list of group names.
 `--dryrun` checks configuration and input syntax without committing, recovering
 exports or cleaning files. It does not validate a candidate write against stored
 data. `check-data --dryrun` performs read-only data validation.
+
+Apply and rollback use a pinned snapshot and an interprocess lock shared by
+generated interfaces. SQLite updates the affected rows and transaction record in
+one native transaction. The file backend streams changed tables to a new immutable
+generation and reuses unchanged files with hard links. The local filesystem and
+process must support hard links; publication fails before the generation switch
+when they cannot be created. External writers do not participate in the
+lock and can change hard-linked files shared by multiple generations. The first
+indexed access validates the full file table, and publishing a changed table streams
+the full table. Recovery tests cover process interruption, not power loss.
 
 A `TransactionStatus.EXPORT_PENDING` (`export_pending`) result means the data commit succeeded and its `.yatran`
 export needs recovery. Opening the repository or starting another write restores

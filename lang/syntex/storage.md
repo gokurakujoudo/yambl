@@ -267,6 +267,9 @@ python -m fmc_model check-data -o config repository.lclcfg
 ```
 
 配置文件选择后端及路径。有效数据退出 0；数据违规、配置或读取失败返回非零退出码。
+完整检查扫描所有表，覆盖物理行、集合归属、SCD 区间重叠、ConfigGroup 定义及映射载荷，
+并检查同字段引用环。apply 和 rollback 增量检查改动及受影响关系，假设未修改数据原本有效；
+不确定已有数据是否有效时运行 `check-data`。绕过生成接口的外部写入不参与锁和增量校验。
 引用环按继承根与逻辑 attr 分别检查，单引用和引用集合均参与，override/overload 共用身份。
 不同 attr 不合并，跨根引用不参与；维度按相同组合、snapshot 按同日、SCD 按共同有效期间检查。
 非正常状态和悬空引用不产生有效环边；不存在目标仍由 resolve 返回 ENTITY_NOT_FOUND。
