@@ -132,6 +132,25 @@ to `yambl_compiler`, or to the generated data package when using its copies.
 Generated packages declare both lclang and Lark dependencies, using the versions
 declared by the compiler, and include the data-language grammar files.
 
+## Plan validation
+
+`FmcData.validate_plan_syntax(plan_path)` checks the document syntax and structure,
+model digest, entity and writable field names, coordinates, and model-bound literal
+types. It uses the generated package's bundled contract and does not open a business
+repository. IDs and references are checked for type compatibility, not existence.
+
+`data.validate_plan_expectations(plan_path)` performs the first check, then checks
+explicit `expect one` and `expect any` clauses against one consistent snapshot of
+the current repository. Every expectation sees that same unchanged snapshot;
+earlier Plan operations are not simulated. Neither method writes data, recovers
+exports, or creates a Transaction. Both return the parsed Plan on success and raise
+`ValueError` for invalid contents or failed checks; file I/O errors propagate.
+
+These checks do not reserve data or guarantee a later commit. `apply` still checks
+the actual candidate state, including effects of earlier Plan operations, storage
+constraints and final data validation. A Plan that first inserts a row and then
+expects it to exist can therefore fail snapshot validation and succeed on apply.
+
 ## Configured data operations
 
 Generated packages expose a model-specific data interface, such as `FmcData`.

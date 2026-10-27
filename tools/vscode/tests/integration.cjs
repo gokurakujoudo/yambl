@@ -179,7 +179,21 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     const messages = vscode.languages.getDiagnostics(removedUri).map(d => d.message);
     assert.ok(messages.includes('::at(...) was removed; use ::value(...) instead'));
     assert.ok(messages.includes('field retrieval requires ::value(...) or ::best_available(...)'));
-    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['unified value calls', 'double-colon completion', 'explicit read and at migration diagnostics', 'activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None', 'decorator signatures and named parameter navigation/completion'] }));
+    const fixtures = JSON.parse(fs.readFileSync(path.join(root, 'transaction-cases.json'), 'utf8'));
+    for (const [language, entry] of [
+      ['yambl', { text: 'entity Example{ id key:string }', formatted: 'entity Example {\n    id key: string\n}\n' }],
+      ['yaplan', fixtures.find(item => item.name === 'empty plan')],
+      ['yatran', fixtures.find(item => item.name === 'sealed transaction')],
+    ]) {
+      const document = await vscode.workspace.openTextDocument({ language, content: entry.text });
+      await vscode.window.showTextDocument(document);
+      assert.equal(vscode.workspace.getConfiguration('editor', { uri: document.uri, languageId: language }).get('defaultFormatter'), 'gokurakujoudo.yambl');
+      await vscode.commands.executeCommand('editor.action.formatDocument');
+      assert.equal(document.getText(), entry.formatted, language + ' Format Document');
+      await vscode.commands.executeCommand('editor.action.formatDocument');
+      assert.equal(document.getText(), entry.formatted, language + ' idempotent formatting');
+    }
+    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['unified value calls', 'double-colon completion', 'explicit read and at migration diagnostics', 'activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'Format Document for all three languages with LF', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None', 'decorator signatures and named parameter navigation/completion'] }));
   } catch (error) {
     fs.writeFileSync(output, JSON.stringify({ ok: false, error: error.stack })); throw error;
   }

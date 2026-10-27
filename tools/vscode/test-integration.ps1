@@ -8,6 +8,8 @@ $testRoot = Join-Path $build ('integration-' + [Guid]::NewGuid().ToString('N'))
 $workspace = Join-Path $testRoot 'workspace'
 $profile = Join-Path $testRoot 'profile'
 [IO.Directory]::CreateDirectory($workspace) | Out-Null
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'lsp/tests/transaction-cases.json') -Destination $workspace
+[IO.Directory]::CreateDirectory($workspace) | Out-Null
 [IO.Directory]::CreateDirectory((Join-Path $profile 'User')) | Out-Null
 [IO.File]::WriteAllText((Join-Path $profile 'User/settings.json'), '{"telemetry.telemetryLevel":"off","update.mode":"none","extensions.autoUpdate":false,"extensions.autoCheckUpdates":false,"window.restoreWindows":"none"}')
 [IO.File]::WriteAllText((Join-Path $workspace 'yambl-root.lclcfg'), "prefix: ''")

@@ -139,7 +139,9 @@ async function activate(context) {
     vscode.languages.registerDocumentFormattingEditProvider(selector, {
       async provideDocumentFormattingEdits(doc, options, token) {
         const edits = await client.feature('textDocument/formatting', doc, { options }, token);
-        return (edits || []).map(e => vscode.TextEdit.replace(asRange(e.range), e.newText));
+        const result = (edits || []).map(e => vscode.TextEdit.replace(asRange(e.range), e.newText));
+        if (result.length && doc.eol !== vscode.EndOfLine.LF) result.push(vscode.TextEdit.setEndOfLine(vscode.EndOfLine.LF));
+        return result;
       },
     }),
     vscode.languages.registerCompletionItemProvider(selector, {

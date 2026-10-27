@@ -2,7 +2,7 @@
   "name": "yambl",
   "displayName": "YAMBL",
   "description": "YAMBL highlighting and a self-contained language server.",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "publisher": "gokurakujoudo",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Programming Languages"],
@@ -20,7 +20,10 @@
       { "command": "yambl.clearTransactionModel", "title": "YAMBL: Clear Transaction Model Binding", "enablement": "editorLangId == yaplan || editorLangId == yatran" }
     ],
     "configurationDefaults": {
+      "[yaplan]": { "editor.defaultFormatter": "gokurakujoudo.yambl" },
+      "[yatran]": { "editor.defaultFormatter": "gokurakujoudo.yambl" },
       "[yambl]": {
+        "editor.defaultFormatter": "gokurakujoudo.yambl",
         "editor.semanticHighlighting.enabled": true,
         "editor.gotoLocation.alternativeDefinitionCommand": "editor.action.referenceSearch.trigger"
       }

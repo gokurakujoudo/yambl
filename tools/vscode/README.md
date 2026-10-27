@@ -14,7 +14,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.22.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.25.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -22,6 +22,8 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 ```
 
 安装后执行 `Developer: Reload Window`，打开 `.yambl`、`.yaplan` 或 `.yatran` 文件即可启动语言服务。
+三种文件均支持命令面板或编辑器右键菜单中的 **Format Document**（Windows：Shift+Alt+F），格式化整个文件并统一为 LF；无须选择文本或绑定模型目录。扩展为三种语言提供默认 formatter，用户可在设置中覆盖。存在语法错误时不修改文件；Transaction 格式化保留摘要。
+
 YAMBL 模型文件支持：
 
 - Problems 面板中的实时语法、类型及引用诊断；未定义的裸字典名称报错，带引号的外部字典不提示。
