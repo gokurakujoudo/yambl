@@ -38,8 +38,10 @@ Nested collection and object literals stay on the same line as their record.
 | Delete a field scope | `delete Entity.field scope (...)` |
 
 Scope conditions use `coordinate=value` or `coordinate in [start, end)`.
-An interval includes its start and excludes its end. The owner ID is required;
-dimension and temporal coordinate names come from the model. A scope has no
+An interval includes its start and excludes its end. Every scope requires an
+owner ID equality condition. Dimension and temporal conditions may be omitted;
+an omitted condition includes all corresponding data for that owner and field.
+Dimension and temporal coordinate names come from the model. A scope has no
 duplicate coordinate names. Replacement rows describe its complete target data.
 
 ## Data literals
