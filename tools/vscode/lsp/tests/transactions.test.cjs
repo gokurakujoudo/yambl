@@ -42,7 +42,7 @@ test('oversized transaction numeric expansion reports a diagnostic without stopp
 });
 
 test('FMC static plan parses and retains its canonical layout', () => {
-  const text = fs.readFileSync(path.resolve(__dirname, '../../../../../fmc-data-model/examples/demo.yaplan'), 'utf8');
+  const text = fs.readFileSync(path.resolve(__dirname, '../../../../../fmc-data-model/sample_data/demo.yaplan'), 'utf8');
   const doc = parse(text);
   assert.deepEqual(doc.diagnostics, []);
   assert.equal(format(doc), text);
@@ -167,8 +167,8 @@ test('shared runtime/editor type cases use aliases, exact constraints and refere
 test('FMC static plan passes model-bound type checks', () => {
   const root = path.resolve(__dirname, '../../../../../fmc-data-model'), uri = 'untitled:typed-fmc';
   const service = new Service(() => {});
-  service.open.set(uri, { text: fs.readFileSync(path.join(root, 'examples/demo.yaplan'), 'utf8'), languageId: 'yaplan', version: 1 });
-  service.bindModel(uri, root);
+  service.open.set(uri, { text: fs.readFileSync(path.join(root, 'sample_data/demo.yaplan'), 'utf8'), languageId: 'yaplan', version: 1 });
+  service.bindModel(uri, path.join(root, 'model'));
   assert.deepEqual(service.document(uri).diagnostics, []);
 });
 

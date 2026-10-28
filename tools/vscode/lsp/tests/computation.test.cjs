@@ -10,7 +10,7 @@ const { pathToFileURL } = require('node:url');
 const { position } = require('../language/syntax.cjs');
 
 function fmcEditor() {
-  const filename = path.resolve(__dirname, '../../../../../fmc-data-model/core/computations.yambl');
+  const filename = path.resolve(__dirname, '../../../../../fmc-data-model/model/core/computations.yambl');
   const uri = pathToFileURL(filename).href, original = fs.readFileSync(filename, 'utf8');
   const service = new Service(() => {});
   let text, version = 0;

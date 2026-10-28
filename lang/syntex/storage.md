@@ -8,7 +8,7 @@
 本页说明该接口使用的物理存储和读取规则。
 
 ```console
-yambl compile -o path ../fmc-data-model -o output ./build/model.yambl-ir.json
+yambl compile -o path ../fmc-data-model/model -o output ./build/model.yambl-ir.json
 yambl generate -o path ./build/model.yambl-ir.json -o output ./build/generated -o package fmc_model
 ```
 

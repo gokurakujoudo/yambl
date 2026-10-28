@@ -229,7 +229,7 @@ async function main() {
   const nestedType = 'computed attr totals: mapping<string, collection<HoldingEntry>> {';
   for (const match of nestedType.matchAll(/[<>{]/g)) expectBracketMetadata(nestedType, match.index, 1, true);
   let computationState = textmate.INITIAL, arrowCount = 0;
-  const fmcSource = fs.readFileSync(path.resolve(__dirname, '../../../fmc-data-model/core/computations.yambl'), 'utf8');
+  const fmcSource = fs.readFileSync(path.resolve(__dirname, '../../../fmc-data-model/model/core/computations.yambl'), 'utf8');
   for (const line of fmcSource.split(/\r?\n/)) {
     const tokens = grammar.tokenizeLine(line, computationState);
     for (const match of line.matchAll(/->/g)) {

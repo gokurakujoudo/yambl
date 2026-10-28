@@ -65,7 +65,7 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     }
 
     // Drive the shipped client against the real FMC repository and LSP process.
-    const filename = path.resolve(__dirname, '../../../fmc-data-model/core/computations.yambl');
+    const filename = path.resolve(__dirname, '../../../fmc-data-model/model/core/computations.yambl');
     const original = fs.readFileSync(filename, 'utf8');
     let current = original;
     const fmc = { languageId: 'yambl', uri: { toString: () => pathToFileURL(filename).href }, version: 1, getText: () => current };
@@ -106,13 +106,13 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     const references = await providers.get('registerReferenceProvider').provider.provideReferences(owner, { line, character }, { includeDeclaration: false });
     assert.ok(references.some(r => r.uri === fmc.uri.toString() && r.range.coordinates[0] === use.line && r.range.coordinates[1] === use.character));
     const root = path.resolve(__dirname, '../../../fmc-data-model');
-    const planText = fs.readFileSync(path.join(root, 'examples/demo.yaplan'), 'utf8');
+    const planText = fs.readFileSync(path.join(root, 'sample_data/demo.yaplan'), 'utf8');
     const planDoc = { languageId: 'yaplan', uri: { toString: () => 'untitled:bound-client' }, version: 1, getText: () => planText };
     vscode.window.activeTextEditor = { document: planDoc };
-    vscode.window.showOpenDialog = async () => [{ fsPath: root }];
+    vscode.window.showOpenDialog = async () => [{ fsPath: path.join(root, 'model') }];
     vscode.window.showErrorMessage = async message => assert.fail(message);
     await commands.get('yambl.selectTransactionModel')();
-    assert.equal(saved.get('transactionModelBindings')[planDoc.uri.toString()], root);
+    assert.equal(saved.get('transactionModelBindings')[planDoc.uri.toString()], path.join(root, 'model'));
     const prefix = planText.slice(0, planText.indexOf('core.Portfolio')).split('\n');
     const planPosition = { line: prefix.length - 1, character: prefix.at(-1).length };
     const definition = providers.get('registerDefinitionProvider').provider;

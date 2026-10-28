@@ -7,7 +7,7 @@
 
 ## 当前案例
 
-`fmc-data-model/decodes/currencies.yambl`：
+`fmc-data-model/model/decodes/currencies.yambl`：
 
 ```text
 namespace decodes
@@ -18,7 +18,7 @@ decodes Currencies {
 }
 ```
 
-`fmc-data-model/core/security.yambl`（节选）：
+`fmc-data-model/model/core/security.yambl`（节选）：
 
 ```text
 namespace core
