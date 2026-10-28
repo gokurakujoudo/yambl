@@ -100,10 +100,11 @@ calls are not data literals.
 
 ## Transaction records
 
-A transaction envelope contains a UUID, version, UTC `time`, integrity `digest`,
-the executed `plan` block and result `group` blocks. A rollback also includes the
-source transaction UUID in `source`. The embedded plan always has the actual model
-digest, including when the submitted plan omitted it.
+A transaction envelope contains an ID, version, UTC `time`, integrity `digest`,
+the executed `plan` block and result `group` blocks. New IDs are decimal Snowflake
+IDs written as strings. Existing canonical UUID IDs remain readable. A rollback
+includes the source transaction ID as a string in `source`. The embedded plan
+always has the actual model digest, including when the submitted plan omitted it.
 
 `time` uses `YYYY-MM-DDTHH:MM:SS[.fraction]Z`, with a valid calendar date,
 year 0001–9999, hour 00–23 and minute/second 00–59. Fractional seconds are optional.

@@ -151,12 +151,12 @@ class Parser {
     this.line(); this.take('transaction'); const id = this.string(); this.open(); this.revision();
     this.take('time'); const time = this.string(); this.line(); let source = '';
     if (this.current.text === 'source') { this.take(); source = this.string(); this.line(); }
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    const idPattern = /^(?:[1-9][0-9]*|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
     const parts = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?Z$/.exec(time);
     const [year, month, day, hour, minute, second] = parts ? parts.slice(1).map(Number) : [];
     const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
     const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    if (!uuid.test(id) || (source && !uuid.test(source)) || !parts || year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1] || hour > 23 || minute > 59 || second > 59) this.fail('invalid transaction metadata');
+    if (!idPattern.test(id) || (source && !idPattern.test(source)) || !parts || year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1] || hour > 23 || minute > 59 || second > 59) this.fail('invalid transaction metadata');
     this.take('digest'); const digest = this.digest(), plan = this.plan(), groups = [];
     if (plan.model === null) this.fail('transaction plan requires a model digest');
     while (this.current.text !== '}') {

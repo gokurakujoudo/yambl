@@ -213,5 +213,35 @@
     "name": "sealed transaction retains expectation in digest",
     "text": "transaction '12345678-1234-1234-1234-123456789abc' {\n    version 1\n    time '2026-10-27T00:00:00Z'\n    digest 'a9f615b5da87dfe6d61d7b94f01a13680331221a0d7dd6477281cee452280795'\n    plan p {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group g {\n            delete A.x expect any scope (id=1)\n        }\n    }\n    group g {\n    }\n}\n",
     "formatted": "transaction '12345678-1234-1234-1234-123456789abc' {\n    version 1\n    time '2026-10-27T00:00:00Z'\n    digest 'a9f615b5da87dfe6d61d7b94f01a13680331221a0d7dd6477281cee452280795'\n    plan p {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group g {\n            delete A.x expect any scope (id=1)\n        }\n    }\n    group g {\n    }\n}\n"
+  },
+  {
+    "name": "sealed Snowflake transaction with UUID source",
+    "text": "transaction '1234567890123456789' {\n    version 1\n    time '2026-10-26T12:34:56Z'\n    source '12345678-1234-1234-1234-123456789abc'\n    digest '1dd9651f6bd3a1a5af0063c1a2e523cc9f36b0db684ad3b106aa1a53c6eb87c5'\n    plan daily {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group first {\n        }\n    }\n    group first {\n        change core.Security.coupon scope (security_id='S1') {\n            before core.Security (security_id, coupon) {\n                'S1', 1.25\n            }\n            after core.Security (security_id, coupon) {\n                'S1', 2.5\n            }\n        }\n        warning 'later change retained'\n    }\n}\n",
+    "formatted": "transaction '1234567890123456789' {\n    version 1\n    time '2026-10-26T12:34:56Z'\n    source '12345678-1234-1234-1234-123456789abc'\n    digest '1dd9651f6bd3a1a5af0063c1a2e523cc9f36b0db684ad3b106aa1a53c6eb87c5'\n    plan daily {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group first {\n        }\n    }\n    group first {\n        change core.Security.coupon scope (security_id='S1') {\n            before core.Security (security_id, coupon) {\n                'S1', 1.25\n            }\n            after core.Security (security_id, coupon) {\n                'S1', 2.5\n            }\n        }\n        warning 'later change retained'\n    }\n}\n"
+  },
+  {
+    "name": "invalid Snowflake zero",
+    "text": "transaction '0' {\n    version 1\n    time '2026-10-26T12:34:56Z'\n    digest '74040ec10dc331d81bb280923a84391a435e69b44a851633b017c34aeca49181'\n    plan daily {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group first {\n        }\n    }\n    group first {\n        change core.Security.coupon scope (security_id='S1') {\n            before core.Security (security_id, coupon) {\n                'S1', 1.25\n            }\n            after core.Security (security_id, coupon) {\n                'S1', 2.5\n            }\n        }\n        warning 'later change retained'\n    }\n}\n",
+    "invalid": true
+  },
+  {
+    "name": "invalid Snowflake leading zero",
+    "text": "transaction '0123' {\n    version 1\n    time '2026-10-26T12:34:56Z'\n    digest '74040ec10dc331d81bb280923a84391a435e69b44a851633b017c34aeca49181'\n    plan daily {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group first {\n        }\n    }\n    group first {\n        change core.Security.coupon scope (security_id='S1') {\n            before core.Security (security_id, coupon) {\n                'S1', 1.25\n            }\n            after core.Security (security_id, coupon) {\n                'S1', 2.5\n            }\n        }\n        warning 'later change retained'\n    }\n}\n",
+    "invalid": true
+  },
+  {
+    "name": "invalid Snowflake signed ID",
+    "text": "transaction '-123' {\n    version 1\n    time '2026-10-26T12:34:56Z'\n    digest '74040ec10dc331d81bb280923a84391a435e69b44a851633b017c34aeca49181'\n    plan daily {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group first {\n        }\n    }\n    group first {\n        change core.Security.coupon scope (security_id='S1') {\n            before core.Security (security_id, coupon) {\n                'S1', 1.25\n            }\n            after core.Security (security_id, coupon) {\n                'S1', 2.5\n            }\n        }\n        warning 'later change retained'\n    }\n}\n",
+    "invalid": true
+  },
+  {
+    "name": "invalid Snowflake source",
+    "text": "transaction '1234567890123456789' {\n    version 1\n    time '2026-10-26T12:34:56Z'\n    source '0123'\n    digest '1dd9651f6bd3a1a5af0063c1a2e523cc9f36b0db684ad3b106aa1a53c6eb87c5'\n    plan daily {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group first {\n        }\n    }\n    group first {\n        change core.Security.coupon scope (security_id='S1') {\n            before core.Security (security_id, coupon) {\n                'S1', 1.25\n            }\n            after core.Security (security_id, coupon) {\n                'S1', 2.5\n            }\n        }\n        warning 'later change retained'\n    }\n}\n",
+    "invalid": true
+  },
+  {
+    "name": "sealed Snowflake rollback",
+    "text": "transaction '1234567890123456789' {\n    version 1\n    time '2026-10-26T12:34:56Z'\n    source '1234567890123456788'\n    digest 'a85a97d2f702422792addfc229a7ebe004c97f064d152f2b2fd1668c08e1a556'\n    plan daily {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group first {\n        }\n    }\n    group first {\n        change core.Security.coupon scope (security_id='S1') {\n            before core.Security (security_id, coupon) {\n                'S1', 1.25\n            }\n            after core.Security (security_id, coupon) {\n                'S1', 2.5\n            }\n        }\n        warning 'later change retained'\n    }\n}\n",
+    "formatted": "transaction '1234567890123456789' {\n    version 1\n    time '2026-10-26T12:34:56Z'\n    source '1234567890123456788'\n    digest 'a85a97d2f702422792addfc229a7ebe004c97f064d152f2b2fd1668c08e1a556'\n    plan daily {\n        version 1\n        model 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n        group first {\n        }\n    }\n    group first {\n        change core.Security.coupon scope (security_id='S1') {\n            before core.Security (security_id, coupon) {\n                'S1', 1.25\n            }\n            after core.Security (security_id, coupon) {\n                'S1', 2.5\n            }\n        }\n        warning 'later change retained'\n    }\n}\n"
   }
 ]
