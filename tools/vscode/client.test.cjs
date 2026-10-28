@@ -51,10 +51,27 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     const completion = providers.get('registerCompletionItemProvider');
     assert.deepEqual(Array.from(completion.selector, s => s.language), ['yambl', 'yambl', 'yaplan', 'yaplan', 'yatran', 'yatran']);
     assert.ok(completion.triggers.includes(':'));
+    for (const trigger of ['[', '<']) {
+      assert.ok(completion.triggers.includes(trigger));
+      assert.ok(providers.get('registerSignatureHelpProvider').triggers.includes(trigger));
+    }
     const items = await completion.provider.provideCompletionItems(doc, position);
     assert.equal(items.find(i => i.label === 'as_of_date').insertText, 'as_of_date=');
     const signature = await providers.get('registerSignatureHelpProvider').provider.provideSignatureHelp(doc, position);
     assert.match(signature.signatures[0].label, /as_of_date: date/);
+    const typeText = 'entity Security {} entity Sample { attr amount: decimal[scale: 4, precision: 18] attr holdings: collection<> }';
+    const typeDoc = { languageId: 'yambl', uri: { toString: () => 'untitled:client-types' }, version: 1, getText: () => typeText };
+    const decimalPosition = { line: 0, character: typeText.indexOf('scale: 4, ') + 'scale: 4, '.length };
+    const decimalItems = await completion.provider.provideCompletionItems(typeDoc, decimalPosition);
+    assert.equal(decimalItems.find(item => item.label === 'precision').insertText, 'precision: ');
+    const decimalHelp = await providers.get('registerSignatureHelpProvider').provider.provideSignatureHelp(typeDoc, decimalPosition);
+    assert.equal(decimalHelp.activeParameter, 0);
+    assert.match(decimalHelp.signatures[0].label, /precision: integer/);
+    const collectionPosition = { line: 0, character: typeText.indexOf('collection<') + 'collection<'.length };
+    const collectionItems = await completion.provider.provideCompletionItems(typeDoc, collectionPosition);
+    assert.ok(collectionItems.some(item => item.label === 'Security'));
+    const collectionHelp = await providers.get('registerSignatureHelpProvider').provider.provideSignatureHelp(typeDoc, collectionPosition);
+    assert.match(collectionHelp.signatures[0].label, /collection<T>/);
     const localItems = await completion.provider.provideCompletionItems(doc, { line: 0, character: text.indexOf('return') + 7 });
     assert.equal(localItems.find(i => i.label === 'input').insertText.value, 'input.${1:name}');
     for (const languageId of ['yaplan', 'yatran']) {
@@ -113,15 +130,15 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     vscode.window.showErrorMessage = async message => assert.fail(message);
     await commands.get('yambl.selectTransactionModel')();
     assert.equal(saved.get('transactionModelBindings')[planDoc.uri.toString()], path.join(root, 'model'));
-    const prefix = planText.slice(0, planText.indexOf('core.Portfolio')).split('\n');
+    const prefix = planText.slice(0, planText.indexOf('core.Security')).split('\n');
     const planPosition = { line: prefix.length - 1, character: prefix.at(-1).length };
     const definition = providers.get('registerDefinitionProvider').provider;
-    assert.ok((await definition.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/fund.yambl'));
+    assert.ok((await definition.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/security.yambl'));
     await module.exports.deactivate();
     subscriptions.splice(0).forEach(s => s.dispose?.());
     vscode.workspace.textDocuments = [planDoc];
     await module.exports.activate({ subscriptions, workspaceState: { get: (key, fallback) => saved.get(key) || fallback, update: async (key, value) => saved.set(key, { ...value }) } });
-    assert.ok((await providers.get('registerDefinitionProvider').provider.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/fund.yambl'));
+    assert.ok((await providers.get('registerDefinitionProvider').provider.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/security.yambl'));
     await commands.get('yambl.clearTransactionModel')();
     assert.equal(saved.get('transactionModelBindings')[planDoc.uri.toString()], undefined);
     assert.equal(await definition.provideDefinition(planDoc, planPosition), null);

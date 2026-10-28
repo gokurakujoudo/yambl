@@ -43,7 +43,10 @@ target entity and retain their original definition locations and scopes.
 
 Formatting preserves comments and string spelling and ends with exactly one LF.
 A document with a syntax error produces no formatting edits. Completion offers
-built-ins and names visible in the current file. Definition lookup follows imports,
+built-ins and names visible in the current file. Hover and completion describe
+built-in types. Signature help explains the arguments of `decimal[...]`,
+`string[...]`, and generic types; completion offers named parameters and visible
+names appropriate to the generic argument. Definition lookup follows imports,
 entity references, inheritance, extension targets, and defined Decodes names,
 including quoted identifiers. External Decodes have no definition to navigate to.
 On an `@overload` marker, definition lookup returns the other branch implementations.

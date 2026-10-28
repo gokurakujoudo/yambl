@@ -14,7 +14,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.26.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.27.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -29,6 +29,8 @@ YAMBL 模型文件支持：
 - Problems 面板中的实时语法、类型及引用诊断；未定义的裸字典名称报错，带引号的外部字典不提示。
 - Format Document 格式化当前文档；存在语法错误时不提供修改。
 - 输入补全，包括关键字、注解、内置类型和当前文件可见的声明。
+- 类型悬停和补全显示内置类型的含义与参数说明。输入 `decimal[` 或 `string[` 时，
+  签名提示说明参数，并补全命名参数；泛型参数位置提供类型约束说明和可见名称补全。
 - `::` 后按接收字段提示 `value(...)`，存储字段还提示 `best_available(...)`；支持未完成的调用、参数补全与签名提示。
 - 计算中的末端字段必须显式取值；旧 `::at(...)` 提示迁移到 `::value(...)`。
 - `@sparse` / `@dense` 提供 cat 参数补全、签名悬停和定义跳转；补全排除集合、

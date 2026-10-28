@@ -21,7 +21,7 @@ function receive(message) {
       if (initialized) throw Object.assign(new Error('Already initialized'), { code: -32600 });
       initialized = true;
       send({ id, result: { capabilities: { positionEncoding: 'utf-16', textDocumentSync: { openClose: true, change: 1, save: { includeText: false } },
-        completionProvider: { triggerCharacters: ['.', ':', '(', ','] }, signatureHelpProvider: { triggerCharacters: ['(', ','] }, hoverProvider: true, definitionProvider: true, referencesProvider: true,
+        completionProvider: { triggerCharacters: ['.', ':', '(', ',', '[', '<'] }, signatureHelpProvider: { triggerCharacters: ['(', ',', '[', '<'] }, hoverProvider: true, definitionProvider: true, referencesProvider: true,
         semanticTokensProvider: { legend: { tokenTypes: ['yamblValueType'], tokenModifiers: [] }, full: true },
         documentSymbolProvider: true, documentFormattingProvider: true },
         serverInfo: { name: 'yambl-lsp', version: '0.1.22' } } });

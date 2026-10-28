@@ -408,13 +408,13 @@ function checkComputations(documents, symbols, report) {
   }
   for (const doc of documents.filter(d => !d.errors.length)) for (const declaration of doc.declarations) {
     if (declaration.kind === 'constant') constant(declaration);
-    for (const dimension of declaration.dimensions || []) if (dimension.fallback) {
+    for (const dimension of declaration.dimensions || []) if (dimension.fallback && dimension.owner) {
       const checker = new Checker(doc, dimension.owner, (node, message) => report(doc, node.token, message));
       const actual = checker.read(checker.infer(dimension.fallback, new Map([['self', { type: type(dimension.owner.name.value, 'reference', { key: dimension.owner.key }) }]])), dimension.fallback);
       if (actual.type.name !== 'integer' && actual.type.kind !== 'unknown') checker.issue(dimension.fallback, 'fallback_days requires an integer expression');
       if (checker.inputs.size || checker.dependencies.size) checker.issue(dimension.fallback, 'fallback_days requires stored static or config dependencies without external parameters');
     }
-    for (const field of declaration.fields) if (field.calculation) analyze(field);
+    for (const field of declaration.fields) if (field.calculation && field.owner?.kind === 'entity') analyze(field);
   }
   const contracts = new Map();
   for (const [field, checker] of completed) {

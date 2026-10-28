@@ -6,6 +6,7 @@ const { fileURLToPath, pathToFileURL } = require('node:url');
 const { parse, format, range, position, keywords, annotations, values, generics, entities, structures, constants, resultConstants } = require('./language/syntax.cjs');
 const { validate, describe } = require('./language/validation.cjs');
 const { typeLabel, methodNames, methodHelp, nodes, defaultLabel, inputTypeHelp } = require('./language/calculation-tools.cjs');
+const typeTools = require('./language/type-tools.cjs');
 
 const { sources, readPrefix, rootName, configError } = require('./repository.cjs');
 const { modelRoot } = require('./language/relationships.cjs');
@@ -133,6 +134,7 @@ const help = {
   '??': 'Omitted-input fallback. The left operand is input.name; the right operand is lazy. Caller values and declaration defaults take precedence. Native non-normal results require recover.',
   input_type: 'Decorator pair constraint accepting non-collection value types or entity references. Not a runtime field type.',
   extra_input_params: 'Declare one optional computed-field input, with an optional default and trailing description. Repeat for different names. Types merge with inferred dependencies; declaration defaults take precedence over ??.',
+  ...typeTools.types,
 };
 
 class Service {
@@ -230,6 +232,37 @@ class Service {
     onRecovered?.(recovered);
     return recovered.scope;
   }
+  typeScope(doc, context, offset) {
+    if (!doc.errors.length) return doc.scope;
+    const root = context.root, close = root.open === '<' ? '>' : ']';
+    let depth = 0, end = -1;
+    for (const token of doc.tokens) {
+      if (token.start < root.token.start) continue;
+      if (token.value === root.open) depth++;
+      if (token.value === close && --depth === 0) { end = token.end; break; }
+    }
+    if (end < offset) {
+      const nextLine = doc.text.indexOf('\n', offset), nextBrace = doc.text.indexOf('}', offset);
+      end = Math.min(...[nextLine, nextBrace, doc.text.length].filter(n => n >= offset));
+    }
+    let text = doc.text.slice(0, root.name.start) + 'string' + doc.text.slice(end);
+    let recovered = parse(text, doc.uri);
+    if (recovered.errors.length && end === doc.text.length) {
+      const stack = [];
+      for (const token of recovered.tokens) {
+        if (['{', '('].includes(token.value)) stack.push(token.value);
+        if ((token.value === '}' && stack.at(-1) === '{') || (token.value === ')' && stack.at(-1) === '(')) stack.pop();
+      }
+      text += stack.reverse().map(open => open === '{' ? '}' : ')').join('');
+      recovered = parse(text, doc.uri);
+    }
+    Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
+    if (recovered.errors.length) return doc.scope;
+    const rootDir = rootFor(doc.uri);
+    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && rootDir && rootFor(d.uri) === rootDir).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+    validate([...siblings, recovered]);
+    return recovered.scope;
+  }
   calculationDocument(doc, offset) {
     const before = doc.text.slice(0, offset);
     const descriptor = /::[a-z_0-9]*$/.test(before);
@@ -308,6 +341,10 @@ class Service {
     }
     if (method === 'textDocument/signatureHelp') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
+      const previous = doc.tokens.findLast(t => t.end <= offset);
+      if (doc.comments.some(c => c.start <= offset && offset <= c.end) || doc.tokens.some(t => t.value.startsWith("'") && t.start < offset && offset < t.end) || doc.text.slice(previous?.end ?? 0, offset).includes("'")) return null;
+      const typeContext = typeTools.context(doc, offset);
+      if (typeContext) return typeTools.signatureHelp(typeContext);
       const calculationDoc = this.calculationDocument(doc, offset);
       const call = calculationDoc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes)]).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
       if (!call) return null;
@@ -322,6 +359,13 @@ class Service {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       const before = doc.text.slice(0, offset);
       if (doc.comments.some(c => c.start <= offset && offset <= c.end) || doc.tokens.some(t => t.value.startsWith("'") && t.start < offset && offset < t.end)) return { isIncomplete: false, items: [] };
+      const typeContext = typeTools.context(doc, offset);
+      if (typeContext && !/::[a-z_]*$/.test(before) && !/\bself(?:\.[A-Za-z_][A-Za-z_0-9]*(?:::value)?)*\.[A-Za-z_0-9]*$/.test(before) && !/\b[A-Z][A-Za-z_0-9]*\.[A-Za-z_0-9]*$/.test(before)) {
+        const scope = this.typeScope(doc, typeContext, offset);
+        const symbols = new Map([...this.documents.values()].flatMap(d => [...(d.scope || new Map()).values()].map(decl => [decl.key, decl])));
+        for (const declaration of scope.values()) symbols.set(declaration.key, declaration);
+        return { isIncomplete: false, items: typeTools.completions(typeContext, scope, symbols, describe, Resolver) };
+      }
       const calculationDoc = this.calculationDocument(doc, offset);
       const computation = calculationDoc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= offset && offset <= f.end);
       const constantContext = calculationDoc.declarations.find(d => d.kind === 'constant' && d.token.start <= offset && offset <= d.end);

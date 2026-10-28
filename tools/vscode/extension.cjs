@@ -155,7 +155,7 @@ async function activate(context) {
           return completion;
         });
       },
-    }, '.', ':', '(', ','),
+    }, '.', ':', '(', ',', '[', '<'),
     vscode.languages.registerSignatureHelpProvider(selector, {
       async provideSignatureHelp(doc, position, token) {
         const result = await client.feature('textDocument/signatureHelp', doc, { position }, token);
@@ -169,7 +169,7 @@ async function activate(context) {
         });
         return help;
       },
-    }, '(', ','),
+    }, '(', ',', '[', '<'),
     vscode.languages.registerHoverProvider(selector, {
       async provideHover(doc, position, token) {
         const result = await client.feature('textDocument/hover', doc, { position }, token);
