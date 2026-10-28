@@ -106,6 +106,10 @@ IDs written as strings. Existing canonical UUID IDs remain readable. A rollback
 includes the source transaction ID as a string in `source`. The embedded plan
 always has the actual model digest, including when the submitted plan omitted it.
 
+The generator uses worker ID 0 and does not persist its state across processes or
+coordinate separate repositories. Before restarting with the same worker ID,
+ensure the wall clock has advanced past the time of the last generated ID.
+
 `time` uses `YYYY-MM-DDTHH:MM:SS[.fraction]Z`, with a valid calendar date,
 year 0001–9999, hour 00–23 and minute/second 00–59. Fractional seconds are optional.
 The writer records UTC; offsets and alternative date separators are not accepted.
@@ -209,15 +213,16 @@ lclang syntax; `LCL[...]` marks an expression, including a list of group names.
 exports or cleaning files. It does not validate a candidate write against stored
 data. `check-data --dryrun` performs read-only data validation.
 
-Apply and rollback use a pinned snapshot and an interprocess lock shared by
-generated interfaces. SQLite updates the affected rows and transaction record in
-one native transaction. The file backend streams changed tables to a new immutable
+Apply and rollback use a pinned snapshot. Only one process may write to or recover
+a repository at a time; generated interfaces do not coordinate writes across
+processes. SQLite updates the affected rows and transaction record in one native
+transaction. The file backend streams changed tables to a new immutable
 generation and reuses unchanged files with hard links. The local filesystem and
 process must support hard links; publication fails before the generation switch
-when they cannot be created. External writers do not participate in the
-lock and can change hard-linked files shared by multiple generations. The first
-indexed access validates the full file table, and publishing a changed table streams
-the full table. Recovery tests cover process interruption, not power loss.
+when they cannot be created. External writes can change hard-linked files shared
+by multiple generations. The first indexed access validates the full file table,
+and publishing a changed table streams the full table. Recovery tests cover process
+interruption, not power loss.
 
 A `TransactionStatus.EXPORT_PENDING` (`export_pending`) result means the data commit succeeded and its `.yatran`
 export needs recovery. Opening the repository or starting another write restores
