@@ -167,7 +167,7 @@
       "entity": "core.Item",
       "field": "currency",
       "literal": "'Missing'",
-      "valid": false
+      "valid": true
     },
     {
       "entity": "core.Item",

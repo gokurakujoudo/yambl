@@ -2,7 +2,7 @@
 
 const { entities, structures, stringValue, parse, modelRoot } = require('./syntax.cjs');
 
-const { Resolver, canonical, equal, accepts, commonType } = require('./expressions.cjs');
+const { Resolver, type, entity, canonical, equal, accepts, commonType } = require('./expressions.cjs');
 function typeSignature(node, doc, owner, symbols) {
   return canonical(new Resolver(doc, () => {}, symbols, owner, true).resolve(node));
 }
@@ -68,6 +68,17 @@ function relationships(symbols, issue) {
     } else for (const field of fields) issue(field.doc, field.token, `overload requires marked branches with identical signatures: ${name}`);
   }
   for (const decl of declarations) for (const field of decl.ownFields.values()) field.identity = replacements.get(field.identity) || field.identity;
+  for (const decl of declarations) {
+    const root = decl.ancestors.at(-1) || decl;
+    for (const name of ['entity_type', 'root_entity_type']) {
+      const token = { ...decl.name, value: name };
+      const target = name === 'entity_type' ? type(decl.name.value, 'reference', { key: decl.key }) : entity;
+      const field = { name: token, token, type: { name: 'type', args: [{ name: name === 'entity_type' ? 'self' : 'Entity' }], token: { ...token, start: name === 'entity_type' ? -1 : -2 }, builtinType: type('type', 'value', { args: [target] }) }, mode: 'static', metadata: [], doc: decl.doc, owner: decl, builtin: true };
+      field.qualifiedName = root.key.split('\0').slice(-2).filter(Boolean).join('.') + '.' + name;
+      field.identity = root === decl ? field : root.effective.get(name);
+      decl.effective.set(name, field);
+    }
+  }
 }
 
 // These schemas also make built-in mapping candidates available without user declarations.

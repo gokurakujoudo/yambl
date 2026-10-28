@@ -1,6 +1,6 @@
 # VS Code 扩展
 
-`tools/vscode/` 是唯一插件目录，`lsp/` 是其内部语言服务与测试，不再保留独立的 `tools/lsp/`。
+`tools/vscode/` 包含扩展、语言服务及其测试。
 
 本扩展提供 YAMBL 语法高亮和自包含 [LSP](lsp/README.md)。安装包使用
 VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依赖、其他扩展，
@@ -14,7 +14,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.27.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.29.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -32,7 +32,7 @@ YAMBL 模型文件支持：
 - 类型悬停和补全显示内置类型的含义与参数说明。输入 `decimal[` 或 `string[` 时，
   签名提示说明参数，并补全命名参数；泛型参数位置提供类型约束说明和可见名称补全。
 - `::` 后按接收字段提示 `value(...)`，存储字段还提示 `best_available(...)`；支持未完成的调用、参数补全与签名提示。
-- 计算中的末端字段必须显式取值；旧 `::at(...)` 提示迁移到 `::value(...)`。
+- 计算中的末端字段使用 `::value(...)` 取值。
 - `@sparse` / `@dense` 提供 cat 参数补全、签名悬停和定义跳转；补全排除集合、
   非 static 属性以及与已有 sparse/dense/dimension 标记互斥的选项。
 - 七个非正常值常量 `NOT_DEFINED`、`NOT_APPLICABLE`、`EMPTY`、`NO_ENTRY`、`NO_DATA`、
@@ -162,7 +162,7 @@ resolved fields. Field uses participate in definition navigation and reference s
 completion and signature help. The editor inserts `name=` and preserves snippets.
 `input.` lists inferred and explicitly declared inputs, their types and defaults.
 `@extra_input_params` supplies optional input declarations and descriptions; `??`
-handles omitted inputs. The former `.default(...)` syntax is no longer supported.
+handles omitted inputs.
 The formatter preserves multiline lambda bodies and chained recovery calls.
 
 Typed locals (`let amount: decimal = 1.25`), contextual collection and structured
@@ -170,5 +170,5 @@ value literals, and `const NAME: Type = expression` use the same analysis for
 diagnostics, hover, completion and navigation. Member suggestions follow the
 receiver type for both `.` and `::`. Conversion functions offer parameter names,
 signatures and documentation; `/` and `//` have separate numeric rules.
-See the [language reference](../../lang/syntex/README.md) and
-[conversion functions](../../lang/builtins/functions.md).
+See the [language reference](../../docs/reference/README.md) and
+[conversion functions](../../docs/reference/functions.md).

@@ -79,7 +79,7 @@ test('self navigation and completion accept arbitrary type fields and incomplete
     const current = text.replace('self.arbitrary', 'self.' + suffix);
     service.open.set(uri, { text: current, version: 2 }); service.refresh();
     const completions = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: current.indexOf('self.') + 5 + suffix.length } });
-    assert.deepEqual(completions.items.map(i => i.label), ['arbitrary', 'ignored', 'data']);
+    assert.deepEqual(completions.items.map(i => i.label), ['arbitrary', 'ignored', 'data', 'entity_type', 'root_entity_type']);
   }
   const completions = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: 0 } });
   for (const label of ['final', 'static', 'self', 'type', 'field_mapping', 'Entity', 'ConfigGroup', 'overload', 'override']) assert.ok(completions.items.some(i => i.label === label), label);
@@ -98,7 +98,7 @@ test('invalid field declarations do not offer marker navigation', () => {
 test('repository discovery, unsaved dependencies, definitions, hover, symbols and close', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lsp-')); t.after(() => fs.rmSync(root, { recursive: true }));
   const write = (name, text) => { const file = path.join(root, name); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); return pathToFileURL(file).href; };
-  write('yambl-root.lclcfg', 'prefix: "fmc"');
+  write('yambl-root.lclcfg', 'prefix: "demo"');
   const base = write('core/base.yambl', "namespace core @title('Base title') entity Base { id item_id: string }");
   const child = write('core/child.yambl', 'namespace core entity Child inherits Base { attr kind: code<Kinds> }');
   const dictionary = write('odd/kinds.yambl', 'namespace core decodes Kinds {}');
@@ -228,13 +228,13 @@ test('separate repository roots do not merge equally named entities', t => {
 test('prefixes, unsaved root configuration and nested repository errors', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-prefix-')); t.after(() => fs.rmSync(root, { recursive: true }));
   const write = (name, text) => { const filename = path.join(root, name); fs.mkdirSync(path.dirname(filename), { recursive: true }); fs.writeFileSync(filename, text); return pathToFileURL(filename).href; };
-  const config = write('yambl-root.lclcfg', "prefix: 'fmc'");
+  const config = write('yambl-root.lclcfg', "prefix: 'demo'");
   const value = write('values/a.yambl', 'namespace types value record { attr x: string }');
   const text = 'namespace core from types import record entity A { attr x: record attr h: Hierarchy }';
   const uri = write('core/a.yambl', text);
   const published = [], service = new Service((method, params) => published.push(params));
   service.open.set(uri, { version: 1, text }); service.refresh();
-  assert.equal(service.document(uri).prefix, 'fmc');
+  assert.equal(service.document(uri).prefix, 'demo');
   assert.deepEqual(service.document(uri).diagnostics, []);
   const params = { textDocument: { uri }, position: { line: 0, character: text.lastIndexOf('record') } };
   assert.equal(service.feature('textDocument/definition', params).uri, value);
@@ -244,7 +244,7 @@ test('prefixes, unsaved root configuration and nested repository errors', t => {
   service.open.set(config, { version: 2, text: "prefix: 'changed'" }); service.refresh();
   assert.equal(service.document(uri).prefix, 'changed');
   assert.deepEqual(service.document(uri).diagnostics, []);
-  service.open.set(config, { version: 3, text: "prefix: 'fmc'\nprefix: 'other'" }); service.refresh();
+  service.open.set(config, { version: 3, text: "prefix: 'demo'\nprefix: 'other'" }); service.refresh();
   assert.equal(service.document(config).diagnostics[0].range.start.line, 1);
   assert.match(service.document(config).diagnostics[0].message, /one literal prefix/);
   service.open.delete(config); service.refresh();
@@ -279,7 +279,7 @@ test('built-in model repository checks its own declarations exactly once', () =>
 test('literal configuration grammar rejects expressions and missing prefixes', () => {
   const { readPrefix } = require('../repository.cjs');
   assert.throws(() => readPrefix(path.join(os.tmpdir(), 'absent-yambl-config-' + process.pid)), /Cannot read root configuration/);
-  assert.equal(readPrefix('root.lclcfg', '# Comment\n\nprefix: "fmc.data" # inline'), 'fmc.data');
+  assert.equal(readPrefix('root.lclcfg', '# Comment\n\nprefix: "demo.data" # inline'), 'demo.data');
   for (const text of ['', '# Comment', 'other: ""', 'prefix: 1', "prefix: 'x' + 'y'", "prefix: 'bad..name'", "prefix: ''\nprefix: ''"]) {
     assert.throws(() => readPrefix('root.lclcfg', text), /prefix/);
   }
@@ -307,7 +307,7 @@ entity Selection {
     const current = text.replace('self.security::value.amount::type', 'self.security::value.' + suffix + '::type');
     service.open.set(uri, { text: current, version: 2 }); service.refresh();
     const col = current.split('\n')[4].indexOf('self.security::value.') + 'self.security::value.'.length + suffix.length;
-    assert.deepEqual(feature('completion', 4, col).items.map(i => i.label), ['amount']);
+    assert.deepEqual(feature('completion', 4, col).items.map(i => i.label), ['amount', 'entity_type', 'root_entity_type']);
   }
   const col = text.split('\n')[4].indexOf('::type') + 2;
   assert.deepEqual(feature('completion', 4, col).items.map(i => i.label), ['type', 'value', 'entity']);
@@ -336,6 +336,25 @@ test('builtins authoring works outside the extension resource directory', t => {
   service.open.set(uri, { version: 2, text: text.replace('namespace builtins', 'namespace business') }); service.refresh();
   assert.ok(service.document(uri).diagnostics.some(d => /duplicate or reserved declaration: Hierarchy/.test(d.message)));
   service.open.set(uri, { version: 3, text });
-  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: 'fmc'"); service.refresh();
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: 'demo'"); service.refresh();
   assert.ok(service.document(uri).diagnostics.some(d => /duplicate or reserved declaration: Hierarchy/.test(d.message)));
+});
+
+
+test('subtype dictionaries provide completion, hover and declaration navigation', () => {
+  const service = new Service(() => {}), uri = 'untitled:subtypes';
+  const text = 'entity Root {} entity Child inherits Root {} entity Use { attr choice: code<Root::subtypes> computed attr result: code<Root::subtypes> { return Root::subtypes.Child } }';
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  assert.deepEqual(service.document(uri).diagnostics, []);
+  const feature = (method, offset) => service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 0, character: offset } });
+  const descriptor = text.indexOf('Root::subtypes') + 'Root::'.length;
+  assert.deepEqual(feature('completion', descriptor).items.map(i => i.label), ['subtypes']);
+  const member = text.lastIndexOf('.Child') + 1;
+  assert.deepEqual(feature('completion', member).items.map(i => i.label), ['Child']);
+  assert.equal(feature('definition', member).range.start.character, text.indexOf('Child'));
+  assert.match(feature('hover', member).contents.value, /Child/);
+  assert.match(feature('hover', descriptor).contents.value, /strict descendant/);
+  const incomplete = 'entity Root {} entity Child inherits Root {} entity Use { attr x: code<Root::';
+  service.open.set(uri, { text: incomplete, version: 2 }); service.refresh();
+  assert.deepEqual(feature('completion', incomplete.length).items.map(i => i.label), ['subtypes']);
 });

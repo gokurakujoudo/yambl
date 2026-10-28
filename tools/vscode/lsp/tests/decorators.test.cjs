@@ -136,6 +136,7 @@ test('decorator completion filters all definition kinds and attribute categories
   const examples = [
     ['@| entity A {}', [...common, 'definition', 'model']],
     ['@| final entity A {}', [...common, 'definition', 'model']],
+    ['entity Root {} @| entity A inherits Root {}', [...common, 'decodes_rank', 'definition', 'model']],
     ['@| value item {}', [...common, 'definition']],
     ['@| decodes Codes {}', [...common, 'definition', 'flags']],
     ['@| type label = string', [...common, 'definition', 'model']],
@@ -149,7 +150,7 @@ test('decorator completion filters all definition kinds and attribute categories
     ['entity A {} extend A { @| snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
     ['value item { @| attr x: string }', [...common, 'value_field']],
     ['value item { @| static attr x: string }', [...common, 'value_field']],
-    ['@|', [...common, 'allow_multiple', 'definition', 'flags', 'model', 'targets']],
+    ['@|', [...common, 'allow_multiple', 'decodes_rank', 'definition', 'flags', 'model', 'targets']],
     ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'extra_input_params', 'identity', 'overload', 'override', 'setting', 'temporal']],
     ['entity A {} extend A { @| }', [...common, 'dense', 'sparse', 'dimension', 'extra_input_params', 'overload', 'override', 'setting', 'temporal']],
     ['value item { @|', [...common, 'value_field']],

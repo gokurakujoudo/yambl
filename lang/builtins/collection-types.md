@@ -1,74 +1,20 @@
-# 内置集合类型
+# 文档入口
 
-YAMBL 的 builtins 提供 `collection<T>`、`values<T>`、`mapping<TKey, TValue>`，
-以及按字段约束的 [field_mapping](field-mapping.md)。
-尖括号内填写类型参数；`mapping` 的两个类型参数以逗号分隔。
+正文见[中文参考](../../docs/reference/collection-types.md)。
 
-| 类型 | 泛型约束 | 已确认的集合语义 |
-| --- | --- | --- |
-| `collection<T>` | `T` 必须是实体引用类型 | 无序，同一实体引用不得重复出现 |
-| `values<T>` | `T` 必须是值类型 | 无序，相同的值不得重复出现 |
-| `mapping<TKey, TValue>` | `TKey` 为 string 兼容类型或实体引用类型；`TValue` 为任意非集合的值类型或实体引用类型 | 无序，键唯一，不同键可以对应相同的值或实体引用 |
+按章节查看：
 
-实体类型名直接表示引用类型，无需额外的 `ref` 关键字。值类型清单及参数写法
-见[内置值类型](value-types.md)。
+<a id="内置集合类型"></a>
+- [内置集合类型](../../docs/reference/collection-types.md#内置集合类型)
 
-## collection
+<a id="collection"></a>
+- [collection](../../docs/reference/collection-types.md#collection)
 
-```text
-attr holdings: collection<HoldingEntry>
-```
+<a id="values"></a>
+- [values](../../docs/reference/collection-types.md#values)
 
-`HoldingEntry` 是实体类型，因此集合元素是持仓条目的引用。同一个实体引用
-不能在集合中重复出现，按引用指向的实体身份区分元素。
+<a id="mapping"></a>
+- [mapping](../../docs/reference/collection-types.md#mapping)
 
-`collection` 不包含顺序。数据使用方如需有序结果，应指定按照 `attr` 排序，
-或自行应用排序规则。
-
-## values
-
-```text
-attr labels: values<string>
-attr reporting_dates: values<date>
-```
-
-`values` 的元素必须是值类型，不包含顺序，也不允许重复值。相同值的判断依赖
-对应值类型的相等规则。结构化 value 比较全部字段，引用字段比较其 ID；
-基础值类型的完整相等规则仍待定义。排序由数据使用方决定。
-
-## mapping
-
-```text
-attr metrics: mapping<string, decimal>
-attr securities: mapping<string, Security>
-attr quantities: mapping<Security, decimal>
-attr holding_entries: mapping<Security, HoldingEntry>
-```
-
-`TKey` 可以是 string 兼容类型或实体引用类型。`TValue` 可以是值类型或实体引用
-类型，但不能是 `collection`、`values`、`mapping` 或 `field_mapping`。
-
-`mapping` 无序，键唯一。不同键可以映射到相同的值或实体引用。排序由数据使用方
-决定；引用键按所指向的实体身份区分，字符串键按字符串值区分。
-
-## 不合法的类型组合
-
-| 写法 | 原因 |
-| --- | --- |
-| `collection<string>` | `collection` 的元素必须是实体引用 |
-| `values<Security>` | `values` 的元素必须是值类型 |
-| `collection<Currencies>` | Currencies 是 Decodes 实例名称，不是实体类型；字典引用集合应使用 `collection<Decodes>` |
-| `mapping<integer, decimal>` | 键必须是 string 兼容类型或实体引用 |
-| `mapping<string, collection<Security>>` | 值不能是集合类型 |
-| `mapping<string, values<decimal>>` | 值不能是集合类型 |
-| `mapping<string, mapping<string, decimal>>` | 值不能是集合类型 |
-
-这些泛型约束属于模型的类型规则。无重复语义描述集合本身，不表示 YAMBL
-执行了业务数据质量校验；当前编译器检查类型组合，不检查存储的集合内容。
-
-正常空集合与非正常结果分开表示：存在正常记录而没有成员是成功的空集合；无记录为
-NO_ENTRY，存在空值记录为 EMPTY。当前物理引用集合的记录/成员表和读取契约见
-[存储规范](../syntex/storage.md)。集合元素本身不是无载荷的结果状态。
-
-code、snowflake_id、type<T> 和 attrs<a, b> 可单向视作 string，也可作为 mapping 的 key。
-旧的 map 拼写不再接受。field_mapping 是语言定义的 mapping 别名。
+<a id="不合法的类型组合"></a>
+- [不合法的类型组合](../../docs/reference/collection-types.md#不合法的类型组合)

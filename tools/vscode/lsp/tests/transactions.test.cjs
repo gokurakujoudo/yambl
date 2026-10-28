@@ -41,8 +41,8 @@ test('oversized transaction numeric expansion reports a diagnostic without stopp
   assert.deepEqual(parse(original).diagnostics, []);
 });
 
-test('FMC static plan parses and retains its canonical layout', () => {
-  const text = fs.readFileSync(path.resolve(__dirname, '../../../../../fmc-data-model/sample_data/demo.yaplan'), 'utf8');
+test('Example static plan parses and retains its canonical layout', () => {
+  const text = fs.readFileSync(path.resolve(__dirname, 'fixtures/example/example.yaplan'), 'utf8');
   const doc = parse(text);
   assert.deepEqual(doc.diagnostics, []);
   assert.equal(format(doc), text);
@@ -71,13 +71,13 @@ test('explicit model bindings navigate inherited and extended fields and track u
   t.after(() => fs.rmSync(directory, { recursive: true }));
   const roots = ['first', 'second'].map(name => {
     const root = path.join(directory, name); fs.mkdirSync(root);
-    fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: 'fmc'\n");
+    fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: 'demo'\n");
     fs.writeFileSync(path.join(root, 'base.yambl'), 'namespace core entity Base { id id: string static attr amount: decimal } entity Child inherits Base {}');
     fs.writeFileSync(path.join(root, 'extra.yambl'), 'namespace core extend Child { static attr label: string }');
     return root;
   });
   const service = new Service(() => {}), uri = 'untitled:bound-plan';
-  const text = cases[0].text.replace('group first {', "group first {\nupdate fmc.core.Child (id, amount, label) {\n'x', 2.5, 'label'\n}\ndelete fmc.core.Child.label scope (id='y')");
+  const text = cases[0].text.replace('group first {', "group first {\nupdate demo.core.Child (id, amount, label) {\n'x', 2.5, 'label'\n}\ndelete demo.core.Child.label scope (id='y')");
   service.open.set(uri, { text, languageId: 'yaplan', version: 1 });
   const at = (needle, skip = 0) => {
     const offset = text.indexOf(needle) + skip, lines = text.slice(0, offset).split('\n');
@@ -86,7 +86,7 @@ test('explicit model bindings navigate inherited and extended fields and track u
   const definition = (needle, skip = 0) => service.feature('textDocument/definition', { textDocument: { uri }, position: at(needle, skip) });
   service.bindModel(uri, roots[0]);
   assert.deepEqual(service.document(uri).diagnostics, []);
-  assert.ok(definition('fmc.core.Child').uri.endsWith('/first/base.yambl'));
+  assert.ok(definition('demo.core.Child').uri.endsWith('/first/base.yambl'));
   assert.ok(definition('amount').uri.endsWith('/first/base.yambl'));
   assert.ok(definition('label').uri.endsWith('/first/extra.yambl'));
   assert.ok(definition('Child.label', 6).uri.endsWith('/first/extra.yambl'));
@@ -100,11 +100,11 @@ test('explicit model bindings navigate inherited and extended fields and track u
   assert.ok(definition('label').uri.endsWith('/second/extra.yambl'));
   const configUri = pathToFileURL(path.join(roots[1], 'yambl-root.lclcfg')).href;
   service.open.set(configUri, { text: "prefix: 'other'", version: 1 }); service.refresh();
-  assert.equal(definition('fmc.core.Child'), null);
+  assert.equal(definition('demo.core.Child'), null);
   service.open.delete(configUri); service.refresh();
-  assert.ok(definition('fmc.core.Child'));
+  assert.ok(definition('demo.core.Child'));
   service.bindModel(uri, null);
-  assert.equal(definition('fmc.core.Child'), null);
+  assert.equal(definition('demo.core.Child'), null);
   assert.equal(service.document(extraUri).diagnostics.length, 0);
 });
 
@@ -164,10 +164,10 @@ test('shared runtime/editor type cases use aliases, exact constraints and refere
   }
 });
 
-test('FMC static plan passes model-bound type checks', () => {
-  const root = path.resolve(__dirname, '../../../../../fmc-data-model'), uri = 'untitled:typed-fmc';
+test('Example static plan passes model-bound type checks', () => {
+  const root = path.resolve(__dirname, 'fixtures/example'), uri = 'untitled:typed-example';
   const service = new Service(() => {});
-  service.open.set(uri, { text: fs.readFileSync(path.join(root, 'sample_data/demo.yaplan'), 'utf8'), languageId: 'yaplan', version: 1 });
+  service.open.set(uri, { text: fs.readFileSync(path.join(root, 'example.yaplan'), 'utf8'), languageId: 'yaplan', version: 1 });
   service.bindModel(uri, path.join(root, 'model'));
   assert.deepEqual(service.document(uri).diagnostics, []);
 });
@@ -233,6 +233,8 @@ extend Item {
     ['update core.Item (amount) {\n1\n}', /ID column/],
     ['delete core.Item (id, amount) {\n1, 2\n}', /not writable/],
     ['update core.Item (id, doubled) {\n1, 2\n}', /not writable/],
+    ['update core.Item (id, entity_type) {\n1, core.Item\n}', /not writable/],
+    ['delete core.Item.root_entity_type scope (id=1)', /not writable/],
     ['update core.Item (id, members) {\n1, [2]\n}', /scope/],
     ['update core.Item.amount (id, value) {\n1, 2\n}', /field operations/],
     ['delete core.Item.id scope (id=1)', /not writable/],
@@ -256,11 +258,11 @@ test('ConfigGroup maps check field categories, payload types and known target tr
   const service = new Service(() => {}), uri = 'untitled:config-plan';
   service.bindModel(uri, root);
   const diagnose = (field, value) => {
-    const body = `insert builtins.ConfigGroup (config_group_id, priority, entity_type) {\n'g', 1, core.Item\n}\nreplace builtins.ConfigGroup.${field} scope (config_group_id='g') columns (value) {\n${value}\n}`;
+    const body = `insert builtins.ConfigGroup (config_group_id, priority, target_entity_type) {\n'g', 1, core.Item\n}\nreplace builtins.ConfigGroup.${field} scope (config_group_id='g') columns (value) {\n${value}\n}`;
     service.open.set(uri, { text: cases[0].text.replace('group first {', 'group first {\n' + body), languageId: 'yaplan', version: 1 }); service.refresh();
     return service.document(uri).diagnostics;
   };
-  for (const [field, value] of [['when', '{core.Item.count: 2}'], ['then_set', "{'core.Item.limit': 3}"], ['when', '{}']]) assert.deepEqual(diagnose(field, value), []);
+  for (const [field, value] of [['when', '{core.Item.count: 2}'], ['when', '{core.Item.entity_type: core.Item}'], ['when', '{core.Item.root_entity_type: core.Item}'], ['then_set', "{'core.Item.limit': 3}"], ['when', '{}']]) assert.deepEqual(diagnose(field, value), []);
   for (const [field, value, error] of [
     ['when', '{core.Item.limit: 2}', /static fields/],
     ['then_set', '{core.Item.count: 2}', /config fields/],
@@ -297,4 +299,93 @@ test('sealed transaction images validate their types and navigate field coordina
     const formatted = format(doc);
     assert.equal(parse(formatted).ast.digest, doc.ast.digest);
   }
+});
+
+
+test('Plan dictionary changes protect model entries and track known members in order', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-plan-dictionaries-'));
+  t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
+  fs.writeFileSync(path.join(root, 'model.yambl'), `namespace core
+    decodes Colors { - 100 Red: 'Red' - 200 Blue: 'Blue' }
+    @flags decodes Access { - 1 Read: 'Read' }
+    entity Root { id id: string }
+    entity Child inherits Root {}
+    value point { attr color: code<Colors> }
+    entity Item {
+      id id: string
+      static attr color: code<Colors>
+      static attr samples: values<point>
+      dimension shades { value shade: code<Colors> }
+      @dimension(shades) @temporal(day: date) snapshot attr amount: decimal
+    }`);
+  const service = new Service(() => {}), uri = 'untitled:dictionary-plan';
+  service.bindModel(uri, root);
+  function diagnostics(operations) {
+    const text = `plan p {\nversion 1\ngroup first {\n${operations.join('\n')}\n}\n}\n`;
+    service.open.set(uri, { text, languageId: 'yaplan', version: 1 }); service.refresh();
+    return service.document(uri).diagnostics.map(d => d.message);
+  }
+  const replace = value => `replace builtins.Decodes.entries scope (decodes_id='core.Colors') columns (value) {\n${value}\n}`;
+  const original = "{code: 'Red', decode: 'Red', ordering: 100}, {code: 'Blue', decode: 'Blue', ordering: 200}";
+  const extension = `{code: 'Purple', decode: 'Purple', ordering: 300}`;
+  const use = code => `update core.Item (id, color) {\n'one', '${code}'\n}`;
+  assert.deepEqual(diagnostics([use('PreviouslyAdded')]), []);
+  assert.deepEqual(diagnostics([replace(`[${original}, ${extension}]`), use('Purple')]), []);
+  assert.deepEqual(diagnostics([replace(`[${original}, ${extension}]`), '}\ngroup later {\n' + use('Purple')]), []);
+  const nested = "replace core.Item.samples scope (id='one') columns (value) {\n[{color: 'Purple'}]\n}";
+  const dimension = "replace core.Item.amount scope (id='one', shade='Purple') columns (day, value) {\n'2026-01-01', 1\n}";
+  const group = "insert builtins.ConfigGroup (config_group_id, priority, target_entity_type) {\n'g', 1, core.Item\n}";
+  const mapping = "replace builtins.ConfigGroup.when scope (config_group_id='g') columns (value) {\n{core.Item.color: 'Purple'}\n}";
+  for (const operation of [nested, dimension]) {
+    assert.deepEqual(diagnostics([replace(`[${original}, ${extension}]`), operation]), []);
+    assert.ok(diagnostics([replace(`[${original}]`), operation]).includes('unknown code for core.Colors: Purple'));
+  }
+  assert.deepEqual(diagnostics([replace(`[${original}, ${extension}]`), group, mapping]), []);
+  assert.ok(diagnostics([replace(`[${original}]`), group, mapping]).includes('unknown code for core.Colors: Purple'));
+  assert.ok(diagnostics([replace(`[${original}]`), use('Purple')]).includes('unknown code for core.Colors: Purple'));
+  for (const changed of [
+    "[{code: 'Red', decode: 'Red', ordering: 100}]",
+    "[{code: 'Red', decode: 'Changed', ordering: 100}, {code: 'Blue', decode: 'Blue', ordering: 200}]",
+    "[{code: 'Red', decode: 'Red', ordering: 101}, {code: 'Blue', decode: 'Blue', ordering: 200}]",
+    '[]', 'EMPTY',
+  ]) assert.ok(diagnostics([replace(changed)]).includes('model dictionary entries are immutable: core.Colors'), changed);
+  assert.ok(diagnostics([replace(`[${original}, ${extension}, ${extension}]`)]).includes('duplicate collection member'));
+  assert.ok(diagnostics(["delete builtins.Decodes (decodes_id) {\n'core.Colors'\n}"]).includes('model dictionary cannot be deleted: core.Colors'));
+  for (const [id, label] of [['core.Access', 'flags'], ['core.Root::subtypes', 'derived']]) {
+    for (const operation of [
+      `insert builtins.Decodes (decodes_id) {\n'${id}'\n}`,
+      `update builtins.Decodes (decodes_id) {\n'${id}'\n}`,
+      `delete builtins.Decodes (decodes_id) {\n'${id}'\n}`,
+      `delete builtins.Decodes.entries scope (decodes_id='${id}')`,
+      `replace builtins.Decodes.entries scope (decodes_id='${id}') columns (value) {\n[]\n}`,
+    ]) assert.ok(diagnostics([operation]).includes(`${label} dictionary is read-only: ${id}`), operation);
+  }
+  assert.deepEqual(diagnostics(["insert builtins.Decodes (decodes_id, entries) {\n'external', []\n}"]), []);
+  const transaction = `transaction '12345678-1234-1234-1234-123456789abc' {
+version 1
+time '2026-10-26T12:34:56Z'
+digest '${'0'.repeat(64)}'
+plan p {
+version 1
+model '${'a'.repeat(64)}'
+group first {
+${replace(`[${original}]`)}
+}
+}
+group first {
+change core.Item.color scope (id='one') {
+before core.Item.color (id, value) {
+'one', 'Purple'
+}
+after core.Item.color (id, value) {
+'one', 'Purple'
+}
+}
+}
+}`;
+  const transactionSyntax = require('../transactions/syntax.cjs');
+  const digest = require('../transactions/writing.cjs').semanticDigest(transactionSyntax.parse(transaction).ast);
+  service.open.set(uri, { text: transaction.replace('0'.repeat(64), digest), languageId: 'yatran', version: 2 }); service.refresh();
+  assert.deepEqual(service.document(uri).diagnostics, []);
 });

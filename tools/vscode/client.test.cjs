@@ -81,11 +81,11 @@ test('VS Code adapters retain snippets, named insertions and live signature help
       assert.ok(items.some(item => item.label === 'scope'));
     }
 
-    // Drive the shipped client against the real FMC repository and LSP process.
-    const filename = path.resolve(__dirname, '../../../fmc-data-model/model/core/computations.yambl');
+    // Drive the shipped client against the bundled example repository and LSP process.
+    const filename = path.resolve(__dirname, 'lsp/tests/fixtures/example/model/core/computations.yambl');
     const original = fs.readFileSync(filename, 'utf8');
     let current = original;
-    const fmc = { languageId: 'yambl', uri: { toString: () => pathToFileURL(filename).href }, version: 1, getText: () => current };
+    const example = { languageId: 'yambl', uri: { toString: () => pathToFileURL(filename).href }, version: 1, getText: () => current };
     const at = offset => { const lines = current.slice(0, offset).split('\n'); return { line: lines.length - 1, character: lines.at(-1).length }; };
     for (const [prefix, name, candidate] of [
       ['input.', 'industry_date', 'price_date'],
@@ -93,37 +93,37 @@ test('VS Code adapters retain snippets, named insertions and live signature help
       ['h.security.', 'wind_level1_industry', 'wind_level1_industry'],
     ]) {
       const offset = original.indexOf(prefix + name) + prefix.length;
-      current = original.slice(0, offset) + original.slice(offset + name.length); fmc.version++;
-      const offered = await completion.provider.provideCompletionItems(fmc, at(offset));
+      current = original.slice(0, offset) + original.slice(offset + name.length); example.version++;
+      const offered = await completion.provider.provideCompletionItems(example, at(offset));
       assert.ok(offered.some(i => i.label === candidate));
       assert.ok(!offered.some(i => i.label === '__completion'));
     }
-    current = original; fmc.version++;
+    current = original; example.version++;
     const descriptorOffset = original.indexOf('self.holdings::') + 'self.holdings::'.length;
-    const descriptorItems = await completion.provider.provideCompletionItems(fmc, at(descriptorOffset));
+    const descriptorItems = await completion.provider.provideCompletionItems(example, at(descriptorOffset));
     assert.deepEqual(descriptorItems.map(i => i.label), ['value', 'best_available']);
     assert.equal(descriptorItems[0].insertText.value, 'value($0)');
     for (const needle of ['holdings::value(', 'market_value::value(']) {
       const offset = original.indexOf(needle) + needle.length;
-      current = original.slice(0, offset) + original.slice(original.indexOf(')', offset) + 1); fmc.version++;
-      const help = await providers.get('registerSignatureHelpProvider').provider.provideSignatureHelp(fmc, at(offset));
+      current = original.slice(0, offset) + original.slice(original.indexOf(')', offset) + 1); example.version++;
+      const help = await providers.get('registerSignatureHelpProvider').provider.provideSignatureHelp(example, at(offset));
       assert.match(help.signatures[0].label, /as_of_date: date/);
       if (needle.includes('market_value')) assert.match(help.signatures[0].label, /price_hierarchy: Hierarchy/);
     }
-    current = original; fmc.version++;
-    const inputHover = await providers.get('registerHoverProvider').provider.provideHover(fmc, at(original.indexOf('input.industry_date')));
+    current = original; example.version++;
+    const inputHover = await providers.get('registerHoverProvider').provider.provideHover(example, at(original.indexOf('input.industry_date')));
     assert.match(inputHover.contents.value, /input: \{\n/);
     assert.match(inputHover.contents.value, /price_source: code<PriceSources> \(optional\)/);
     assert.match(inputHover.contents.value, /industry_date: date = input.as_of_date/);
     const use = at(original.indexOf('security.wind_level1_industry'));
-    const target = await providers.get('registerDefinitionProvider').provider.provideDefinition(fmc, use);
+    const target = await providers.get('registerDefinitionProvider').provider.provideDefinition(example, use);
     assert.ok(target.uri.endsWith('/holdings_entry.yambl'));
     const owner = { languageId: 'yambl', uri: { toString: () => target.uri }, version: 1, getText: () => fs.readFileSync(fileURLToPath(target.uri), 'utf8') };
     const [line, character] = target.range.coordinates;
     const references = await providers.get('registerReferenceProvider').provider.provideReferences(owner, { line, character }, { includeDeclaration: false });
-    assert.ok(references.some(r => r.uri === fmc.uri.toString() && r.range.coordinates[0] === use.line && r.range.coordinates[1] === use.character));
-    const root = path.resolve(__dirname, '../../../fmc-data-model');
-    const planText = fs.readFileSync(path.join(root, 'sample_data/demo.yaplan'), 'utf8');
+    assert.ok(references.some(r => r.uri === example.uri.toString() && r.range.coordinates[0] === use.line && r.range.coordinates[1] === use.character));
+    const root = path.resolve(__dirname, 'lsp/tests/fixtures/example');
+    const planText = fs.readFileSync(path.join(root, 'example.yaplan'), 'utf8');
     const planDoc = { languageId: 'yaplan', uri: { toString: () => 'untitled:bound-client' }, version: 1, getText: () => planText };
     vscode.window.activeTextEditor = { document: planDoc };
     vscode.window.showOpenDialog = async () => [{ fsPath: path.join(root, 'model') }];
@@ -133,12 +133,12 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     const prefix = planText.slice(0, planText.indexOf('core.Security')).split('\n');
     const planPosition = { line: prefix.length - 1, character: prefix.at(-1).length };
     const definition = providers.get('registerDefinitionProvider').provider;
-    assert.ok((await definition.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/security.yambl'));
+    assert.ok((await definition.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/security/security.yambl'));
     await module.exports.deactivate();
     subscriptions.splice(0).forEach(s => s.dispose?.());
     vscode.workspace.textDocuments = [planDoc];
     await module.exports.activate({ subscriptions, workspaceState: { get: (key, fallback) => saved.get(key) || fallback, update: async (key, value) => saved.set(key, { ...value }) } });
-    assert.ok((await providers.get('registerDefinitionProvider').provider.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/security.yambl'));
+    assert.ok((await providers.get('registerDefinitionProvider').provider.provideDefinition(planDoc, planPosition)).uri.endsWith('/core/security/security.yambl'));
     await commands.get('yambl.clearTransactionModel')();
     assert.equal(saved.get('transactionModelBindings')[planDoc.uri.toString()], undefined);
     assert.equal(await definition.provideDefinition(planDoc, planPosition), null);

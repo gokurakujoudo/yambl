@@ -1,37 +1,52 @@
 # YAMBL
 
-YAMBL stands for **Yet Another Model-Based Language**. It is a domain-specific
-language for describing business models.
+YAMBL（Yet Another Model-Based Language）用于描述实体、属性、类型、字典与计算规则。
+[YAMBL 编译器](https://github.com/gokurakujoudo/yambl-compiler)可检查、格式化模型，
+编译中间模型并生成数据访问包。
 
-The language is being designed. This repository records confirmed decisions and
-proposals for discussion. The companion compiler checks and formats the current
-examples, including attribute extensions, final entities, overload/override field
-contracts, dependent field mappings, ConfigGroup, and external Decodes.
+## 快速开始
 
-The built-in data repository is [lang/](lang/README.md). Expressible definitions,
-including AttrCats and the field_mapping alias, are compiled from its source files.
+安装 Python 3.14 或更新版本和 Git，在 PowerShell 中运行：
 
-## Repository structure
+```powershell
+git clone https://github.com/gokurakujoudo/yambl-compiler.git
+cd yambl-compiler
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+```
 
-- [lang/syntex/](lang/syntex/README.md): lexical rules, syntax, source formatting, file
-  structure, and model repository structure.
-- [lang/builtins/](lang/builtins/README.md): built-in keywords, types, and constants.
-- [lang/models/](lang/models/README.md): built-in data models.
-- [tools/vscode/](tools/vscode/README.md): VS Code highlighting, language features,
-  and local installation scripts.
-- [tools/vscode/lsp/](tools/vscode/lsp/README.md): a self-contained language server included in
-  the VS Code extension, with no external runtime or service setup.
+在一个新工作目录创建 `model` 目录和两个 UTF-8 文件。`model/yambl-root.lclcfg`：
 
-Draft examples illustrate proposed notation. Their semantics remain open unless
-explicitly marked as confirmed.
+```text
+prefix: 'example'
+```
 
-## Related projects
+`model/items.yambl`：
 
-- [fmc-data-model](https://github.com/gokurakujoudo/fmc-data-model) uses YAMBL
-  to describe the data model of a fund management company.
-- [yambl-compiler](https://github.com/gokurakujoudo/yambl-compiler) provides the
-  Python parser, static checker, and formatter. A stable intermediate representation
-  and target generation are planned.
+```yambl
+namespace inventory
 
-The language definition belongs here. Company-specific models belong in
-`fmc-data-model`, and compiler implementation belongs in `yambl-compiler`.
+entity Item {
+    id item_id: string
+    static attr name: string
+}
+```
+
+实体 `Item` 用 `item_id` 标识，每个实例可以有一个名称。在 `model` 的父目录运行：
+
+```powershell
+yambl check -o path ./model
+yambl format -o path ./model
+yambl format -o path ./model -o check
+```
+
+第一条命令检查整个模型仓库；第二条格式化所选目录；第三条确认文件符合格式要求。
+格式化使用 LF 和四空格缩进。
+
+## 文档
+
+- [从零开始](docs/tutorial/getting-started.md)：安装工具、编写模型、检查并生成数据包。
+- [中文参考](docs/reference/README.md)：语言规则、计算、事务和存储能力。
+- [VS Code 扩展](tools/vscode/README.md)：语法高亮、补全、诊断和导航。
+- [内置模型](lang/README.md)：随工具分发的定义和模型源码。

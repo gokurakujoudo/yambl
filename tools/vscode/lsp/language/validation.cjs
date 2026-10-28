@@ -1,6 +1,6 @@
 'use strict';
 const { checkDecorators } = require('./decorators.cjs');
-const { isFlags, codeEntries, checkDecodes } = require('./decodes.cjs');
+const { isFlags, codeEntries, checkDecodes, deriveSubtypes } = require('./decodes.cjs');
 
 const { values, generics, entities, structures, stringValue, resultConstants } = require('./syntax.cjs');
 const { relationships, builtinModels } = require('./relationships.cjs');
@@ -60,6 +60,7 @@ function validate(documents) {
       const blocked = decl.kind === 'extend' && (builtinModels.get(decl.name.value)?.final || target?.final);
       if (blocked) issue(doc, decl.token, `cannot extend final entity: ${decl.name.value}`);
       else if (decl.kind === 'extend' && (!target || target.kind !== 'entity')) issue(doc, decl.token, `extend requires a visible user-defined entity: ${decl.name.value}`);
+      if (decl.metadata.some(a => a.name === 'decodes_rank') && !decl.parent) issue(doc, decl.token, 'decodes_rank requires an explicit parent');
       if (decl.parent) {
         const parent = doc.scope.get(decl.parent.value); bind(doc, decl.parent, parent);
         if (builtinModels.get(decl.parent.value)?.final || parent?.final) issue(doc, decl.parent, `cannot inherit final entity: ${decl.parent.value}`);
@@ -69,6 +70,7 @@ function validate(documents) {
       }
       for (const field of decl.fields) {
         const name = field.name.value; bind(doc, field.name, field);
+        if (target?.kind === 'entity' && ['entity_type', 'root_entity_type'].includes(name)) issue(doc, field.token, `reserved built-in field: ${name}`);
         field.owner = target;
         if (!blocked && ['entity', 'value'].includes(target?.kind)) {
           if (target.ownFields.has(name)) issue(doc, field.token, `duplicate field: ${name}`);
@@ -108,6 +110,7 @@ function validate(documents) {
   }
   collectDimensions(documents.filter(d => !d.errors.length), issue);
   relationships(symbols, issue);
+  deriveSubtypes(symbols, issue);
   checkDimensions(documents.filter(d => !d.errors.length), issue, symbols);
   checkDecorators(documents, issue, symbols);
   checkAliases(documents, issue, symbols);

@@ -81,6 +81,11 @@ async function main() {
   }
 
   expectScope('@flags', '@flags', 'entity.name.function.yambl');
+  expectScope("@decodes_rank(-5, 'Child')", '@decodes_rank', 'entity.name.function.yambl');
+  expectScope('Root::subtypes.Child', 'Root', 'support.type.yambl');
+  expectScope('Root::subtypes.Child', '::', 'punctuation.accessor.yambl');
+  expectScope('Root::subtypes.Child', 'subtypes', 'variable.language.yambl');
+  expectScope('Root::subtypes.Child', 'Child', 'constant.other.yambl');
   for (const name of ['sparse', 'dense']) {
     expectScope(`@${name}(cat='bond_info')`, '@' + name, 'entity.name.function.yambl');
     expectScope(`@${name}(cat='bond_info')`, 'cat', 'variable.parameter.yambl');
@@ -229,8 +234,8 @@ async function main() {
   const nestedType = 'computed attr totals: mapping<string, collection<HoldingEntry>> {';
   for (const match of nestedType.matchAll(/[<>{]/g)) expectBracketMetadata(nestedType, match.index, 1, true);
   let computationState = textmate.INITIAL, arrowCount = 0;
-  const fmcSource = fs.readFileSync(path.resolve(__dirname, '../../../fmc-data-model/model/core/computations.yambl'), 'utf8');
-  for (const line of fmcSource.split(/\r?\n/)) {
+  const exampleSource = fs.readFileSync(path.resolve(__dirname, 'lsp/tests/fixtures/example/model/core/computations.yambl'), 'utf8');
+  for (const line of exampleSource.split(/\r?\n/)) {
     const tokens = grammar.tokenizeLine(line, computationState);
     for (const match of line.matchAll(/->/g)) {
       const token = tokens.tokens.find(t => t.startIndex <= match.index && t.endIndex >= match.index + 2);
@@ -240,7 +245,7 @@ async function main() {
     }
     computationState = tokens.ruleStack;
   }
-  assert.ok(arrowCount >= 3, 'FMC must exercise both lambdas and recovery arrows');
+  assert.ok(arrowCount >= 3, 'The example must exercise both lambdas and recovery arrows');
   expectScope("value price_source: code<'PriceSources'>", 'price_source', 'variable.other.property.yambl');
   expectScope("hierarchy price_hierarchy: Hierarchy = 'LocalHierarchy'", 'price_hierarchy', 'variable.other.property.yambl');
   expectScope('decorator @extra_input_params(*parameter: input_type)', 'input_type', 'support.type.yambl');

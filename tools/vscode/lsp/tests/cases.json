@@ -329,7 +329,7 @@
     "namespace builtins value string {} entity Entity {}"
   ],
   [
-    "namespace fmc.builtins final entity Hierarchy {}"
+    "namespace demo.builtins final entity Hierarchy {}"
   ],
   [
     "namespace builtins entity Private {}",

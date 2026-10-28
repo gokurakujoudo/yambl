@@ -97,7 +97,7 @@ node tools/vscode/lsp/tests/parity.cjs
 The parity check uses the compiler's existing venv, or a Python executable supplied
 as its first argument. It compares syntax acceptance, core diagnostics before the
 editor's dynamic-Decodes filter, and formatted
-output for the regression corpus and current FMC files. Python is a development
+output for the regression corpus and current model files. Python is a development
 test dependency only. New keywords must be added to both implementations and the
 TextMate grammar; the vocabulary tests check this link.
 
@@ -161,7 +161,7 @@ resolved fields. Field uses participate in definition navigation and reference s
 completion and signature help. The editor inserts `name=` and preserves snippets.
 `input.` lists inferred and explicitly declared inputs, their types and defaults.
 `@extra_input_params` supplies optional input declarations and descriptions; `??`
-handles omitted inputs. The former `.default(...)` syntax is no longer supported.
+handles omitted inputs.
 The formatter preserves multiline lambda bodies and chained recovery calls.
 
 The server is an internal component of `tools/vscode/`. Stored and computed field

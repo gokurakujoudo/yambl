@@ -98,6 +98,8 @@ function inside(root, uri) {
 const help = {
   sparse: 'Store a non-collection, dimensionless static field in a typed long table grouped by inheritance root and cat. cat must be nonempty snake_case. Mutually exclusive with dense and dimension; reading semantics are unchanged.',
   dense: 'Store a non-collection, dimensionless static field in a wide table grouped by inheritance root and cat. cat must be nonempty snake_case. Mutually exclusive with sparse and dimension; reading semantics are unchanged.',
+  decodes_rank: 'Override a descendant code ordering relative to its parent and supply its decode.',
+  subtypes: 'Derived Decodes containing strict descendant entities.',
   flags: 'Independent positive single-bit codes; None is zero and All selects every declared flag. Use + to add and - to remove flags, left to right; repeated additions or removals have no further effect.',
   value: 'Final structured value; fields are static, non-collection values or entity IDs.',
   Hierarchy: 'Prioritized dimension candidates; lower ordering is tried first.',
@@ -109,7 +111,7 @@ const help = {
   self: 'The current entity instance; self.field selects a descriptor; ::type and ::value select its type and instance value.',
   overload: 'Same-signature field shared by independent branches of one inheritance tree.',
   override: 'Same-signature redeclaration of an inherited field; config defaults may differ.',
-  ConfigGroup: 'Final built-in conditional configuration model with entity_type, when and then_set.',
+  ConfigGroup: 'Final built-in conditional configuration model with target_entity_type, when and then_set.',
   extend: 'Merge attributes into the named entity. Each attribute retains its original definition location.',
   inherits: 'Single inheritance. Duplicate inherited fields and cycles are errors.',
   snapshot: 'Independent temporal attribute snapshot.', scd: 'Slowly changing dimension Type 2 attribute.',
@@ -336,6 +338,7 @@ class Service {
         const parameter = computation?.inferredInputs?.find(p => p.name === token.value);
         if (parameter) return { contents: { kind: 'plaintext', value: `input.${parameter.name}: ${typeLabel(parameter.type)}${parameter.default ? ' = ' + defaultLabel(parameter.default) : parameter.required ? ' (required)' : ' (optional)'}${parameter.description ? '\n\n' + parameter.description : ''}\n\nExternal computation input. Bind with name=input.name; defaults apply only when omitted.` }, range: token.range };
       }
+      if (token?.value === 'subtypes' && target?.kind === 'entity') return { contents: { kind: 'plaintext', value: target.name.value + '::subtypes: ' + help.subtypes }, range: token.range };
       const value = target ? describe(target) + (target.kind === 'decorator' && help[token.value] ? '\n\n' + help[token.value] : '') : token && (help[token.value] || (values.includes(token.value) ? `Built-in value type: ${token.value}` : null));
       return value ? { contents: { kind: 'plaintext', value }, range: token.range } : null;
     }
@@ -359,6 +362,14 @@ class Service {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       const before = doc.text.slice(0, offset);
       if (doc.comments.some(c => c.start <= offset && offset <= c.end) || doc.tokens.some(t => t.value.startsWith("'") && t.start < offset && offset < t.end)) return { isIncomplete: false, items: [] };
+      const subtypeMember = /\b([A-Z][A-Za-z_0-9]*)::subtypes\.([A-Za-z_0-9]*)$/.exec(before);
+      const subtypeDescriptor = /\b([A-Z][A-Za-z_0-9]*)::([a-z_0-9]*)$/.exec(before);
+      if (subtypeMember || subtypeDescriptor) {
+        const match = subtypeMember || subtypeDescriptor;
+        const scope = doc.errors.length ? this.completionScope(doc, match.index, offset) : doc.scope;
+        const owner = scope.get(match[1]);
+        if (owner?.kind === 'entity') return { isIncomplete: false, items: subtypeMember ? codeEntries(owner.subtypes).map(e => ({ label: e.name.value, kind: 20, detail: describe(e) })) : [{ label: 'subtypes', kind: 10, detail: 'Derived Decodes of strict descendant entities' }] };
+      }
       const typeContext = typeTools.context(doc, offset);
       if (typeContext && !/::[a-z_]*$/.test(before) && !/\bself(?:\.[A-Za-z_][A-Za-z_0-9]*(?:::value)?)*\.[A-Za-z_0-9]*$/.test(before) && !/\b[A-Z][A-Za-z_0-9]*\.[A-Za-z_0-9]*$/.test(before)) {
         const scope = this.typeScope(doc, typeContext, offset);
@@ -461,11 +472,13 @@ class Service {
         let completionDoc = doc;
         const scope = doc.errors.length ? this.completionScope(doc, decorator.index, offset, true, recovered => { completionDoc = recovered; }) : doc.scope;
         const symbols = new Map([...scope.values()].map(d => [d.key, d]));
+        const targetDeclaration = completionDoc.declarations.find(d => d.metadata?.some(a => a.token.start === decorator.index));
         const field = completionDoc.declarations.flatMap(d => d.fields).find(f => f.metadata.some(a => a.token.start === decorator.index));
         const collection = field && new Resolver(completionDoc, () => {}, symbols, field.owner).resolve(field.type).kind === 'collection';
         const usedKeys = new Set([...used].map(name => scope.get(name)?.key));
         const applicable = [...scope.values()].filter(d => {
           if (d.kind !== 'decorator') return false;
+          if (d.name.value === 'decodes_rank' && targetDeclaration?.kind === 'entity' && !targetDeclaration.parent) return false;
           if (collection && ['sparse', 'dense'].includes(d.name.value)) return false;
           if (usedKeys.has(d.key) && !allowsMultiple(d)) return false;
           if (['sparse', 'dense'].includes(d.name.value) && ['sparse', 'dense', 'dimension'].some(name => used.has(name))) return false;

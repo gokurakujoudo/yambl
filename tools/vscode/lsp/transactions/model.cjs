@@ -87,7 +87,7 @@ function completion(doc, position) {
     for (const [name, entity] of doc.entities) {
       if (![...entity.effective.values()].some(f => f.mode === 'id')) continue;
       if (kind !== 'replace') names.push(name);
-      if (['replace', 'delete'].includes(kind)) for (const [fieldName, field] of entity.effective) if (!['id', 'computed'].includes(field.mode)) names.push(name + '.' + fieldName);
+      if (['replace', 'delete'].includes(kind)) for (const [fieldName, field] of entity.effective) if (!field.builtin && !['id', 'computed'].includes(field.mode)) names.push(name + '.' + fieldName);
     }
     return names.filter(name => name.startsWith(target)).map(label => ({ label, kind: 7, insertText: label.slice(target.lastIndexOf('.') + 1) }));
   }
@@ -105,7 +105,7 @@ function completion(doc, position) {
       for (const match of scope.matchAll(/\b([a-z_][a-z_0-9]*)\s*=/g)) used.add(match[1]);
     } else choices = new Map([...entity.effective].filter(([, candidate]) => {
       if (candidate.mode === 'id') return true;
-      if (kind === 'delete' || !['static', 'config'].includes(candidate.mode) || candidate.metadata.some(m => m.name === 'dimension')) return false;
+      if (candidate.builtin || kind === 'delete' || !['static', 'config'].includes(candidate.mode) || candidate.metadata.some(m => m.name === 'dimension')) return false;
       const resolved = new Resolver(candidate.doc, () => {}, doc.modelSymbols, candidate.owner, true).resolve(candidate.type);
       return kind === 'insert' || !['collection', 'values', 'mapping'].includes(resolved.name);
     }));

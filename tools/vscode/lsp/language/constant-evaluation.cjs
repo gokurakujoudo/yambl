@@ -75,6 +75,7 @@ function evaluate(node, resolve) {
   if (node.kind === 'bool') return node.value === 'true';
   if (node.kind === 'name') return resolve(node.value);
   if (node.kind === 'member' && node.operands[0].kind === 'name') return resolve(node.operands[0].value + '.' + node.value);
+  if (node.kind === 'member' && node.operands[0].kind === 'descriptor' && node.operands[0].value === 'subtypes' && node.operands[0].operands[0].kind === 'name') return resolve(node.operands[0].operands[0].value + '::subtypes.' + node.value);
   if (node.kind === 'sequence') return node.operands.map(child);
   if (node.kind === 'object') { const result = new Map(); for (let i = 0; i < node.operands.length; i += 2) { const key = node.operands[i], value = child(node.operands[i + 1]), actual = key.kind === 'name' ? key.value : child(key); if (result.has(actual)) throw Error('duplicate mapping literal key'); result.set(actual, value); } return result; }
   if (node.kind === 'conditional') return child(node.operands[truth(child(node.operands[0])) ? 1 : 2]);

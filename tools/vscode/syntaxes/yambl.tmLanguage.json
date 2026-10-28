@@ -44,7 +44,17 @@
       }
     },
     {
-      "match": "(::)(type|value|entity|best_available)\\b",
+      "match": "\\b([A-Z][A-Za-z0-9_]*)(::)(subtypes)(\\.)([A-Z][A-Za-z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "support.type.yambl" },
+        "2": { "name": "punctuation.accessor.yambl" },
+        "3": { "name": "variable.language.yambl" },
+        "4": { "name": "punctuation.accessor.yambl" },
+        "5": { "name": "constant.other.yambl" }
+      }
+    },
+    {
+      "match": "(::)(type|value|entity|best_available|subtypes)\\b",
       "captures": {
         "1": {
           "name": "punctuation.accessor.yambl"

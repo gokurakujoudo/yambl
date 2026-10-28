@@ -9,8 +9,8 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { position } = require('../language/syntax.cjs');
 
-function fmcEditor() {
-  const filename = path.resolve(__dirname, '../../../../../fmc-data-model/model/core/computations.yambl');
+function exampleEditor() {
+  const filename = path.resolve(__dirname, 'fixtures/example/model/core/computations.yambl');
   const uri = pathToFileURL(filename).href, original = fs.readFileSync(filename, 'utf8');
   const service = new Service(() => {});
   let text, version = 0;
@@ -67,8 +67,8 @@ test('descriptor completions use the receiver and reject invalid member contexts
   }
 });
 
-test('actual FMC completion handles unfinished inputs and typed collection/reference members', () => {
-  const { original, open, feature } = fmcEditor();
+test('example model completion handles unfinished inputs and typed collection/reference members', () => {
+  const { original, open, feature } = exampleEditor();
   for (const [prefix, name, expected] of [
     ['input.', 'industry_date', ['industry_date', 'price_date', 'as_of_date', 'price_source', 'price_hierarchy']],
     ['holdings.', 'group_by', ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'recover']],
@@ -89,8 +89,8 @@ test('actual FMC completion handles unfinished inputs and typed collection/refer
   }
 });
 
-test('actual FMC input hover shows the complete inferred input structure', () => {
-  const { original, feature } = fmcEditor();
+test('example model input hover shows the complete inferred input structure', () => {
+  const { original, feature } = exampleEditor();
   const first = feature('hover', original.indexOf('input.industry_date'));
   const second = feature('hover', original.indexOf('input.price_date'));
   assert.equal(first.contents.value, second.contents.value);
@@ -99,7 +99,7 @@ test('actual FMC input hover shows the complete inferred input structure', () =>
     'as_of_date: date (required)',
     'industry_date: date = input.as_of_date',
     'price_date: date = input.as_of_date',
-    "price_hierarchy: Hierarchy = 'LocalHierarchy'",
+    'price_hierarchy: Hierarchy (optional)',
     'price_source: code<PriceSources> (optional)',
     "Additional issuer's industry date",
   ]) assert.ok(first.contents.value.includes(entry), entry);
@@ -110,8 +110,8 @@ test('actual FMC input hover shows the complete inferred input structure', () =>
   assert.match(member.contents.value, /Additional issuer's industry date/);
 });
 
-test('actual FMC field calls offer signatures while parentheses and argument values are unfinished', () => {
-  const { original, open, feature } = fmcEditor();
+test('example model field calls offer signatures while parentheses and argument values are unfinished', () => {
+  const { original, open, feature } = exampleEditor();
   for (const [needle, parameters] of [
     ['holdings::value(', ['as_of_date']],
     ['industry::value(', ['as_of_date', 'industry_type']],
@@ -136,14 +136,14 @@ test('actual FMC field calls offer signatures while parentheses and argument val
   }
 });
 
-test('actual FMC calculated paths navigate across files and appear in reverse references', () => {
-  const { uri, original, service, feature } = fmcEditor();
+test('example model calculated paths navigate across files and appear in reverse references', () => {
+  const { uri, original, service, feature } = exampleEditor();
   for (const [use, file, declaration] of [
     ['security.wind_level1_industry', 'holdings_entry.yambl', 'security: Security'],
     ['wind_level1_industry::value', 'computations.yambl', 'wind_level1_industry: string'],
-    ['issuer.industry', 'security.yambl', 'issuer: Issuer'],
+    ['issuer.industry', 'security/security.yambl', 'issuer: Issuer'],
     ['industry::value', 'issuer.yambl', 'industry: string'],
-    ['holdings::value', 'fund.yambl', 'holdings: collection<HoldingEntry>'],
+    ['holdings::value', 'portfolio/portfolio.yambl', 'holdings: collection<HoldingEntry>'],
   ]) {
     const offset = original.indexOf(use), target = feature('definition', offset);
     assert.ok(target.uri.endsWith('/' + file));
@@ -296,8 +296,8 @@ test('extra inputs merge, declared defaults win, descriptions and lambda layout 
 });
 
 
-test('unfinished double-colon calls complete stored and computed FMC fields', () => {
-  const { original, open, feature } = fmcEditor();
+test('unfinished double-colon calls complete stored and computed example fields', () => {
+  const { original, open, feature } = exampleEditor();
   for (const [needle, expected] of [
     ['self.holdings::value()', ['value', 'best_available']],
     ['h.market_value::value(as_of_date=input.price_date ?? input.as_of_date)', ['value']],

@@ -9,7 +9,7 @@ const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json'), ...require('./computation-cases.json')];
 cases.push(...require('./literal-cases.json'));
 const workspace = path.resolve(__dirname, '../../../../..');
-const model = path.join(workspace, 'fmc-data-model', 'model');
+const model = path.join(__dirname, 'fixtures', 'example', 'model');
 const files = require('../service.cjs').sources(model);
 cases.push(files.map(file => fs.readFileSync(file, 'utf8')));
 const modelRoot = require('../language/relationships.cjs').modelRoot;
@@ -29,6 +29,19 @@ for (const name of ['NOT_DEFINED', 'NOT_APPLICABLE', 'EMPTY', 'NO_ENTRY', 'NO_DA
   ]) cases.push([text]);
 }
 cases.push(["decodes Codes { - 1 ERROR: 'Error' } @title(Codes.ERROR) entity Empty {}"]);
+
+cases.push(
+  ['entity Root {} entity Child inherits Root {} entity Leaf inherits Child {} entity Use { attr choice: code<Root::subtypes> attr empty: code<Leaf::subtypes> }'],
+  ['entity Root {} entity Child inherits Root {} entity Use { computed attr selected: code<Root::subtypes> { return Root::subtypes.Child } }'],
+  ['entity Root {} entity Child inherits Root {} const CHOICE: code<Root::subtypes> = Root::subtypes.Child'],
+  ['entity Root {} entity Use { computed attr selected: code<Root::subtypes> { return Root::subtypes.Bad } }'],
+
+  ["entity Root {} @decodes_rank(-5, 'Child') entity Child inherits Root {} @decodes_rank(5, 'Leaf') entity Leaf inherits Child {}"],
+  ["@decodes_rank(1, 'Root') entity Root {}"],
+  ['namespace core entity Root {}', 'namespace left from core import Root entity Same inherits Root {}', 'namespace right from core import Root entity Same inherits Root {}'],
+  ['entity Root {} entity Use { attr invalid: code<Root::subtypes.Unknown> }'],
+);
+
 for (const line of grammar.split('\n')) {
   const match = /^[A-Z]+: \/(.+)\\b\//.exec(line);
   if (!match) continue;
@@ -59,4 +72,4 @@ cases.forEach((group, i) => {
   const actual = { syntax, format: docs.map(format), diagnostics: syntax.some(Boolean) ? null : docs.flatMap(d => d.diagnostics.map(x => [x.severity, x.message])).sort() };
   assert.deepEqual(actual, expected[i], `Compiler parity failed for case ${i}: ${group}`);
 });
-console.log(`Passed Python/LSP parity for ${cases.length} compilation units, including current FMC sources.`);
+console.log(`Passed Python/LSP parity for ${cases.length} compilation units, including the example model.`);

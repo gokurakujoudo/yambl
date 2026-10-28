@@ -50,7 +50,7 @@ class Resolver {
   issue(node, message, warning = false) {
     this.report(this.doc, node.token || node.operator, message, warning ? 2 : 1, warning ? 'undefined-decodes' : undefined);
   }
-  resolve(node) { return this.asType(this.evaluate(node), node); }
+  resolve(node) { return node.builtinType || this.asType(this.evaluate(node), node); }
   asType(value, node) {
     if (value.sort === 'type') return value.type;
     if (value.sort === 'value' && value.type.name === 'type') return value.type.exact === null ? { ...value.type.args[0], dependency: value.path } : value.type.args[0];
@@ -148,6 +148,11 @@ class Resolver {
     const operator = access.operator.value, member = access.token.value, path = value.path + operator + member;
     const site = { token: access.operator };
     if (operator === '::') {
+      if (member === 'subtypes' && value.sort === 'type' && this.symbols.get(value.type.key)?.kind === 'entity') {
+        const owner = this.symbols.get(value.type.key), dictionary = owner.subtypes;
+        this.bind(access.token, owner);
+        return term(type('Decodes', 'reference', { key: this.doc.scope.get('Decodes').key, exact: dictionary.key }), 'value', { path: (value.path || owner.name.value) + '::subtypes', dictionary });
+      }
       if (value.sort === 'field' && member === 'entity') {
         const owner = value.source?.owner;
         if (owner?.kind !== 'entity') { this.issue(site, 'field description has no owning entity'); return term(unknown); }

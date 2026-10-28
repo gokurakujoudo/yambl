@@ -21,6 +21,7 @@ function checkComputations(documents, symbols, report) {
     const before = declaration.doc.diagnostics.length;
     const actual = checker.infer(node, new Map(), expected).type;
     function pure(expression, keyPosition = false) {
+      if (expression.kind === 'descriptor' && expression.value === 'subtypes' && expression.operands[0].kind === 'name' && declaration.doc.scope.get(expression.operands[0].value)?.kind === 'entity') return;
       if (expression.kind === 'name' && !keyPosition) {
         const symbol = declaration.doc.scope.get(expression.value);
         if (!(expression.value in conversions.signatures) && !['constant', 'decodes'].includes(symbol?.kind)) issue(expression, `not a pure constant dependency: ${expression.value}`);
@@ -34,7 +35,8 @@ function checkComputations(documents, symbols, report) {
     if (declaration.doc.diagnostics.length === before) {
       try {
         const payload = constants.evaluate(node, name => {
-          const [root, code] = name.split('.'), target = declaration.doc.scope.get(root);
+          const [root, code] = name.split('.'), target = declaration.doc.scope.get(root.replace(/::subtypes$/, ''));
+          if (root.endsWith('::subtypes') && target?.kind === 'entity' && code !== undefined && target.subtypes.entries.some(e => e.code.value === code)) return code;
           if (target?.kind === 'constant') { constant(target); if (constantValues.has(target)) { const value = constantValues.get(target); if (code === undefined) return value; if (value instanceof Map && value.has(code)) return value.get(code); } }
           if (target?.kind === 'decodes' && code !== undefined) return code;
           throw Error(`not a pure constant dependency: ${name}`);
@@ -214,7 +216,12 @@ function checkComputations(documents, symbols, report) {
         this.issue(node, `unknown calculation name: ${node.value}`); return { type: unknown };
       }
       if (node.kind === 'member') {
-        const receiver = node.operands[0], symbol = receiver.kind === 'name' && this.doc.scope.get(receiver.value);
+        const receiver = node.operands[0];
+        if (receiver.kind === 'descriptor' && receiver.value === 'subtypes' && receiver.operands[0].kind === 'name') {
+          const root = receiver.operands[0], syntax = { token: root.token, name: root.value, accesses: [{ operator: { value: '::', start: receiver.token.end }, token: receiver.memberToken }, { operator: { value: '.', start: node.memberToken.start - 1 }, token: node.memberToken }] };
+          return { type: new Resolver(this.doc, report, symbols, this.owner).evaluate(syntax).type };
+        }
+        const symbol = receiver.kind === 'name' && this.doc.scope.get(receiver.value);
         if (receiver.kind === 'name' && receiver.value === 'input' && this.inputs.has(node.value)) {
           const parameter = this.inputs.get(node.value);
           if (parameter.declaration) this.doc.bindings.set(node.memberToken.start, parameter.declaration);
