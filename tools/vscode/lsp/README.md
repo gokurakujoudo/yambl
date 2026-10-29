@@ -160,7 +160,7 @@ resolved fields. Field uses participate in definition navigation and reference s
 `::value(...)` and `::best_available(...)` provide named parameter
 completion and signature help. The editor inserts `name=` and preserves snippets.
 `input.` lists inferred and explicitly declared inputs, their types and defaults.
-`@extra_input_params` supplies optional input declarations and descriptions; `??`
+`@extra_input_param` supplies optional input declarations and descriptions; `??`
 handles omitted inputs.
 The formatter preserves multiline lambda bodies and chained recovery calls.
 

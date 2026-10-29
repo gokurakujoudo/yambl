@@ -117,31 +117,31 @@
     "entity E { dimension prices { value source:string hierarchy hierarchy:Hierarchy='Local' fallback_days = self.days::value()+1 } config attr days:integer=2 @dimension(prices) snapshot attr price:decimal computed attr value:decimal { let p=self.price::value(as_of_date=input.day) return if p>0 then p*2 # chosen branch\nelse 0 } }"
   ],
   [
-    "entity E { snapshot attr n: integer @extra_input_params(day: date = '2026-01-01', 'Date') computed attr x: integer { return self.n::value(as_of_date=input.day ?? input.other) } }"
+    "entity E { snapshot attr n: integer @extra_input_param(day: date = '2026-01-01', 'Date') computed attr x: integer { return self.n::value(as_of_date=input.day ?? input.other) } }"
   ],
   [
-    "entity E { @extra_input_params(count: integer) computed attr x: integer { return input.count ?? 7 } }"
+    "entity E { @extra_input_param(count: integer) computed attr x: integer { return input.count ?? 7 } }"
   ],
   [
-    "entity E { @extra_input_params(day: date) @extra_input_params(day: date) computed attr x: integer { return 0 } }"
+    "entity E { @extra_input_param(day: date) @extra_input_param(day: date) computed attr x: integer { return 0 } }"
   ],
   [
-    "entity E { @extra_input_params(day: date = '2026-02-30') computed attr x: integer { return 0 } }"
+    "entity E { @extra_input_param(day: date = '2026-02-30') computed attr x: integer { return 0 } }"
   ],
   [
-    "entity E { @extra_input_params(day: date = '20260101') computed attr x: integer { return 0 } }"
+    "entity E { @extra_input_param(day: date = '20260101') computed attr x: integer { return 0 } }"
   ],
   [
-    "entity E { @extra_input_params(day: date = EMPTY) computed attr x: integer { return 0 } }"
+    "entity E { @extra_input_param(day: date = EMPTY) computed attr x: integer { return 0 } }"
   ],
   [
-    "entity E { @extra_input_params(day: collection<E>) computed attr x: integer { return 0 } }"
+    "entity E { @extra_input_param(day: collection<E>) computed attr x: integer { return 0 } }"
   ],
   [
-    "entity E { @extra_input_params(day: dimension_ref) computed attr x: integer { return 0 } }"
+    "entity E { @extra_input_param(day: dimension_ref) computed attr x: integer { return 0 } }"
   ],
   [
-    "entity E { @extra_input_params() computed attr x: integer { return 0 } }"
+    "entity E { @extra_input_param() computed attr x: integer { return 0 } }"
   ],
   [
     "entity E { computed attr x: integer { return 1 ?? 2 } }"

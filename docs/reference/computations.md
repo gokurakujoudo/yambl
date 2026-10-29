@@ -92,11 +92,11 @@ NO_ENTRY 视为不存在，EMPTY 与 NOT_APPLICABLE 跳过；无候选返回 NO_
 应计利息仍按 10 月 25 日取数，再遵循自身的取数规则。需要日期联动时必须显式绑定；
 不能从其他字段的回退结果隐式推导新的请求日期。
 
-`@extra_input_params` 在计算字段上显式声明可省略的输入，并可提供默认值和说明：
+`@extra_input_param` 在计算字段上显式声明可省略的输入，并可提供默认值和说明：
 
 ```yambl
-@extra_input_params(industry_date: date, 'Industry observation date')
-@extra_input_params(price_date: date = '2026-01-01', description='Price observation date')
+@extra_input_param(industry_date: date, 'Industry observation date')
+@extra_input_param(price_date: date = '2026-01-01', description='Price observation date')
 computed attr amount: money {
     return self.price::value(as_of_date=input.price_date ?? input.as_of_date)
 }

@@ -262,7 +262,7 @@ entity Fund {
 test('extra inputs merge, declared defaults win, descriptions and lambda layout survive formatting', () => {
   const text = `entity E {
     snapshot attr n: integer
-    @extra_input_params(day: date = '2026-01-01', 'Optional date')
+    @extra_input_param(day: date = '2026-01-01', 'Optional date')
     computed attr x: integer {
         return self.n::value(as_of_date=input.day ?? input.as_of_date)
     }
@@ -286,9 +286,9 @@ test('extra inputs merge, declared defaults win, descriptions and lambda layout 
   assert.equal(format(parse(layout)), layout);
   assert.equal(format(parse(format(doc))), format(doc));
   for (const declaration of [
-    '@extra_input_params(day: date) @extra_input_params(day: date)',
-    "@extra_input_params(day: date = '2026-02-30')",
-    '@extra_input_params(day: collection<E>)',
+    '@extra_input_param(day: date) @extra_input_param(day: date)',
+    "@extra_input_param(day: date = '2026-02-30')",
+    '@extra_input_param(day: collection<E>)',
   ]) {
     const bad = parse(`entity E { ${declaration} computed attr x: integer { return 0 } }`); validate([bad]);
     assert.ok(bad.diagnostics.some(d => d.severity === 1));

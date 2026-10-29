@@ -30,7 +30,7 @@ YAMBL 描述类型、字段、元信息及计算依赖。本文按语言结构�
 | entity | PascalCase | Security、HoldingEntry |
 | value、透明别名 | snake_case | money、hierarchy_entry |
 | 字段、局部变量、参数、dimension | snake_case | price、as_of_date |
-| decorator | snake_case，带 `@` 调用 | @extra_input_params |
+| decorator | snake_case，带 `@` 调用 | @extra_input_param |
 | decodes | 复数 PascalCase | Currencies |
 | 仓库定义的字典 code | PascalCase | Static、WindIndustryLevel1 |
 | 编译期常量 | UPPER_SNAKE_CASE | OTHER_INDUSTRY |
@@ -274,7 +274,7 @@ entity Security {
 | `@title(...)`、`@description(...)` | 标题、描述 |
 | `@temporal(day: date)` | snapshot/scd 时间参数名 |
 | `@dimension(name)` | 引用命名 dimension，可重复 |
-| `@extra_input_params(name: Type = value, '说明')` | computed 可选输入，默认值可省略 |
+| `@extra_input_param(name: Type = value, '说明')` | computed 或 lookup 可选输入，默认值可省略 |
 | `@sparse('cat')`、`@dense('cat')` | 无维度、非集合 static 的长表/宽表分组 |
 | `@flags` | flags 字典 |
 | `@decodes_rank(k, decode)` | 子类型字典中的排序偏移与显示内容 |
@@ -408,7 +408,7 @@ integer 保持整数精度，与 decimal 混算得到 decimal；decimal 加减�
 默认关系循环报错。常量、self 字段或内部表达式绑定依赖后，该依赖不再贡献对应输入；
 只有所有同名依赖均绑定时，参数才完全消除。对子计算的绑定只影响其依赖子树。
 
-@extra_input_params 声明可省略的输入和说明，可提供默认值并与依赖推导合并。
+@extra_input_param 声明可省略的输入和说明，可提供默认值并与依赖推导合并。
 外层 best_effort 是整棵计算树的调用上下文，不能局部改写。见[计算规则](computations.md)。
 
 ## 点号与双冒号

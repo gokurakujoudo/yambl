@@ -109,7 +109,7 @@ test('explicit target contracts provide diagnostics, completion, hover and navig
     ['@', ['targets']],
     ['@targets(', ['targets', 'categories']],
     ['@targets(DecoratorTargets.EntityAttr, ', ['categories']],
-    ['@targets(DecoratorTargets.', ['Entity', 'Value', 'Decodes', 'Type', 'Decorator', 'Id', 'EntityAttr', 'ValueAttr', 'None', 'All']],
+    ['@targets(DecoratorTargets.', ['Entity', 'Value', 'Decodes', 'Type', 'Decorator', 'Id', 'EntityAttr', 'ValueAttr', 'Lookup', 'None', 'All']],
     ['@targets(DecoratorTargets.EntityAttr, categories=AttrCats.', ['Static', 'Config', 'Snapshot', 'Scd', 'None', 'All']],
   ]) {
     open(source);
@@ -151,8 +151,8 @@ test('decorator completion filters all definition kinds and attribute categories
     ['value item { @| attr x: string }', [...common, 'value_field']],
     ['value item { @| static attr x: string }', [...common, 'value_field']],
     ['@|', [...common, 'allow_multiple', 'decodes_rank', 'definition', 'flags', 'model', 'targets']],
-    ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'extra_input_params', 'identity', 'overload', 'override', 'setting', 'temporal']],
-    ['entity A {} extend A { @| }', [...common, 'dense', 'sparse', 'dimension', 'extra_input_params', 'overload', 'override', 'setting', 'temporal']],
+    ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'extra_input_param', 'identity', 'overload', 'override', 'setting', 'temporal']],
+    ['entity A {} extend A { @| }', [...common, 'definition', 'dense', 'sparse', 'dimension', 'extra_input_param', 'overload', 'override', 'setting', 'temporal']],
     ['value item { @|', [...common, 'value_field']],
     ['entity A { @t| # misleading decodes {}\n @title(\'@flags }\') snapshot attr x: string }', [...common.filter(n => n !== 'title'), 'dimension', 'overload', 'override', 'temporal']],
     ['entity A { @tem|poral(day: date) snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],

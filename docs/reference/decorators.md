@@ -34,14 +34,14 @@ Type 按现有类型兼容规则检查。每个 `*` 参数只接收一个 pair�
 集合、字段描述、dimension_ref 和 input_type 本身。内置声明为：
 
 ```yambl
-@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Computed)
+@targets(DecoratorTargets.EntityAttr + DecoratorTargets.Lookup, categories=AttrCats.Computed)
 @allow_multiple
-decorator @extra_input_params(*parameter: input_type)
+decorator @extra_input_param(*parameter: input_type)
 ```
 
-只有 `@extra_input_params` 的调用 pair 可写默认值，如
-`@extra_input_params(day: date = '2026-01-01', '查询日期')`。
-输入合并与省略回退规则见 [计算字段](computations.md)。
+只有 `@extra_input_param` 的调用 pair 可写默认值，如
+`@extra_input_param(day: date = '2026-01-01', '查询日期')`。
+输入合并与省略回退规则见 [计算字段](computations.md)和[具名批量匹配](lookup.md)。
 
 声明总是包含括号。无实参调用可写 `@flags` 或 `@flags()`；格式化保留这种选择，
 也保留位置/命名调用方式。调用中的等号写为 `text='Name'`，声明默认值写为
@@ -62,6 +62,7 @@ decorator @extra_input_params(*parameter: input_type)
 | Id | 实体 ID 字段 |
 | EntityAttr | 实体自身或 extend 中的属性 |
 | ValueAttr | 结构化值中的属性 |
+| Lookup | 具名 lookup 声明 |
 
 `None` 与 `All` 自动生成；`+` 合并范围，`-` 移除范围，重复操作幂等。
 `None` 声明不允许任何应用对象；`All` 不开放 extend 块、字典条目或形式参数。
@@ -180,7 +181,7 @@ Decorator 只描述元信息和参数约束，不提供自定义可执行逻辑�
 `@` 后的候选按可见声明的 `@targets` 和当前位置过滤。已写出后续声明时，
 补全使用该对象种类和属性类别；例如 snapshot/scd 属性提供 temporal，static 属性不提供。
 尚未写出对象或类别时，只保留当前层级仍可能适用的候选：顶层为声明，
-实体体内为 ID 或属性，extend 体内为属性，value 体内为 static 属性。
+实体体内为 ID、属性或 lookup，extend 体内为属性或 lookup，value 体内为 static 属性。
 没有有效范围声明的 decorator 不进入候选。注释、字符串、字典条目和形式参数内
 不提供 decorator 名称。补全保留 namespace/import 可见性，并响应未保存的范围修改。
 

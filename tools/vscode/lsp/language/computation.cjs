@@ -68,14 +68,9 @@ function checkComputations(documents, symbols, report) {
     if (expected.name === actual.name && expected.args.length && expected.args.length === actual.args.length) return expected.args.every((t, i) => compatible(t, actual.args[i]));
     return accepts(expected, actual, symbols);
   }
-  function analyze(field) {
-    if (completed.has(field)) return completed.get(field);
-    const issue = (node, message) => report(field.doc, node.token, message);
-    if (active.has(field)) { issue(field.calculation.result, `computed field dependency cycle: ${field.name.value}`); return { inputs: new Map() }; }
-    active.add(field);
-    const checker = new Checker(field.doc, field.owner, issue);
-    for (const call of field.metadata.filter(c => c.name === 'extra_input_params')) {
-      const values = new Map(); require('./decorators.cjs').bindCall(call, field, () => {}, symbols, values);
+  function declareInputs(checker, node, issue) {
+    for (const call of node.metadata.filter(c => c.name === 'extra_input_param')) {
+      const values = new Map(); require('./decorators.cjs').bindCall(call, node, () => {}, symbols, values);
       const pair = call.arguments.find(a => a.mode === 'pair'), constraint = values.get('parameter');
       if (!pair || !constraint) continue;
       const name = pair.key.value, defaultType = values.get('parameter_default');
@@ -83,9 +78,17 @@ function checkComputations(documents, symbols, report) {
       const defaultValue = defaultType?.exact == null ? null : { kind: ['integer', 'snowflake_id'].includes(constraint.name) ? 'integer' : ['decimal', 'float'].includes(constraint.name) ? 'decimal' : constraint.name === 'bool' ? 'bool' : 'string', value: defaultType.exact, token: pair.default.token, end: pair.default.token.end, operands: [], arguments: [], cases: [] };
       const parameter = { name, type: constraint, required: false, default: defaultValue, sites: [pair.key], description: values.get('description')?.exact || '' };
       checker.addInput(parameter, { token: pair.key }); checker.declared.set(name, parameter);
-      const declaration = { kind: 'calculation_binding', name: pair.key, doc: field.doc, resolvedType: constraint };
-      field.doc.bindings.set(pair.key.start, declaration); parameter.declaration = declaration;
+      const declaration = { kind: 'calculation_binding', name: pair.key, doc: node.doc, resolvedType: constraint };
+      node.doc.bindings.set(pair.key.start, declaration); parameter.declaration = declaration;
     }
+  }
+  function analyze(field) {
+    if (completed.has(field)) return completed.get(field);
+    const issue = (node, message) => report(field.doc, node.token, message);
+    if (active.has(field)) { issue(field.calculation.result, `computed field dependency cycle: ${field.name.value}`); return { inputs: new Map() }; }
+    active.add(field);
+    const checker = new Checker(field.doc, field.owner, issue);
+    declareInputs(checker, field, issue);
     const environment = new Map([['self', { type: type(field.owner.name.value, 'reference', { key: field.owner.key }) }]]);
     for (const binding of field.calculation.bindings) {
       if (!snake(binding.name) || environment.has(binding.name) || binding.name === 'input') issue(binding.expression, `duplicate or invalid local binding: ${binding.name}`);
@@ -457,10 +460,48 @@ function checkComputations(documents, symbols, report) {
       return super.parameters(value, operation, node);
     }
     bindInput(parameter, expression, environment) {
-      if (expression.kind === 'member' && expression.operands[0].kind === 'name' && expression.operands[0].value === 'input') return super.bindInput(parameter, expression, environment);
-      const root = expression.kind === 'member' && expression.operands[0].kind === 'name' ? expression.operands[0].value : expression.kind === 'name' ? expression.value : null;
-      const fixed = ['string', 'integer', 'decimal', 'bool'].includes(expression.kind) || (expression.kind === 'member' && this.doc.scope.get(root)?.kind === 'decodes') || (expression.kind === 'name' && this.doc.scope.get(root)?.kind === 'constant');
-      if (!fixed) { this.issue(expression, 'lookup binding requires a literal, constant, dictionary member or input'); return; }
+      const pure = node => {
+        if (['string', 'integer', 'decimal', 'bool'].includes(node.kind)) return true;
+        if (node.kind === 'name') return this.doc.scope.get(node.value)?.kind === 'constant';
+        if (node.kind === 'member' && node.operands[0].kind === 'name') {
+          const root = node.operands[0].value;
+          if (root === 'input') return true;
+          return this.doc.scope.get(root)?.kind === 'decodes';
+        }
+        if (['binary', 'unary', 'conditional'].includes(node.kind)) return node.operands.every(pure);
+        if (node.kind === 'call' && node.operands[0].kind === 'name' && node.operands[0].value in conversions.signatures) return node.arguments.every(a => pure(a.expression));
+        return false;
+      };
+      if (!pure(expression)) { this.issue(expression, 'lookup binding requires a pure expression of inputs, literals, constants or dictionary members'); return; }
+      if (expression.kind === 'member' && expression.operands[0].value === 'input') return super.bindInput(parameter, expression, environment);
+      if (expression.kind === 'binary' && expression.value === '??') return super.bindInput(parameter, expression, environment);
+      const inferInputs = (node, expected) => {
+        if (node.kind === 'member' && node.operands[0].kind === 'name' && node.operands[0].value === 'input') {
+          if (!this.inputs.has(node.value)) this.addInput({ ...parameter, name: node.value, type: expected }, node);
+          return;
+        }
+        if (node.kind === 'conditional') {
+          inferInputs(node.operands[0], type('bool'));
+          node.operands.slice(1).forEach(child => inferInputs(child, expected));
+          return;
+        }
+        if (['binary', 'unary'].includes(node.kind) && ['and', 'or', 'not'].includes(node.value)) {
+          node.operands.forEach(child => inferInputs(child, type('bool')));
+          return;
+        }
+        if (node.kind === 'call' && node.operands[0].kind === 'name') {
+          const signature = conversions.signatures[node.operands[0].value];
+          node.arguments.forEach((argument, index) => {
+            const name = argument.name || signature[index]?.[0];
+            const typeName = signature.find(([key]) => key === name)?.[1];
+            inferInputs(argument.expression, ['string', 'date', 'datetime', 'integer', 'bool'].includes(typeName) ? type(typeName, typeName === 'string' ? 'string' : 'value') : expected);
+          });
+          return;
+        }
+        node.operands.forEach(child => inferInputs(child, expected));
+        node.arguments.forEach(argument => inferInputs(argument.expression, expected));
+      };
+      inferInputs(expression, parameter.type);
       let actual = this.read(this.infer(expression, environment, parameter.type), expression).type;
       if (expression.kind === 'string' && parameter.type.name === 'string') actual = { ...parameter.type, exact: expression.value };
       if (!compatible(parameter.type, actual)) this.issue(expression, `incompatible binding for parameter: ${parameter.name}`);
@@ -498,6 +539,7 @@ function checkComputations(documents, symbols, report) {
         const token = operator && doc.tokens.findLast(t => t.end <= selected.memberToken.start && t.value === operator);
         report(doc, token || node.token, message);
       });
+      declareInputs(checker, lookup, checker.issue);
       const environment = new Map([['self', { type: type(owner.name.value, 'reference', { key: owner.key }) }]]);
       for (const key of lookup.keys) {
         descriptorError = false;
@@ -507,13 +549,14 @@ function checkComputations(documents, symbols, report) {
         key.resolvedType = result.type;
         if (!lookupSupported(result.type, symbols)) checker.issue(source, 'lookup key requires a supported non-collection type');
       }
+      checker.checkDefaults();
       lookup.inferredInputs = [...checker.inputs.values()].sort((a, b) => a.name.localeCompare(b.name));
       const inputs = new Map();
       for (const node of require('./calculation-tools.cjs').nodes(lookup)) {
         if (node.kind !== 'member' || node.operands[0].kind !== 'name' || node.operands[0].value !== 'input') continue;
         const parameter = checker.inputs.get(node.value);
         if (!parameter) continue;
-        if (!inputs.has(node.value)) inputs.set(node.value, { kind: 'lookup_input', name: node.memberToken, doc, resolvedType: parameter.type });
+        if (!inputs.has(node.value)) inputs.set(node.value, { kind: 'lookup_input', name: node.memberToken, doc, resolvedType: parameter.type, required: parameter.required, default: parameter.default });
         doc.bindings.set(node.memberToken.start, inputs.get(node.value));
       }
     }

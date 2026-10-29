@@ -23,8 +23,9 @@ entity Security {
         name = self.name::value()
         issuer_name = self.issuer.name::value()
     }
+    @extra_input_param(client_date: date, '可选客户标识日期')
     lookup by_client_id {
-        client_id = self.client_id::value(day=input.as_of_date)
+        client_id = self.client_id::value(day=input.client_date ?? input.as_of_date)
     }
 }
 ```
@@ -42,12 +43,14 @@ computed、任意计算和 `::best_available()` 不属于此接口。
 尚不支持。实体引用键使用声明类型的 `EntityRef`，不能直接传入 ID 字符串。
 
 每个路径节点独立确定时间和维度。未绑定参数按名称合并，类型和约束须兼容；
-`input.name` 可将某个参数重命名。参数可绑定兼容字面量、编译期常量或字典成员；
-固定绑定不会出现在准备方法的参数中。所有推导出的准备参数均必填，并以关键字传入。
+`input.name` 可将某个参数重命名。参数可绑定仅依赖输入、字面量、编译期常量和字典成员的纯表达式；
+固定绑定不会出现在准备方法的参数中。`@extra_input_param` 可声明可选输入、默认值和说明；
+其余推导出的准备参数必填。准备参数以关键字传入，参数表达式在准备匹配器时求值一次，
+缺少必需输入、类型不符或求值失败返回 `ERROR`。
 SCD 使用左闭右开区间，缺口不回退；所有维度都需要确定，不自动选择 Hierarchy。
 
 上面的 `by_client_id` 有一个输入键 `client_id: string`，准备参数为
-`as_of_date: date`。例如以下写法不符合 lookup 的路径约束：
+`as_of_date: date` 和可选的 `client_date: date`。例如以下写法不符合 lookup 的路径约束：
 
 ```yambl
 lookup invalid {

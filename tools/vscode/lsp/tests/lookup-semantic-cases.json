@@ -1,4 +1,7 @@
 [
+  ["entity E { dimension source { value source: string } @dimension(source) @temporal(day: date) scd attr value: string lookup converted { value = self.value::value(day=parse_date(input.same), source=input.same) } lookup conditional { value = self.value::value(day=if true then parse_date(input.text) else parse_date('2026-01-01'), source='x') } @extra_input_param(day: date = '2026-01-01') lookup defaulted { value = self.value::value(day=input.day ?? input.fallback, source='x') } }"],
+  ["entity E { @temporal(day: date) scd attr value: string lookup branches { value = self.value::value(day=if input.first and not input.second then input.start else input.end) } }"],
+  ["@targets(DecoratorTargets.Lookup) decorator @extra_input_params(*x: input_type) entity E { @extra_input_params(day: date) lookup old { x = self.name::value() } attr name: string }"],
   ["entity Issuer { static attr name: string @temporal(rating_date: date) scd attr rating: string } entity Security { id id: string static attr issuer: Issuer @temporal(code_date: date) scd attr code: string lookup by_code { code = self.code::value(code_date=input.day) name = self.issuer.name::value() rating = self.issuer.rating::value() } }"],
   ["entity A { id id: string lookup valid { key = self.id::value() } } entity B inherits A {} extend A { lookup other { key = self.id::value() } }"],
   ["entity A { lookup empty {} lookup by_x { x = self.x::value() x = self.x::value() } lookup by_x { x = self.x::value() } } entity B inherits A { lookup by_x { x = self.x::value() } }"],

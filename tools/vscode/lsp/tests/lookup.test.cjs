@@ -17,6 +17,51 @@ function editor(source) {
 }
 const labels = result => result.items.map(item => item.label);
 
+test('lookup accepts optional inputs and pure fallback bindings', () => {
+  const { parse } = require('../language/syntax.cjs');
+  const { validate } = require('../language/validation.cjs');
+  const doc = parse(`entity E {
+    id id: string
+    @temporal(day: date) scd attr value: string
+    @extra_input_param(selected: date, 'Optional date')
+    lookup by_value { value = self.value::value(day=input.selected ?? input.day) }
+  }`, 'optional.yambl');
+  validate([doc]);
+  assert.deepEqual(doc.errors, []);
+  assert.deepEqual(doc.diagnostics, []);
+  const lookup = doc.declarations[0].lookups[0];
+  assert.deepEqual(lookup.inferredInputs.map(p => [p.name, p.required]), [['day', true], ['selected', false]]);
+  const old = parse('entity E { @extra_input_params(day: date) lookup by_id { id = self.id::value() } id id: string }', 'old.yambl');
+  validate([old]);
+  assert.ok(old.diagnostics.some(d => d.message === 'use @extra_input_param instead of @extra_input_params'));
+  assert.ok(labels(editor('entity E { @| lookup by_id { id = self.id::value() } id id: string }').feature('completion')).includes('extra_input_param'));
+});
+
+test('lookup inputs follow conversion signatures and declared fallback defaults', () => {
+  const { parse } = require('../language/syntax.cjs');
+  const { validate } = require('../language/validation.cjs');
+  const doc = parse(`entity E {
+    dimension source { value source: string }
+    @dimension(source) @temporal(day: date) scd attr value: string
+    lookup converted { value = self.value::value(day=parse_date(input.same), source=input.same) }
+    lookup conditional { value = self.value::value(day=if true then parse_date(input.text) else parse_date('2026-01-01'), source='x') }
+    lookup branches { value = self.value::value(day=if input.first and not input.second then input.start else input.end, source='x') }
+    @extra_input_param(day: date = '2026-01-01')
+    lookup defaulted { value = self.value::value(day=input.day ?? input.fallback, source='x') }
+  }`, 'expressions.yambl');
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  const [converted, conditional, branches, defaulted] = doc.declarations[0].lookups;
+  assert.deepEqual(converted.inferredInputs.map(p => [p.name, p.type.name]), [['same', 'string']]);
+  assert.deepEqual(conditional.inferredInputs.map(p => [p.name, p.type.name]), [['text', 'string']]);
+  assert.deepEqual(branches.inferredInputs.map(p => [p.name, p.type.name]), [['end', 'date'], ['first', 'bool'], ['second', 'bool'], ['start', 'date']]);
+  assert.deepEqual(defaulted.inferredInputs.map(p => [p.name, p.type.name]), [['day', 'date']]);
+
+  const custom = parse('@targets(DecoratorTargets.Lookup) decorator @extra_input_params(*x: input_type) entity E { @extra_input_params(day: date) lookup old { x = self.name::value() } attr name: string }', 'custom.yambl');
+  validate([custom]);
+  assert.equal(custom.diagnostics.filter(d => d.message === 'use @extra_input_param instead of @extra_input_params').length, 2);
+});
+
 test('embedded builtin lookups are analyzed and are not duplicated when authoring builtins', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lookup-builtins-'));
   t.after(() => fs.rmSync(root, { recursive: true }));

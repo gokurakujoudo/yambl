@@ -94,6 +94,7 @@ async function main() {
   expectScope('@targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot + AttrCats.Scd)', '@targets', 'entity.name.function.yambl');
   expectScope('@targets(DecoratorTargets.EntityAttr)', 'DecoratorTargets', 'support.type.yambl');
   expectScope('@targets(DecoratorTargets.EntityAttr)', 'EntityAttr', 'constant.other.yambl');
+  expectScope('@targets(DecoratorTargets.Lookup)', 'Lookup', 'constant.other.yambl');
   expectScope('@targets(DecoratorTargets.All - DecoratorTargets.Id)', 'All', 'constant.other.yambl');
   expectScope('@targets(DecoratorTargets.All - DecoratorTargets.Id)', '-', 'keyword.operator.bitwise.yambl');
   expectScope('@targets(DecoratorTargets.None)', 'None', 'constant.other.yambl');
@@ -255,7 +256,7 @@ async function main() {
   assert.ok(arrowCount >= 3, 'The example must exercise both lambdas and recovery arrows');
   expectScope("value price_source: code<'PriceSources'>", 'price_source', 'variable.other.property.yambl');
   expectScope("hierarchy price_hierarchy: Hierarchy = 'LocalHierarchy'", 'price_hierarchy', 'variable.other.property.yambl');
-  expectScope('decorator @extra_input_params(*parameter: input_type)', 'input_type', 'support.type.yambl');
+  expectScope('decorator @extra_input_param(*parameter: input_type)', 'input_type', 'support.type.yambl');
   expectScope('self.price::best_available()', '::', 'punctuation.accessor.yambl');
   expectScope('snapshot attr holdings: collection<HoldingEntry>', 'HoldingEntry', 'entity.name.type.yambl');
   for (const type of ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'collection', 'values', 'mapping']) {

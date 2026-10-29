@@ -265,9 +265,11 @@ function parse(text, uri = '') {
           if (!peek().value.startsWith("'")) fail();
           declaration.entries.push({ token, order, code, value: take() }); piece(start, 1);
         } else {
+          const metadata = [];
+          while (is('@')) metadata.push(annotation(1));
           if (is('lookup') && declaration.kind !== 'value') {
             const start = index, token = take(), lookupName = name(); take('{'); piece(start, 1);
-            const lookup = { kind: 'lookup', token, name: lookupName, keys: [], doc, owner: declaration };
+            const lookup = { kind: 'lookup', token, name: lookupName, keys: [], metadata, doc, owner: declaration };
             while (!is('}')) {
               const keyStart = index, key = name(), equals = take('=');
               const expression = calculation();
@@ -277,7 +279,7 @@ function parse(text, uri = '') {
             const close = index; lookup.end = take('}').end; piece(close, 1);
             declaration.lookups.push(lookup); continue;
           }
-          if (is('dimension') && declaration.kind !== 'value') {
+          if (is('dimension') && declaration.kind !== 'value' && !metadata.length) {
             const start = index, token = take(), dimensionName = name(); take('{'); piece(start, 1);
             const dimension = { kind: 'dimension', token, name: dimensionName, doc, owner: declaration };
             let roleStart = index; take('value'); dimension.value = name(); take(':'); dimension.type = type(); piece(roleStart, 2);
@@ -291,8 +293,6 @@ function parse(text, uri = '') {
             }
             const close = index; dimension.end = take('}').end; piece(close, 1); declaration.dimensions.push(dimension); continue;
           }
-          const metadata = [];
-          while (is('@')) metadata.push(annotation(1));
           const start = index; const token = take(); const mode = token.value;
           if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static', 'computed'].includes(mode)) throw token;
           if (['snapshot', 'scd', 'config', 'static', 'computed'].includes(mode)) take('attr');

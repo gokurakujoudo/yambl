@@ -113,10 +113,11 @@ function decoratorSites(doc, start, used) {
   const next = tokens[index]?.value;
   if (owner) {
     if (next === 'id') return owner === 'entity' ? [['Id']] : [];
+    if (next === 'lookup') return owner === 'value' ? [] : [['Lookup']];
     if (next && next !== '}' && !['attr', 'static', 'config', 'snapshot', 'scd', 'computed'].includes(next)) return [];
     if (owner === 'value') return !next || ['}', 'attr', 'static'].includes(next) ? [['ValueAttr', 'static']] : [];
     if (next && next !== '}') return [['EntityAttr', next === 'attr' ? 'static' : next]];
-    return owner === 'entity' ? [['Id'], ['EntityAttr']] : [['EntityAttr']];
+    return owner === 'entity' ? [['Id'], ['EntityAttr'], ['Lookup']] : [['EntityAttr'], ['Lookup']];
   }
   const kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type: 'Type', decorator: 'Decorator', final: 'Entity' }[next];
   return kind ? [[kind]] : next ? [] : ['Entity', 'Value', 'Decodes', 'Type', 'Decorator'].map(kind => [kind]);
@@ -180,7 +181,7 @@ const help = {
   input: 'External computation input: input.name. Rename or bind with name=input.name; input.name ?? expression supplies a value only when omitted.',
   '??': 'Omitted-input fallback. The left operand is input.name; the right operand is lazy. Caller values and declaration defaults take precedence. Native non-normal results require recover.',
   input_type: 'Decorator pair constraint accepting non-collection value types or entity references. Not a runtime field type.',
-  extra_input_params: 'Declare one optional computed-field input, with an optional default and trailing description. Repeat for different names. Types merge with inferred dependencies; declaration defaults take precedence over ??.',
+  extra_input_param: 'Declare one optional computed-field or lookup input, with an optional default and trailing description. Repeat for different names. Types merge with inferred dependencies; declaration defaults take precedence over ??.',
   ...typeTools.types,
 };
 
@@ -398,7 +399,7 @@ class Service {
       if (target?.kind === 'lookup') {
         const owner = target.entity?.name.value || target.owner.name.value;
         const snake = name => name.replace(/(?<!^)(?=[A-Z])/g, '_').toLowerCase();
-        const inputs = (target.inferredInputs || []).map(p => `${p.name}: ${typeLabel(p.type)}`);
+        const inputs = (target.inferredInputs || []).map(p => `${p.name}: ${typeLabel(p.type)}${p.default ? ' = ' + defaultLabel(p.default) : p.required ? '' : ' = ...'}`);
         const keys = target.keys.map(k => `${k.name.value}: ${typeLabel(k.resolvedType)}`);
         const matcher = owner + target.name.value.split('_').map(part => part[0].toUpperCase() + part.slice(1)).join('') + 'Matcher';
         const signature = name => `prepare_${snake(name)}_${target.name.value}(${inputs.length ? '*, ' : ''}${inputs.join(', ')}) -> Success<${matcher}> | NonNormalResult`;
@@ -407,7 +408,7 @@ class Service {
         return { contents: { kind: 'plaintext', value: `lookup ${target.name.value}\nKeys: ${keys.join(', ') || '(none)'}\nPreparation parameters: ${inputs.join(', ') || '(none)'}\nCandidates: ${owner} and descendants\nPython: ${signature(owner)}${inherited}` }, range: token.range };
       }
       if (target?.kind === 'lookup_key') return { contents: { kind: 'plaintext', value: `${target.name.value}: ${typeLabel(target.resolvedType)}\nSource: ${doc.text.slice(target.expression.token.start, target.expression.end)}` }, range: token.range };
-      if (target?.kind === 'lookup_input') return { contents: { kind: 'plaintext', value: `input.${target.name.value}: ${typeLabel(target.resolvedType)} (required)` }, range: token.range };
+      if (target?.kind === 'lookup_input') return { contents: { kind: 'plaintext', value: `input.${target.name.value}: ${typeLabel(target.resolvedType)}${target.default ? ' = ' + defaultLabel(target.default) : target.required ? ' (required)' : ' (optional)'}` }, range: token.range };
       const computation = token && doc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= token.start && token.end <= f.end);
       if (token?.value === 'input' && computation) return { contents: { kind: 'plaintext', value: inputTypeHelp(computation) }, range: token.range };
       const invoked = token && expressionNodes.find(n => ['call', 'recover'].includes(n.kind) && (n.operands[0].memberToken || (n.operands[0].kind === 'name' ? n.operands[0].token : null))?.start === token.start);

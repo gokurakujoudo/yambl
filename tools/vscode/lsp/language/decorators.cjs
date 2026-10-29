@@ -34,6 +34,7 @@ function argumentType(resolver, syntax, expected) {
 }
 
 function checkParameters(declaration, issue, symbols) {
+  if (declaration.name.value === 'extra_input_params') issue(declaration.doc, declaration.token, 'use @extra_input_param instead of @extra_input_params');
   if (!declaration.metadata.some(a => a.name === 'targets')) issue(declaration.doc, declaration.token, 'decorator requires explicit @targets');
   const seen = new Set(); let pairSeen = false, optionalSeen = false;
   const resolver = new Resolver(declaration.doc, issue, symbols, null);
@@ -79,6 +80,7 @@ function callArguments(call, declaration, resolver) {
 function bindCall(call, node, issue, symbols, values = null) {
   const doc = node.doc, name = call.name;
   const actualResolver = new Resolver(doc, issue, symbols, null, false, new Map([['self', capture(node, symbols)]]));
+  if (name === 'extra_input_params') { actualResolver.issue(call, 'use @extra_input_param instead of @extra_input_params'); return ''; }
   const declaration = doc.scope.get(name);
   if (declaration?.kind !== 'decorator') { actualResolver.issue(call, `unknown decorator: ${name}`); return ''; }
   doc.bindings.set(call.markerToken.start, declaration);
@@ -129,7 +131,7 @@ function bindCall(call, node, issue, symbols, values = null) {
       bound.push([name, argument.key.value, canonical(actual)]);
       values?.set(name, actual);
       if (argument.default) {
-        if (call.name !== 'extra_input_params') actualResolver.issue(argument, 'pair defaults are only supported by extra_input_params');
+        if (call.name !== 'extra_input_param') actualResolver.issue(argument, 'pair defaults are only supported by extra_input_param');
         const value = argumentType(actualResolver, argument.default, actual);
         bound.push(['parameter_default', argument.key.value, canonical(value)]); values?.set('parameter_default', value);
       }
@@ -165,7 +167,7 @@ function checkTarget(call, node, declaration, issue, symbols) {
   const contract = targetContract(node.doc.scope.get(call.name), symbols);
   if (!contract) return;
   let mode = node.mode;
-  let kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type_alias: 'Type', decorator: 'Decorator' }[node.kind];
+  let kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type_alias: 'Type', decorator: 'Decorator', lookup: 'Lookup' }[node.kind];
   if (!node.kind) {
     kind = mode === 'id' ? 'Id' : declaration.kind === 'value' ? 'ValueAttr' : 'EntityAttr';
     if (kind === 'ValueAttr') mode = 'static';
@@ -177,7 +179,7 @@ function checkDecorators(documents, issue, symbols) {
   const groups = new Map(), placements = new Map();
   for (const doc of documents.filter(d => !d.errors.length)) for (const declaration of doc.declarations) {
     if (declaration.kind === 'decorator') checkParameters(declaration, issue, symbols);
-    for (const node of [declaration, ...declaration.fields]) {
+    for (const node of [declaration, ...declaration.fields, ...(declaration.lookups || [])]) {
       const seen = new Set(), dimensions = new Set();
       for (const call of node.metadata) {
         const name = call.name;
