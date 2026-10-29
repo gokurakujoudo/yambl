@@ -93,9 +93,9 @@ class Resolver {
           this.doc.valueTypeTokens.set(node.token.start, node.token);
           result = term(type(name, name === 'string' ? 'string' : 'value', { params: this.parameters(node) }));
         } else if (name === 'Entity') { if (params) this.issue(node, 'invalid parameters for Entity'); result = term(entity); }
-        else if (symbol && !['decorator', 'constant'].includes(symbol.kind)) {
+        else if (symbol && !['decorator', 'constant', 'dimension'].includes(symbol.kind)) {
           if (params) this.issue(node, `invalid parameters for ${name}; do not mix positional and named parameters`);
-          result = symbol.kind === 'decodes' ? term(type('Decodes', 'reference', { key: this.doc.scope.get('Decodes').key, exact: symbol.key }), 'value', { path: name, dictionary: symbol }) : term(type(name, symbol.kind === 'entity' ? 'reference' : 'value', { key: symbol.key }));
+          result = symbol.kind === 'decodes' ? term(type('Decodes', 'reference', { key: this.doc.scope.get('Decodes').key, exact: symbol.key }), 'value', { path: name, dictionary: symbol }) : symbol.kind === 'hierarchy' ? term(type('Hierarchy', 'reference', { key: this.doc.scope.get('Hierarchy').key, exact: symbol.key }), 'value', { path: name }) : term(type(name, symbol.kind === 'entity' ? 'reference' : 'value', { key: symbol.key }));
         } else { this.issue(node, `unknown type: ${name}`); result = term(unknown); }
       }
     }

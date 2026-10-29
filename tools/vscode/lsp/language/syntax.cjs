@@ -200,6 +200,21 @@ function parse(text, uri = '') {
     node.end = doc.tokens[index - 1].end;
     piece(start, indent); return node;
   }
+  function dimensionDeclaration(indent, owner = null) {
+    const start = index, token = take('dimension'), dimensionName = name(); take('{'); piece(start, indent);
+    const dimension = { kind: 'dimension', token, name: dimensionName, doc, owner, metadata: [], fields: [], entries: [], dimensions: [] };
+    let roleStart = index; take('value'); dimension.value = name(); take(':'); dimension.type = type(); piece(roleStart, indent + 1);
+    if (is('hierarchy')) {
+      roleStart = index; take(); dimension.hierarchy = name(); take(':'); dimension.hierarchyType = type();
+      if (is('=')) { take(); dimension.default = calculation(); }
+      piece(roleStart, indent + 1, true);
+    }
+    if (is('fallback_days')) {
+      roleStart = index; take(); take('='); dimension.fallback = calculation(); piece(roleStart, indent + 1, true);
+    }
+    const close = index; dimension.end = take('}').end; piece(close, indent);
+    return dimension;
+  }
   try {
     if (is('namespace')) {
       const start = index; take(); doc.namespace = qualified(); piece(start, 0);
@@ -251,6 +266,26 @@ function parse(text, uri = '') {
         doc.declarations.push({ kind: 'type_alias', token, name: aliasName, parameters, type: body, metadata, fields: [], entries: [], doc, end: doc.tokens[index - 1].end });
         piece(start, 0); continue;
       }
+      if (is('dimension')) {
+        if (metadata.length) throw peek();
+        doc.declarations.push(dimensionDeclaration(0)); continue;
+      }
+      if (is('hierarchy')) {
+        if (metadata.length) throw peek();
+        const start = index, token = take(), hierarchyName = name(); take('{'); piece(start, 0);
+        const declaration = { kind: 'hierarchy', token, name: hierarchyName, metadata: [], fields: [], entries: [], dimensions: [], doc };
+        while (!is('}')) {
+          const entryStart = index, entryToken = take('-'), order = take();
+          if (!/^-?\d+$/.test(order.value)) throw order;
+          const value = peek().value.startsWith("'") ? take() : name();
+          let code = null;
+          if (!value.value.startsWith("'")) { take('.'); code = name(); }
+          declaration.entries.push({ token: entryToken, order, value, code, doc, owner: declaration });
+          piece(entryStart, 1);
+        }
+        const close = index; declaration.end = take('}').end; piece(close, 0);
+        doc.declarations.push(declaration); continue;
+      }
       const start = index; const final = is('final') ? take() : null; const token = take();
       if (final && token.value !== 'entity') throw token;
       if (!['entity', 'extend', 'decodes', 'value'].includes(token.value) || (token.value === 'extend' && metadata.length)) throw token;
@@ -280,18 +315,7 @@ function parse(text, uri = '') {
             declaration.lookups.push(lookup); continue;
           }
           if (is('dimension') && declaration.kind !== 'value' && !metadata.length) {
-            const start = index, token = take(), dimensionName = name(); take('{'); piece(start, 1);
-            const dimension = { kind: 'dimension', token, name: dimensionName, doc, owner: declaration };
-            let roleStart = index; take('value'); dimension.value = name(); take(':'); dimension.type = type(); piece(roleStart, 2);
-            if (is('hierarchy')) {
-              roleStart = index; take(); dimension.hierarchy = name(); take(':'); dimension.hierarchyType = type();
-              if (is('=')) { take(); dimension.default = calculation(); }
-              piece(roleStart, 2, true);
-            }
-            if (is('fallback_days')) {
-              roleStart = index; take(); take('='); dimension.fallback = calculation(); piece(roleStart, 2, true);
-            }
-            const close = index; dimension.end = take('}').end; piece(close, 1); declaration.dimensions.push(dimension); continue;
+            declaration.dimensions.push(dimensionDeclaration(1, declaration)); continue;
           }
           const start = index; const token = take(); const mode = token.value;
           if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static', 'computed'].includes(mode)) throw token;

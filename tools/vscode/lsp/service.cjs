@@ -24,7 +24,7 @@ function bodyContext(doc, offset) {
   for (const token of doc.tokens) {
     if (token.start >= offset) break;
     if (token.value === '{') {
-      stack.push(segment.findLast(t => ['entity', 'extend', 'value', 'decodes', 'lookup', 'dimension', 'computed'].includes(t.value))?.value || 'block');
+      stack.push(segment.findLast(t => ['entity', 'extend', 'value', 'decodes', 'lookup', 'dimension', 'hierarchy', 'computed'].includes(t.value))?.value || 'block');
       segment = [];
     } else if (token.value === '}') { stack.pop(); segment = []; }
     else segment.push(token);
@@ -384,7 +384,7 @@ class Service {
     if (method === 'textDocument/references') return this.references(target, params.context?.includeDeclaration === true);
     if (method === 'textDocument/semanticTokens/full') {
       const classified = new Map(doc.valueTypeTokens);
-      for (const token of doc.tokens) if (['decodes', 'value', 'type_alias'].includes(doc.bindings.get(token.start)?.kind)) classified.set(token.start, token);
+      for (const token of doc.tokens) if (['decodes', 'hierarchy', 'value', 'type_alias'].includes(doc.bindings.get(token.start)?.kind)) classified.set(token.start, token);
       const data = []; let lastLine = 0, lastCharacter = 0;
       for (const token of [...classified.values()].sort((a, b) => a.start - b.start)) {
         if (token.value.startsWith("'")) continue;
@@ -441,6 +441,12 @@ class Service {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       const before = doc.text.slice(0, offset);
       if (doc.comments.some(c => c.start <= offset && offset <= c.end) || doc.tokens.some(t => t.value.startsWith("'") && t.start < offset && offset < t.end)) return { isIncomplete: false, items: [] };
+      const hierarchyDefault = /\bhierarchy\s+[a-z][a-z0-9_]*\s*:\s*Hierarchy\s*=\s*([A-Za-z0-9_]*)$/.exec(before);
+      if (hierarchyDefault) {
+        const start = offset - hierarchyDefault[1].length;
+        const scope = doc.errors.length ? this.completionScope(doc, start, offset) : doc.scope;
+        return { isIncomplete: false, items: [...scope.values()].filter(d => d.kind === 'hierarchy' || (d.kind === 'decodes' && !require('./language/decodes.cjs').isFlags(d))).map(d => ({ label: d.name.value, kind: 6, detail: describe(d), ...(d.kind === 'decodes' ? { insertText: d.name.value + '::hierarchy()' } : {}) })) };
+      }
       const subtypeMember = /\b([A-Z][A-Za-z_0-9]*)::subtypes\.([A-Za-z_0-9]*)$/.exec(before);
       const subtypeDescriptor = /\b([A-Z][A-Za-z_0-9]*)::([a-z_0-9]*)$/.exec(before);
       if (subtypeMember || subtypeDescriptor) {
@@ -448,6 +454,7 @@ class Service {
         const scope = doc.errors.length ? this.completionScope(doc, match.index, offset) : doc.scope;
         const owner = scope.get(match[1]);
         if (owner?.kind === 'entity') return { isIncomplete: false, items: subtypeMember ? codeEntries(owner.subtypes).map(e => ({ label: e.name.value, kind: 20, detail: describe(e) })) : [{ label: 'subtypes', kind: 10, detail: 'Derived Decodes of strict descendant entities' }] };
+        if (subtypeDescriptor && owner?.kind === 'decodes' && !require('./language/decodes.cjs').isFlags(owner)) return { isIncomplete: false, items: [{ label: 'hierarchy', kind: 2, detail: 'Read-only hierarchy view of this dictionary', insertText: 'hierarchy()', insertTextFormat: 2 }] };
       }
       const typeContext = typeTools.context(doc, offset);
       if (typeContext && !/::[a-z_]*$/.test(before) && !/\bself(?:\.[A-Za-z_][A-Za-z_0-9]*(?:::value)?)*\.[A-Za-z_0-9]*$/.test(before) && !/\b[A-Z][A-Za-z_0-9]*\.[A-Za-z_0-9]*$/.test(before)) {
@@ -560,6 +567,7 @@ class Service {
           let owner = surrounding && scope.get(surrounding.name.value);
           const dimensions = new Map(), seen = new Set();
           while (owner && !seen.has(owner)) { seen.add(owner); for (const [name, dimension] of owner.ownDimensions || []) if (!dimensions.has(name)) dimensions.set(name, dimension); owner = owner.base; }
+          for (const [name, dimension] of scope) if (dimension.kind === 'dimension' && !dimensions.has(name)) dimensions.set(name, dimension);
           return { isIncomplete: false, items: [...dimensions].map(([label, d]) => ({ label, kind: 5, detail: describe(d) })) };
         }
         const used = new Set([...call[2].matchAll(/\b([a-z][a-z0-9_]*)\s*=/g)].map(m => m[1]));

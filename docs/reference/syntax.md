@@ -67,6 +67,8 @@ namespace 和声明名组成。目录不决定 namespace。见[名称解析](nam
 | `type name = Type` | 透明类型别名 |
 | `type name<a: Constraint> = Type` | 带编译期参数的透明别名 |
 | `decodes Names { ... }` | Decodes 实例及其代码条目 |
+| `dimension name { ... }` | 可由同一作用域内实体共享的维度 |
+| `hierarchy Name { ... }` | 具名 Hierarchy 实例及其有序权重 |
 | `decorator @name(...)` | 有类型和显式 targets 的元信息声明 |
 | `const NAME: Type = expression` | 有明确类型的编译期常量 |
 
@@ -295,7 +297,7 @@ sparse、dense、dimension 互斥。dimension_ref 和 input_type 是编译期约
 
 ## Dimension
 
-dimension 定义于 entity 或 extend，由子类继承使用，同作用域重名报错，不接受 decorator。
+dimension 可定义于顶层、entity 或 extend；实体内定义由子类继承，同作用域重名报错，不接受 decorator。引用先查找实体内及继承的维度，再查找当前文件中可见的共享维度。顶层定义遵循 namespace/import，禁止使用 self。
 
 ```yambl
 entity Security {

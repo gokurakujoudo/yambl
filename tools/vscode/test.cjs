@@ -205,6 +205,9 @@ async function main() {
   expectScope('attr source: code<PriceSources>', 'PriceSources', 'support.type.yambl');
   expectScope('decodes Currencies {', 'decodes', 'keyword.declaration.yambl');
   expectScope('decodes Currencies {', 'Currencies', 'support.type.yambl');
+  expectScope('hierarchy PreferredSources {', 'PreferredSources', 'support.type.yambl');
+  expectScope('dimension source_dimension {', 'source_dimension', 'entity.name.function.yambl');
+  expectScope('Sources::hierarchy()', 'hierarchy', 'variable.other.property.yambl');
   expectScope("    - 100 CNY: 'CNY'", '100', 'constant.numeric.yambl');
   expectScope("    - 100 CNY: 'CNY'", 'CNY:', 'constant.other.yambl');
   expectScope("    - 100 CNY: 'CNY'", "'CNY'", 'string.quoted.single.yambl');

@@ -35,6 +35,27 @@ for (const name of ['NOT_DEFINED', 'NOT_APPLICABLE', 'EMPTY', 'NO_ENTRY', 'NO_DA
 cases.push(["decodes Codes { - 1 ERROR: 'Error' } @title(Codes.ERROR) entity Empty {}"]);
 
 cases.push(
+  ["decodes Sources { - 1 Wind: 'Wind' } hierarchy Preferred { - 1 Sources.Wind - 2 'Manual' } dimension source_dim { value source: code<Sources> hierarchy priority: Hierarchy = Preferred } entity E { @dimension(source_dim) snapshot attr price: integer computed attr x: integer { return self.price::best_available(priority=Sources::hierarchy()) } }"],
+  ["namespace common decodes Sources { - 1 Wind: 'Wind' } hierarchy Preferred { - 1 Sources.Wind } dimension source_dim { value source: code<Sources> hierarchy priority: Hierarchy = Preferred }", "namespace model from common import source_dim entity E { @dimension(source_dim) snapshot attr price: integer }"],
+  ["hierarchy H { - 1 'a' - 1 'b' }"],
+  ["@flags decodes Flags { - 1 A: 'a' } hierarchy H { - 1 Flags.A }"],
+  ["dimension shared { value source: string fallback_days = self.x::value() }"],
+  ["decodes D { - 1 A: 'A' } hierarchy H { - 1 D.Bad - 2 Missing.X }"],
+  ["dimension d { value source: string hierarchy priority: Hierarchy = Missing }"],
+  ["@flags decodes Flags { - 1 A: 'a' } dimension d { value source: string hierarchy priority: Hierarchy = Flags::hierarchy() }"],
+  ["@flags decodes Flags { - 1 A: 'a' } entity E { dimension d { value source: string hierarchy priority: Hierarchy } @dimension(d) snapshot attr price: integer computed attr x: integer { return self.price::best_available(priority=Flags::hierarchy()) } }"],
+  ["entity E { static attr dictionary: Decodes dimension d { value source: string hierarchy priority: Hierarchy = self.dictionary::value()::hierarchy() } @dimension(d) snapshot attr price: integer }"],
+  ["dimension d { value source: string hierarchy priority: Hierarchy = 42 }"],
+  ["dimension d { value Bad: string }"],
+  ["const H: string = 'Local' dimension d { value source: string hierarchy priority: Hierarchy = H }"],
+  ["dimension source_dim { value source: string } entity E { attr wrong: source_dim }"],
+  ["hierarchy Preferred {} entity E { attr wrong: Preferred }"],
+  ["entity E { static attr bad: string dimension d { value source: string hierarchy priority: Hierarchy = self.bad::value()::hierarchy() } @dimension(d) snapshot attr price: integer }"],
+  ["dimension d { value source: string hierarchy h: Hierarchy = EMPTY }"],
+  ["dimension d { value source: string hierarchy h: Hierarchy = if true then EMPTY else 'Local' }"],
+  ["hierarchy A {} hierarchy B {} dimension d { value source: string hierarchy h: Hierarchy = if true then A else B }"],
+  ["namespace one hierarchy H {- 1 'A'} dimension d_one {value source:string hierarchy h:Hierarchy=H}", "namespace two hierarchy H {- 1 'B'} dimension d_two {value source:string hierarchy h:Hierarchy=H}", "namespace use from one import d_one from two import d_two entity E {id id:string @dimension(d_one) attr x:string @dimension(d_two) attr y:string computed attr z:bool {return self.x::best_available() == self.y::best_available()}}"],
+  ["namespace one hierarchy H {- 1 'A'} dimension d_one {value source:string hierarchy h:Hierarchy=H}", "namespace two from one import H dimension d_two {value source:string hierarchy h:Hierarchy=H}", "namespace use from one import d_one from two import d_two entity E {id id:string @dimension(d_one) attr x:string @dimension(d_two) attr y:string computed attr z:bool {return self.x::best_available() == self.y::best_available()}}"],
   ['entity Root {} entity Child inherits Root {} entity Leaf inherits Child {} entity Use { attr choice: code<Root::subtypes> attr empty: code<Leaf::subtypes> }'],
   ['entity Root {} entity Child inherits Root {} entity Use { computed attr selected: code<Root::subtypes> { return Root::subtypes.Child } }'],
   ['entity Root {} entity Child inherits Root {} const CHOICE: code<Root::subtypes> = Root::subtypes.Child'],
@@ -142,3 +163,41 @@ print(json.dumps({'type': rule.keys[0].type.name, 'inputs': [(p.name, p.type.nam
 } finally {
   fs.rmSync(temporary, { recursive: true });
 }
+
+const hierarchyInputs = `hierarchy Preferred { - 1 'A' }
+entity E {
+  @temporal(day: date) scd attr dictionary: Decodes
+  dimension d { value source: string hierarchy h: Hierarchy = self.dictionary::value()::hierarchy() }
+  dimension d2 { value origin: string hierarchy h2: Hierarchy = self.dictionary::value(day=input.history_day)::hierarchy() }
+  @dimension(d) static attr label: string
+  @dimension(d2) static attr market: string
+  @dimension(d) @temporal(day: date) snapshot attr observed: string
+  computed attr automatic: string { return self.label::best_available() }
+  computed attr explicit_hierarchy: string { return self.label::best_available(h=Preferred) }
+  computed attr explicit_source: string { return self.label::best_available(source='A') }
+  computed attr alias: string { return self.label::best_available(h=input.choice) }
+  @extra_input_param(choice: Hierarchy = 'Preferred')
+  computed attr alias_declared: string { return self.label::best_available(h=input.choice) }
+  computed attr fallback: string { return self.label::best_available(h=input.choice ?? Preferred) }
+  @extra_input_param(h: Hierarchy = 'Preferred')
+  computed attr declared: string { return self.label::best_available() }
+  computed attr renamed: string { return self.observed::best_available(day=input.query) }
+  computed attr nested: string { return self.renamed::value(query=input.nested_day) }
+  computed attr source_date: string { return self.market::best_available() }
+}`;
+const hierarchyInputPython = `
+import json, sys
+from pathlib import Path
+from yambl_compiler.languages.yambl.syntax.parser import parse
+from yambl_compiler.languages.yambl.semantics.validation import analyze
+analysis = analyze([parse(sys.stdin.read(), Path('model.yambl'))])
+names = ('automatic', 'explicit_hierarchy', 'explicit_source', 'alias', 'alias_declared', 'fallback', 'declared', 'renamed', 'nested', 'source_date')
+print(json.dumps({name: [(item.name, item.type.name, item.required) for item in analysis.calculations[(('', 'E'), name)].inputs] for name in names}))
+`;
+const hierarchyResult = spawnSync(python, ['-X', 'utf8', '-c', hierarchyInputPython], { input: hierarchyInputs, encoding: 'utf8', windowsHide: true });
+assert.equal(hierarchyResult.status, 0, hierarchyResult.stderr || hierarchyResult.error?.message);
+const hierarchyDoc = parse(hierarchyInputs, 'model.yambl'); validate([hierarchyDoc]);
+const hierarchyEntity = hierarchyDoc.declarations.find(d => d.name.value === 'E');
+const hierarchyActual = Object.fromEntries(hierarchyEntity.fields.filter(f => f.calculation).map(f => [f.name.value, f.inferredInputs.map(p => [p.name, p.type.name, p.required])]));
+assert.deepEqual(hierarchyActual, JSON.parse(hierarchyResult.stdout), 'Hierarchy default input parity failed');
+console.log('Passed Python/LSP hierarchy default input parity.');

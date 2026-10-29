@@ -9,6 +9,141 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { position } = require('../language/syntax.cjs');
 
+test('shared dimensions and hierarchies resolve across namespaces with local precedence', () => {
+  const shared = parse(`namespace common
+decodes Sources { - 1 Wind: 'Wind' }
+hierarchy Preferred { - 1 Sources.Wind - 2 'Manual' }
+dimension source_dim { value source: code<Sources> hierarchy order: Hierarchy = Preferred }
+`, 'common.yambl');
+  const model = parse(`namespace model
+from common import source_dim
+from common import Preferred
+entity Shared { @dimension(source_dim) snapshot attr price: integer }
+entity Local { dimension source_dim { value local: string } @dimension(source_dim) static attr price: integer }
+`, 'model.yambl');
+  validate([shared, model]);
+  assert.deepEqual(shared.errors, []); assert.deepEqual(model.errors, []);
+  assert.deepEqual(shared.diagnostics, []); assert.deepEqual(model.diagnostics, []);
+  const [dictionary, hierarchy, dimension] = shared.declarations;
+  const [entity, local] = model.declarations;
+  assert.equal(entity.fields[0].metadata[0].dimension, dimension);
+  assert.equal(local.fields[0].metadata[0].dimension, local.dimensions[0]);
+  assert.equal(shared.bindings.get(dimension.default.token.start), hierarchy);
+  assert.equal(shared.bindings.get(hierarchy.entries[0].value.start), dictionary);
+  assert.equal(shared.bindings.get(hierarchy.entries[0].code.start).name.value, 'Wind');
+  assert.equal(format(parse(format(shared))), format(shared));
+});
+
+test('hierarchy conversion and shared dimension validation distinguish flags and self', () => {
+  const doc = parse(`decodes Sources { - 1 Wind: 'Wind' }
+@flags decodes Flags { - 1 One: 'One' }
+hierarchy Preference { - 1 Sources.Wind - 2 'Manual' }
+dimension shared { value source: string hierarchy preference: Hierarchy = Sources::hierarchy() }
+entity E {
+  @dimension(shared) snapshot attr price: integer
+  computed attr selected: integer { return self.price::best_available(preference=Sources::hierarchy()) }
+}
+`, 'model.yambl');
+  validate([doc]); assert.deepEqual(doc.diagnostics, []);
+  const invalid = parse(`@flags decodes Flags { - 1 One: 'One' }
+hierarchy Bad { - 1 Flags.One - 1 'same' }
+dimension wrong { value source: string fallback_days = self.days::value() }
+`, 'invalid.yambl');
+  validate([invalid]);
+  assert.ok(invalid.diagnostics.some(d => /ordinary Decodes/.test(d.message)));
+  assert.ok(invalid.diagnostics.some(d => /duplicate Hierarchy ordering/.test(d.message)));
+  assert.ok(invalid.diagnostics.some(d => /shared dimension cannot use self/.test(d.message)));
+});
+
+test('shared dimension and hierarchy references navigate and complete', () => {
+  const text = `decodes Sources { - 1 Wind: 'Wind' }
+hierarchy Preferred { - 1 Sources.Wind }
+dimension shared { value source: string hierarchy order: Hierarchy = Preferred }
+entity E { @dimension(shared) snapshot attr price: integer }
+`;
+  const service = new Service(() => {}), uri = 'untitled:shared-dimensions';
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  const feature = (method, offset) => service.feature('textDocument/' + method, { textDocument: { uri }, position: position(text, offset), context: { includeDeclaration: false } });
+  assert.equal(feature('definition', text.lastIndexOf('shared') + 1).range.start.line, 2);
+  assert.equal(feature('definition', text.lastIndexOf('Preferred') + 1).range.start.line, 1);
+  assert.equal(feature('definition', text.lastIndexOf('Wind') + 1).range.start.line, 0);
+  const completion = feature('completion', text.lastIndexOf('shared') + 2).items.map(item => item.label);
+  assert.ok(completion.includes('shared'));
+  const defaults = feature('completion', text.lastIndexOf('Preferred') + 3).items.map(item => item.label);
+  assert.ok(defaults.includes('Preferred')); assert.ok(defaults.includes('Sources'));
+});
+
+test('hierarchy entry diagnostics point to the start of each entry', () => {
+  const doc = parse(`decodes D { - 1 A: 'a' }
+@flags decodes Flags { - 1 A: 'a' }
+hierarchy H {
+  - 1 D.Bad
+  - 1 Missing.X
+  - 2 Flags.A
+}`, 'invalid-hierarchy.yambl');
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics.map(d => [d.message, d.range.start.line + 1, d.range.start.character + 1]), [
+    ['unknown Decodes code: D.Bad', 4, 3],
+    ['duplicate Hierarchy ordering', 5, 3],
+    ['unknown Decodes: Missing', 5, 3],
+    ['Hierarchy entries require ordinary Decodes', 6, 3],
+  ]);
+});
+
+test('hierarchy defaults infer temporal inputs only when the default is used', () => {
+  const doc = parse(`hierarchy Preferred { - 1 'A' }
+entity E {
+  @temporal(day: date) scd attr dictionary: Decodes
+  dimension d { value source: string hierarchy h: Hierarchy = self.dictionary::value()::hierarchy() }
+  dimension d2 { value origin: string hierarchy h2: Hierarchy = self.dictionary::value(day=input.history_day)::hierarchy() }
+  @dimension(d) static attr label: string
+  @dimension(d2) static attr market: string
+  @dimension(d) @temporal(day: date) snapshot attr observed: string
+  computed attr automatic: string { return self.label::best_available() }
+  computed attr explicit_hierarchy: string { return self.label::best_available(h=Preferred) }
+  computed attr explicit_source: string { return self.label::best_available(source='A') }
+  computed attr alias: string { return self.label::best_available(h=input.choice) }
+  @extra_input_param(choice: Hierarchy = 'Preferred')
+  computed attr alias_declared: string { return self.label::best_available(h=input.choice) }
+  computed attr fallback: string { return self.label::best_available(h=input.choice ?? Preferred) }
+  @extra_input_param(h: Hierarchy = 'Preferred')
+  computed attr declared: string { return self.label::best_available() }
+  computed attr renamed: string { return self.observed::best_available(day=input.query) }
+  computed attr nested: string { return self.renamed::value(query=input.nested_day) }
+  computed attr source_date: string { return self.market::best_available() }
+}`, 'temporal-hierarchy.yambl');
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  const entity = doc.declarations[1];
+  const inputs = name => entity.fields.find(f => f.name.value === name).inferredInputs.map(p => [p.name, p.type.name, p.required]);
+  assert.deepEqual(inputs('automatic'), [['day', 'date', false], ['h', 'Hierarchy', false], ['source', 'string', false]]);
+  assert.deepEqual(inputs('explicit_hierarchy'), [['source', 'string', false]]);
+  assert.deepEqual(inputs('explicit_source'), [['h', 'Hierarchy', false]]);
+  assert.deepEqual(inputs('alias'), [['choice', 'Hierarchy', false], ['day', 'date', false], ['source', 'string', false]]);
+  assert.deepEqual(inputs('alias_declared'), [['choice', 'Hierarchy', false], ['source', 'string', false]]);
+  assert.deepEqual(inputs('fallback'), [['choice', 'Hierarchy', false], ['source', 'string', false]]);
+  assert.deepEqual(inputs('declared'), [['h', 'Hierarchy', false], ['source', 'string', false]]);
+  assert.deepEqual(inputs('renamed'), [['h', 'Hierarchy', false], ['query', 'date', true], ['source', 'string', false]]);
+  assert.deepEqual(inputs('nested'), [['h', 'Hierarchy', false], ['nested_day', 'date', true], ['source', 'string', false]]);
+  assert.deepEqual(inputs('source_date'), [['h2', 'Hierarchy', false], ['history_day', 'date', false], ['origin', 'string', false]]);
+});
+
+test('hierarchy defaults compare their declaration identities across scopes', () => {
+  const one = parse("namespace one hierarchy H { - 1 'A' } dimension d_one { value source: string hierarchy h: Hierarchy = H }", 'one.yambl');
+  const use = parse('namespace use from one import d_one from two import d_two entity E { @dimension(d_one) attr x:string @dimension(d_two) attr y:string computed attr z:bool { return self.x::best_available() == self.y::best_available() } }', 'use.yambl');
+  for (const [text, conflict] of [
+    ["namespace two hierarchy H { - 1 'B' } dimension d_two { value source: string hierarchy h: Hierarchy = H }", true],
+    ["namespace two from one import H dimension d_two { value source: string hierarchy h: Hierarchy = H }", false],
+  ]) {
+    const two = parse(text, 'two.yambl'); validate([one, two, use]);
+    assert.equal(use.diagnostics.some(d => d.message === 'conflicting inferred parameter: h'), conflict);
+  }
+  const shared = parse("namespace one dimension d_one { value source:string hierarchy h:Hierarchy = 'same' }", 'one.yambl');
+  const same = parse("namespace two dimension d_two { value source:string hierarchy h:Hierarchy = 'same' }", 'two.yambl');
+  validate([shared, same, use]);
+  assert.ok(!use.diagnostics.some(d => d.message === 'conflicting inferred parameter: h'));
+});
+
 function exampleEditor() {
   const filename = path.resolve(__dirname, 'fixtures/example/model/core/computations.yambl');
   const uri = pathToFileURL(filename).href, original = fs.readFileSync(filename, 'utf8');

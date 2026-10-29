@@ -5,7 +5,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 修订与独立性
 
-当前 `format_revision` 为整数 `9`。格式尚未固化，不承诺修订间兼容；结构变化时递增
+当前 `format_revision` 为整数 `10`。格式尚未固化，不承诺修订间兼容；结构变化时递增
 修订号。读取器拒绝不支持的修订号，要求重新编译，不自动迁移。
 
 文件完整保存本次采用的内置声明、原语目录和七个无载荷结果常量及携带载荷的 PARTIAL的含义。独立校验仅依赖
@@ -36,10 +36,10 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 声明、字段与身份
 
-声明的 `kind` 为 `entity`、`value`、`type_alias`、`decorator`、`decodes` 或 `constant`。
+声明的 `kind` 为 `entity`、`value`、`type_alias`、`decorator`、`decodes`、`constant`、`dimension` 或 `hierarchy`。
 每个声明保存 `name`、`identity`、`final`、`parent`、`parameters`、`expression`、
 `decorators`、`dimensions`、`fields`、`effective`、`entries`、`initializer`、`references`、
-`lookups`、`effective_lookups`、`source` 和 `derived`。
+`lookups`、`effective_lookups`、`hierarchy_entries`、`source` 和 `derived`。
 
 `name` 是完整 qualified name。通常 `identity` 与它相同。普通仓库允许在
 `namespace builtins` 中编写本地定义，这些定义与工具提供的全局内置定义仍是不同
@@ -57,6 +57,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
   键保存表达式、推导类型及字段路径步骤；步骤保留访问身份、参数的绑定表达式及固定绑定或输入绑定。
 - `entries` 保存 `{code, ordering, decode, generated, source}`；flags 包括生成的
   `None` 和 `All`，`ordering` 保存十进制整数字符串。
+- `hierarchy_entries` 保存具名 Hierarchy 条目的 ordering、字符串或 code、字典身份和来源；ordering 使用十进制整数字符串。
 - `derived` 标记由语言模型派生的声明；子类型字典的 identity 是所属实体 identity 加
   `::subtypes`，条目由继承关系与 `@decodes_rank` 推导。独立校验须拒绝与这些规则不一致的
   派生内容。
@@ -67,7 +68,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 `calculation` 仅在 computed 字段上非空，保存独立表达式 AST、let/return、
 解析后的字段访问、依赖实现、推导参数及默认关系；参数 sites 使用相对来源位置。
-`dimensions` 保存命名声明、value/hierarchy 参数和结构化 fallback 表达式。
+`dimensions` 保存实体内或共享维度的完整声明身份、value/hierarchy 参数、结构化默认值和 fallback 表达式，以及表达式引用的声明身份。维度注解保留 `dimension_identity`；输入参数的 `default_dimension` 标识提供默认 selector 的维度。
 `extension` 标记来源是否为 extend；它不会创建额外实体。`builtin` 标记由语言派生的
 隐藏类型属性，普通源码字段为 false。每个实体的 `entity_type` 和 `root_entity_type`
 各有实现，继承树内共享逻辑身份；独立校验重新推导并检查这些字段，拒绝篡改的派生信息。
@@ -176,7 +177,7 @@ decorator 使用绑定结果，忽略 arguments 的位置/命名拼写。JSON �
 [ir.schema.json](../../lang/syntex/ir.schema.json) 使用 Draft 2020-12，随编译器分发且只包含本地引用。
 加载先拒绝重复 key 和非标准数值，再进行 Schema、类型化解码与语义一致性校验。
 Schema 由 IR 数据类型生成；`yambl schema -o output ./build/ir.schema.json` 可导出同一契约。
-当前 IR 修订号为 9，包含计算表达式、命名 dimension、lookup 规则、推导参数和 PARTIAL。
+当前 IR 修订号为 10，包含计算表达式、共享与实体内 dimension、具名 Hierarchy、lookup 规则、推导参数和 PARTIAL。
 Decorator 调用的 Argument 使用 `default: Expression | null` 保留 pair 默认值。
 隐含 description 仍是有绑定身份的普通元信息；输入说明通过 extra_input_param 的 pair key 关联。
 Constant 声明保留结构化初始化表达式和声明作用域 references。
@@ -188,4 +189,4 @@ TypeHint 包含名称、泛型实参、参数约束、成员访问、flags 运�
 CalculationAccess.operation 限定为 `value` 与 `best_available`。
 `value` 同时读取存储字段和计算字段，具体行为由已解析的字段定义决定。
 导出前拒绝隐式末端字段读取；中间引用导航记录为显式的 value 访问节点。
-运行时契约为 9，存储布局为 8，文件格式为 3；不支持的修订号需要重新编译。
+运行时契约为 10，存储布局为 8，文件格式为 3；不支持的修订号需要重新编译。

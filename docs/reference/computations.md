@@ -40,9 +40,31 @@ entity Security {
 }
 ```
 
-dimension 属于实体，可在 extend 中定义并由子类继承使用；同作用域重名报错。
+dimension 可定义在实体、extend 或文件顶层。实体内定义由子类继承；引用时先查找实体内及继承的 dimension，再查找当前文件作用域中的共享 dimension。顶层 dimension 遵循 namespace 和 import，在声明文件的作用域解析，不能使用 self。
 value 必填，类型为 string 或 code；hierarchy 与 fallback_days 可选。声明本身不接受
 decorator。`dimension_ref` 只用于编译期元信息，不能作为存储字段类型。
+
+共享维度和具名 Hierarchy 可供多个实体使用：
+
+```yambl
+decodes PriceSources {
+    - 100 Wind: 'Wind'
+    - 200 Manual: 'Manual'
+}
+
+hierarchy PreferredSources {
+    - 100 PriceSources.Wind
+    - 200 'Manual'
+}
+
+dimension price_source {
+    value source: code<PriceSources>
+    hierarchy preference: Hierarchy = PreferredSources
+}
+```
+
+Hierarchy 名称使用 PascalCase，按 namespace/import 查找；条目可混用字符串和普通字典 code，保存 code 而非 decode。ordering 必须唯一，选择时按升序使用；空声明合法。`PriceSources::hierarchy()` 在当前读取会话中提供只读 Hierarchy 视图，取字典条目的 code 和 ordering；重复 ordering 返回 ERROR，flags 字典不支持转换。该视图不创建持久化 ID，不能写入 Plan。缺失字典或非正常 entries 状态沿用读取结果。
+
 
 | 写法 | 作用 |
 | --- | --- |
@@ -64,6 +86,8 @@ config 读取有效配置。它不自动使用 Hierarchy 或日期回退。计�
 显式 value 优先于 hierarchy，显式 hierarchy 优先于声明默认值。没有可用 Hierarchy
 时必须提供 value；最多自动选择一个 Hierarchy，其余维度必须明确提供。
 Hierarchy ordering 是任意精度整数，必须唯一，按真实整数升序排列。
+仅为默认 Hierarchy 来源推导出的时间参数可省略；显式提供 value 或 Hierarchy 时无需它。
+使用默认来源而缺少必要时间参数时返回 ERROR。如果其他依赖也需要同名参数，该参数仍必填。
 
 snapshot 选择包含两端的 `[as_of_date - fallback_days, as_of_date]`，先按日期倒序，
 再按来源优先级。fallback_days 只用于 snapshot，由实际证券实例的有效 config 决定；
@@ -160,7 +184,7 @@ when 只读取存储 static 字段并作等值 AND；非错误非正常值为不
 
 ## 产物、执行与边界
 
-IR 修订号 8，运行时契约 8，存储布局 7，JSONL 封装格式 2。
+IR 修订号 10，运行时契约 10，存储布局 8，JSONL 封装格式 3。
 IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
 生成包要求 Python 3.14+，运行依赖由生成项目的 `pyproject.toml` 声明。
 计算执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。

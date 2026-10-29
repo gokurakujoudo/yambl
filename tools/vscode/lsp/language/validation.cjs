@@ -25,7 +25,7 @@ function validate(documents) {
     if (doc.errors.length) continue;
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
       const name = decl.name.value; decl.key = key(doc, namespace(doc), name); decl.ownFields = new Map();
-      if (decl.kind === 'constant' ? !/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(name) : ['value', 'type_alias', 'decorator'].includes(decl.kind) ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, decl.kind === 'constant' ? 'constant names must use UPPER_SNAKE_CASE' : ['value', 'type_alias', 'decorator'].includes(decl.kind) ? (decl.kind === 'decorator' ? 'decorator names must use snake_case' : 'value names must use snake_case') : 'declaration names must use PascalCase');
+      if (decl.kind === 'constant' ? !/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(name) : ['value', 'type_alias', 'decorator', 'dimension'].includes(decl.kind) ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, decl.kind === 'constant' ? 'constant names must use UPPER_SNAKE_CASE' : ['value', 'type_alias', 'decorator', 'dimension'].includes(decl.kind) ? (decl.kind === 'decorator' ? 'decorator names must use snake_case' : decl.kind === 'dimension' ? 'dimension names must use snake_case' : 'value names must use snake_case') : 'declaration names must use PascalCase');
       const modelDefinition = namespace(doc) === 'builtins' && builtinModels.has(name);
       if ((!modelDefinition && reserved.includes(name)) || symbols.has(decl.key)) issue(doc, decl.token, `duplicate or reserved declaration: ${name}`);
       symbols.set(decl.key, decl); bind(doc, decl.name, decl);
@@ -67,6 +67,25 @@ function validate(documents) {
       if (decl.kind === 'decodes') {
         checkDecodes(decl, issue);
         for (const entry of codeEntries(decl).filter(e => !e.generated)) bind(doc, entry.name, entry);
+        continue;
+      }
+      if (decl.kind === 'hierarchy') {
+        const orders = new Set();
+        for (const entry of decl.entries) {
+          const order = BigInt(entry.order.value).toString();
+          if (orders.has(order)) issue(doc, entry.token, 'duplicate Hierarchy ordering');
+          orders.add(order);
+          if (entry.code) {
+            const dictionary = doc.scope.get(entry.value.value); bind(doc, entry.value, dictionary);
+            if (!dictionary || dictionary.kind !== 'decodes') issue(doc, entry.token, `unknown Decodes: ${entry.value.value}`);
+            else if (isFlags(dictionary)) issue(doc, entry.token, 'Hierarchy entries require ordinary Decodes');
+            else {
+              const code = codeEntries(dictionary).find(e => e.name.value === entry.code.value);
+              if (!code) issue(doc, entry.token, `unknown Decodes code: ${entry.value.value}.${entry.code.value}`);
+              else bind(doc, entry.code, code);
+            }
+          }
+        }
         continue;
       }
       const target = doc.scope.get(decl.name.value);

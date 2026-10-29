@@ -1,7 +1,7 @@
 'use strict';
 
 const { Resolver, type, accepts, equal, base, canonical, commonType, unknown } = require('./expressions.cjs');
-const { semantic, resolveDimension } = require('./dimensions.cjs');
+const { resolveDimension } = require('./dimensions.cjs');
 const { resultConstants } = require('./syntax.cjs');
 const numbers = ['integer', 'decimal', 'float'];
 const conversions = require('./conversions.cjs');
@@ -68,6 +68,12 @@ function checkComputations(documents, symbols, report) {
     if (expected.name === actual.name && expected.args.length && expected.args.length === actual.args.length) return expected.args.every((t, i) => compatible(t, actual.args[i]));
     return accepts(expected, actual, symbols);
   }
+  function scopedSemantic(node, doc) {
+    if (!node) return null;
+    const declaration = node.kind === 'name' && doc.scope.get(node.value);
+    const value = declaration && ['constant', 'decodes', 'hierarchy'].includes(declaration.kind) ? declaration.key : node.value;
+    return [node.kind, value, node.operands.map(child => scopedSemantic(child, doc)), node.arguments.map(a => [a.name, scopedSemantic(a.expression, doc)]), node.cases.map(c => [c.statuses, c.binding, scopedSemantic(c.expression, doc)])];
+  }
   function declareInputs(checker, node, issue) {
     for (const call of node.metadata.filter(c => c.name === 'extra_input_param')) {
       const values = new Map(); require('./decorators.cjs').bindCall(call, node, () => {}, symbols, values);
@@ -76,7 +82,7 @@ function checkComputations(documents, symbols, report) {
       const name = pair.key.value, defaultType = values.get('parameter_default');
       if (checker.declared.has(name)) issue({ token: pair.key }, `duplicate extra input parameter: ${name}`);
       const defaultValue = defaultType?.exact == null ? null : { kind: ['integer', 'snowflake_id'].includes(constraint.name) ? 'integer' : ['decimal', 'float'].includes(constraint.name) ? 'decimal' : constraint.name === 'bool' ? 'bool' : 'string', value: defaultType.exact, token: pair.default.token, end: pair.default.token.end, operands: [], arguments: [], cases: [] };
-      const parameter = { name, type: constraint, required: false, default: defaultValue, sites: [pair.key], description: values.get('description')?.exact || '' };
+      const parameter = { name, type: constraint, required: false, default: defaultValue, defaultDoc: node.doc, sites: [pair.key], description: values.get('description')?.exact || '' };
       checker.addInput(parameter, { token: pair.key }); checker.declared.set(name, parameter);
       const declaration = { kind: 'calculation_binding', name: pair.key, doc: node.doc, resolvedType: constraint };
       node.doc.bindings.set(pair.key.start, declaration); parameter.declaration = declaration;
@@ -118,10 +124,10 @@ function checkComputations(documents, symbols, report) {
       if (!snake(name) || ['self', 'input', 'best_effort'].includes(name)) this.issue(node, `invalid or reserved calculation parameter: ${name}`);
       const prior = this.inputs.get(name);
       const declared = this.declared.get(name);
-      if (declared) parameter = { ...parameter, required: false, default: declared.default || parameter.default };
+      if (declared) parameter = { ...parameter, required: false, default: declared.default || parameter.default, defaultDoc: declared.default ? declared.defaultDoc : parameter.defaultDoc, defaultDimension: declared.default ? null : parameter.defaultDimension };
       if (prior) {
-        if (!equal(prior.type, parameter.type) || (prior.default && parameter.default && JSON.stringify(semantic(prior.default)) !== JSON.stringify(semantic(parameter.default)))) this.issue(node, `conflicting inferred parameter: ${name}`);
-        parameter = { ...prior, required: prior.required || parameter.required, default: prior.default || parameter.default, sites: [...prior.sites, ...parameter.sites] };
+        if (!equal(prior.type, parameter.type) || (prior.default && parameter.default && JSON.stringify(scopedSemantic(prior.default, prior.defaultDoc || this.doc)) !== JSON.stringify(scopedSemantic(parameter.default, parameter.defaultDoc || this.doc)))) this.issue(node, `conflicting inferred parameter: ${name}`);
+        parameter = { ...prior, required: prior.required || parameter.required, default: prior.default || parameter.default, defaultDoc: prior.default ? prior.defaultDoc : parameter.defaultDoc, defaultDimension: prior.default ? prior.defaultDimension : parameter.defaultDimension, sites: [...prior.sites, ...parameter.sites] };
       }
       this.inputs.set(name, parameter);
     }
@@ -131,7 +137,7 @@ function checkComputations(documents, symbols, report) {
       if (alias.kind === 'member' && alias.operands[0].kind === 'name' && alias.operands[0].value === 'input') {
         const declaration = this.declared.get(alias.value)?.declaration;
         if (declaration) this.doc.bindings.set(alias.memberToken.start, declaration);
-        this.addInput({ ...parameter, name: alias.value, default: fallback || parameter.default, sites: [expression.token] }, expression);
+        this.addInput({ ...parameter, name: alias.value, default: fallback || parameter.default, defaultDoc: fallback ? this.doc : parameter.defaultDoc, defaultDimension: fallback ? null : parameter.defaultDimension, sites: [expression.token] }, expression);
         if (fallback) {
           const saved = new Map(this.inputs);
           this.bindInput({ ...parameter, default: null, required: true }, fallback, environment);
@@ -175,7 +181,7 @@ function checkComputations(documents, symbols, report) {
           result.push({ name: dimension.value.value, type: valueType, required: !best, default: null, sites: [node.token], declaration: parameterDeclaration(dimension.doc, dimension.value, valueType) });
           if (best) {
             const hierarchyType = type('Hierarchy', 'reference', { key: dimension.doc.scope.get('Hierarchy').key });
-            result.push({ name: dimension.hierarchy.value, type: hierarchyType, required: false, default: dimension.default || null, sites: [node.token], declaration: parameterDeclaration(dimension.doc, dimension.hierarchy, hierarchyType) });
+            result.push({ name: dimension.hierarchy.value, type: hierarchyType, required: false, default: dimension.default || null, defaultDoc: dimension.doc, defaultDimension: dimension.default ? dimension : null, sites: [node.token], declaration: parameterDeclaration(dimension.doc, dimension.hierarchy, hierarchyType) });
           }
         }
       }
@@ -219,6 +225,11 @@ function checkComputations(documents, symbols, report) {
         }
         const declaration = this.doc.scope.get(node.value);
         if (declaration?.kind === 'constant') { this.doc.bindings.set(node.token.start, declaration); return { type: constant(declaration), declaration }; }
+        if (declaration?.kind === 'hierarchy' || declaration?.kind === 'decodes') {
+          this.doc.bindings.set(node.token.start, declaration);
+          const name = declaration.kind === 'hierarchy' ? 'Hierarchy' : 'Decodes';
+          return { type: type(name, 'reference', { key: this.doc.scope.get(name).key, exact: declaration.key }), declaration };
+        }
         if (node.value in resultConstants && node.value !== 'PARTIAL') return { type: unknown };
         this.issue(node, `unknown calculation name: ${node.value}`); return { type: unknown };
       }
@@ -356,6 +367,14 @@ function checkComputations(documents, symbols, report) {
       if (!receiver) { this.issue(node, 'expression is only valid in its binding or method context'); return { type: unknown }; }
       if (selected.kind === 'descriptor') {
         const value = this.infer(receiver, environment);
+        if (method === 'hierarchy') {
+          this.read(value, receiver);
+          const dictionary = value.declaration?.kind === 'decodes' && value.declaration;
+          if (node.arguments.length) this.issue(node, '::hierarchy() does not accept arguments');
+          if (value.type.name !== 'Decodes') this.issue(node, '::hierarchy() requires a Decodes reference');
+          if (dictionary && require('./decodes.cjs').isFlags(dictionary)) this.issue(node, 'flags Decodes cannot be converted to Hierarchy');
+          return { type: type('Hierarchy', 'reference', { key: this.doc.scope.get('Hierarchy').key }) };
+        }
         if (!value.field) { this.issue(node, 'field operation requires a field descriptor'); return { type: unknown }; }
         const explicit = new Map(node.arguments.map(a => [a.name, a.expression]));
         const substitute = expression => expression.kind === 'member' && expression.operands[0].kind === 'name' && expression.operands[0].value === 'input' ? explicit.get(expression.value) || expression : { ...expression, operands: expression.operands.map(substitute), arguments: expression.arguments.map(a => ({ ...a, expression: substitute(a.expression) })) };
@@ -368,6 +387,23 @@ function checkComputations(documents, symbols, report) {
         }
         for (const parameter of parameters) if (!supplied.has(parameter.name)) this.addInput(parameter, node);
         if (method === 'best_available' && value.field.metadata.filter(a => a.name === 'dimension' && a.dimension?.hierarchy && !supplied.has(a.dimension.value.value)).length > 1) this.issue(node, 'best_available supports one automatic Hierarchy; bind the other dimension values');
+        if (method === 'best_available') for (const call of value.field.metadata.filter(a => a.name === 'dimension')) {
+          const dimension = call.dimension;
+          if (!dimension?.default || !dimension.hierarchy || supplied.has(dimension.value.value)) continue;
+          const selection = explicit.get(dimension.hierarchy.value);
+          const selectedName = !selection ? dimension.hierarchy.value : selection.kind === 'member' && selection.operands[0].kind === 'name' && selection.operands[0].value === 'input' ? selection.value : null;
+          if (!selectedName || this.inputs.get(selectedName)?.defaultDimension !== dimension) continue;
+          const owner = value.field.owner;
+          const checker = new Checker(dimension.doc, owner, (item, message) => report(dimension.doc, item.token, message));
+          const defaultEnvironment = new Map([['self', { type: type(owner.name.value, 'reference', { key: owner.key }) }]]);
+          checker.read(checker.infer(dimension.default, defaultEnvironment), dimension.default);
+          for (const parameter of checker.inputs.values()) {
+            const binding = explicit.get(parameter.name);
+            const conditional = { ...parameter, required: false };
+            if (binding) this.bindInput(conditional, binding, environment);
+            else this.addInput(conditional, node);
+          }
+        }
         return { type: value.type };
       }
       const value = this.read(this.infer(receiver, environment, method === 'recover' ? expected : null), receiver);
@@ -518,9 +554,17 @@ function checkComputations(documents, symbols, report) {
   }
   for (const doc of documents.filter(d => !d.errors.length)) for (const declaration of doc.declarations) {
     if (declaration.kind === 'constant') constant(declaration);
-    for (const dimension of declaration.dimensions || []) if (dimension.fallback && dimension.owner) {
+    for (const dimension of declaration.kind === 'dimension' ? [declaration] : declaration.dimensions || []) if (dimension.default) {
       const checker = new Checker(doc, dimension.owner, (node, message) => report(doc, node.token, message));
-      const actual = checker.read(checker.infer(dimension.fallback, new Map([['self', { type: type(dimension.owner.name.value, 'reference', { key: dimension.owner.key }) }]])), dimension.fallback);
+      const environment = dimension.owner ? new Map([['self', { type: type(dimension.owner.name.value, 'reference', { key: dimension.owner.key }) }]]) : new Map();
+      const actual = checker.read(checker.infer(dimension.default, environment), dimension.default).type;
+      const resultLiteral = node => (node.kind === 'name' && node.value in resultConstants) || node.operands.some(resultLiteral) || node.arguments.some(a => resultLiteral(a.expression)) || node.cases.some(c => resultLiteral(c.expression));
+      if (resultLiteral(dimension.default) || (actual.name !== 'Hierarchy' && !(actual.name === 'string' && dimension.default.kind === 'string') && actual.kind !== 'unknown')) checker.issue(dimension.default, 'hierarchy default requires a Hierarchy reference or view');
+    }
+    for (const dimension of declaration.kind === 'dimension' ? [declaration] : declaration.dimensions || []) if (dimension.fallback) {
+      const checker = new Checker(doc, dimension.owner, (node, message) => report(doc, node.token, message));
+      const environment = dimension.owner ? new Map([['self', { type: type(dimension.owner.name.value, 'reference', { key: dimension.owner.key }) }]]) : new Map();
+      const actual = checker.read(checker.infer(dimension.fallback, environment), dimension.fallback);
       if (actual.type.name !== 'integer' && actual.type.kind !== 'unknown') checker.issue(dimension.fallback, 'fallback_days requires an integer expression');
       if (checker.inputs.size || checker.dependencies.size) checker.issue(dimension.fallback, 'fallback_days requires stored static or config dependencies without external parameters');
     }
@@ -563,7 +607,7 @@ function checkComputations(documents, symbols, report) {
   }
   const contracts = new Map();
   for (const [field, checker] of completed) {
-    const contract = JSON.stringify([...checker.inputs.values()].sort((a, b) => a.name.localeCompare(b.name)).map(p => [p.name, canonical(p.type), p.required, semantic(p.default)]));
+    const contract = JSON.stringify([...checker.inputs.values()].sort((a, b) => a.name.localeCompare(b.name)).map(p => [p.name, canonical(p.type), p.required, scopedSemantic(p.default, p.defaultDoc || field.doc)]));
     if (contracts.has(field.identity) && contracts.get(field.identity) !== contract) report(field.doc, field.calculation.result.token, `computed parameter signature mismatch: ${field.name.value}`);
     contracts.set(field.identity, contract);
   }
