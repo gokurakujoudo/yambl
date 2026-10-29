@@ -10,6 +10,7 @@
 | [值类型](value-types.md)、[集合](collection-types.md) | 基础类型、参数、引用及容器约束 |
 | [类型表达式](type-expressions.md)、[字段映射](field-mapping.md) | 字段描述、别名、依赖类型与字段筛选 |
 | [字段关系](field-relationships.md) | 继承、扩展、覆盖和重载 |
+| [实体关系与反向引用](relationships.md) | 引用基数、反向读取和数据校验 |
 | [元信息](decorators.md) | 内置和自定义 decorator、参数及适用范围 |
 | [计算](computations.md)、[转换函数](functions.md) | 字段读取、输入、维度、聚合和转换 |
 | [具名批量匹配](lookup.md) | 匹配键、准备参数、Python 接口和结果 |

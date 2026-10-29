@@ -148,6 +148,9 @@ attribute categories from the language sources. Target codes, generated All/None
 and named arguments complete and navigate to their definitions.
 Decorator calls navigate to declarations and named arguments to formal parameters.
 Override and overload calls retain their field-relationship navigation.
+Relationship cardinalities complete inside `@relationship`. A `@reverse_relationship`
+target navigates to its forward field; the language service checks both sides' types,
+categories, temporal parameters and dimension identities.
 `::entity` selects a concrete field descriptor's declaring entity.
 
 ## Computation editing

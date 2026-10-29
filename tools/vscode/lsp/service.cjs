@@ -175,6 +175,7 @@ const help = {
   ...Object.fromEntries(Object.entries(resultConstants).map(([name, meaning]) => [name, `${meaning}\n\nCalculation results support explicit recover; PARTIAL requires a payload and issue details.`])),
   title: 'Short display title.', description: 'Descriptive metadata.',
   temporal: 'One caller-named date parameter on snapshot or scd attr.', dimension: 'Independent data dimension with an optional Hierarchy selector.',
+  relationship: 'Declare source and target cardinality for a stored entity reference.', reverse_relationship: 'Read source entities through a declared forward relationship.',
   decorator: 'Declare typed metadata with value parameters and caller-defined key/type pairs.',
   targets: 'Declare the allowed definition kinds and optional attribute categories for a decorator.',
   allow_multiple: 'Allow repeated uses of the decorated decorator on one definition.',
@@ -483,6 +484,28 @@ class Service {
         return { isIncomplete: false, items: labels.map(label => computation || lookup ? { label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 } : { label, kind: 10, detail: help[label] || help.self }) };
       }
       if (/\binput\.[a-z_0-9]*$/.test(before) && (computation || lookup)) return { isIncomplete: false, items: ((computation || lookup).inferredInputs || []).filter(p => p.name !== '__completion').map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
+      const relationshipCall = /@relationship\(([^()]*)$/.exec(before);
+      if (relationshipCall) {
+        const part = relationshipCall[1].split(',').at(-1).trim();
+        const named = /^(x|y)\s*=\s*[a-z_0-9]*$/.exec(part);
+        const key = named?.[1] || (relationshipCall[1].includes(',') ? 'y' : 'x');
+        const field = doc.declarations.flatMap(d => d.fields).find(f => f.metadata.some(call => call.token.start === relationshipCall.index));
+        const symbols = new Map([...doc.scope.values()].map(declaration => [declaration.key, declaration]));
+        const fieldType = field && new Resolver(doc, () => {}, symbols, field.owner, true).resolve(field.type);
+        const values = key === 'x' ? ['one', 'many'] : fieldType?.name === 'collection' ? ['maybe', 'many'] : fieldType?.kind === 'reference' ? ['maybe', 'one'] : ['maybe', 'one', 'many'];
+        return { isIncomplete: false, items: values.map(label => ({ label, kind: 21, detail: 'Relationship cardinality' })) };
+      }
+      const reverseCall = /@reverse_relationship\(\s*(?:target\s*=\s*)?([A-Z][A-Za-z0-9]*)\.([a-z_0-9]*)$/.exec(before);
+      if (reverseCall) {
+        const scope = doc.errors.length ? this.completionScope(doc, reverseCall.index, offset) : doc.scope;
+        const owner = scope.get(reverseCall[1]);
+        return { isIncomplete: false, items: [...(owner?.effective?.values() || [])].filter(field => field.metadata.some(call => call.name === 'relationship')).map(field => ({ label: field.name.value, kind: 5, detail: describe(field) })) };
+      }
+      const reverseOwner = /@reverse_relationship\(\s*(?:target\s*=\s*)?([A-Z][A-Za-z0-9]*)?$/.exec(before);
+      if (reverseOwner) {
+        const scope = doc.errors.length ? this.completionScope(doc, reverseOwner.index, offset) : doc.scope;
+        return { isIncomplete: false, items: [...scope.values()].filter(owner => owner.kind === 'entity' && [...(owner.effective?.values() || [])].some(field => field.metadata.some(call => call.name === 'relationship'))).map(owner => ({ label: owner.name.value, kind: 7, insertText: owner.name.value + '.', detail: 'Entity with a forward relationship' })) };
+      }
       const member = /\.([a-z_0-9]*)$/.exec(before);
       if (member && (computation || constantContext || lookup)) {
         const expression = nodes(computation || constantContext || lookup).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
@@ -585,12 +608,14 @@ class Service {
         const symbols = new Map([...scope.values()].map(d => [d.key, d]));
         const targetDeclaration = completionDoc.declarations.find(d => d.metadata?.some(a => a.token.start === decorator.index));
         const field = completionDoc.declarations.flatMap(d => d.fields).find(f => f.metadata.some(a => a.token.start === decorator.index));
-        const collection = field && new Resolver(completionDoc, () => {}, symbols, field.owner).resolve(field.type).kind === 'collection';
+        const fieldType = field && new Resolver(completionDoc, () => {}, symbols, field.owner).resolve(field.type);
+        const collection = fieldType?.kind === 'collection';
         const usedKeys = new Set([...used].map(name => scope.get(name)?.key));
         const applicable = [...scope.values()].filter(d => {
           if (d.kind !== 'decorator') return false;
           if (d.name.value === 'decodes_rank' && targetDeclaration?.kind === 'entity' && !targetDeclaration.parent) return false;
           if (collection && ['sparse', 'dense'].includes(d.name.value)) return false;
+          if (fieldType && fieldType.kind !== 'unknown' && ['relationship', 'reverse_relationship'].includes(d.name.value) && !(fieldType.kind === 'reference' || (fieldType.name === 'collection' && fieldType.args[0]?.kind === 'reference'))) return false;
           if (usedKeys.has(d.key) && !allowsMultiple(d)) return false;
           if (['sparse', 'dense'].includes(d.name.value) && ['sparse', 'dense', 'dimension'].some(name => used.has(name))) return false;
           if (d.name.value === 'dimension' && ['sparse', 'dense'].some(name => used.has(name))) return false;

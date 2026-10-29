@@ -88,6 +88,35 @@ function bindCall(call, node, issue, symbols, values = null) {
   const descriptionType = description && argumentType(actualResolver, description, type('string', 'string'));
   if (descriptionType) values?.set('description', descriptionType);
   if (name === 'dimension') return require('./dimensions.cjs').dimensionCall(call, node, issue, symbols) || '';
+  if (name === 'relationship' || name === 'reverse_relationship') {
+    const formals = declaration.parameters, supplied = new Map(); let position = 0, named = false;
+    for (const argument of args) {
+      const formal = argument.mode === 'keyword' ? formals.find(p => p.name.value === argument.key.value) : argument.mode === 'positional' ? formals[position++] : null;
+      if (argument.mode === 'keyword') named = true;
+      else if (named && argument.mode === 'positional') actualResolver.issue(argument, 'positional arguments must precede named arguments');
+      if (!formal) { actualResolver.issue(argument, `unexpected argument for decorator: ${name}`); continue; }
+      if (supplied.has(formal.name.value)) { actualResolver.issue(argument, `duplicate decorator argument: ${formal.name.value}`); continue; }
+      if (argument.mode === 'keyword') doc.bindings.set(argument.key.start, formal);
+      supplied.set(formal.name.value, argument);
+    }
+    for (const formal of formals) if (!supplied.has(formal.name.value)) actualResolver.issue(call, `missing decorator argument: ${formal.name.value}`);
+    if (name === 'relationship') {
+      const terms = ['x', 'y'].map(key => supplied.get(key)?.type);
+      for (const [index, syntax] of terms.entries()) if (syntax && (syntax.quoted || syntax.literal || syntax.args || syntax.params || syntax.accesses?.length || syntax.operations?.length || !(index ? ['maybe', 'one', 'many'] : ['one', 'many']).includes(syntax.name))) actualResolver.issue(syntax, `invalid relationship cardinality: ${index ? 'y' : 'x'}`);
+      call.relationship = terms.map((term, index) => term && !term.quoted && !term.literal && !term.args && !term.params && !term.accesses?.length && !term.operations?.length && (index ? ['maybe', 'one', 'many'] : ['one', 'many']).includes(term.name) ? term.name : '');
+      return JSON.stringify([declaration.key, call.relationship, descriptionType && canonical(descriptionType)]);
+    }
+    const syntax = supplied.get('target')?.type;
+    if (!syntax) return '';
+    const owner = doc.scope.get(syntax.name), access = syntax.accesses?.[0];
+    call.targetSpecified = true;
+    const valid = owner?.kind === 'entity' && syntax.accesses?.length === 1 && access.operator.value === '.' && !syntax.args && !syntax.params && !syntax.operations?.length;
+    const field = valid && owner.effective?.get(access.token.value);
+    if (!valid) actualResolver.issue(syntax, 'reverse relationship requires an entity field reference');
+    else { doc.bindings.set(syntax.token.start, owner); call.targetOwner = owner; if (field) { doc.bindings.set(access.token.start, field); call.targetField = field; } }
+    const root = field && (field.owner.ancestors?.at(-1) || field.owner).key;
+    return JSON.stringify([declaration.key, field ? root + '\0' + field.name.value : '', descriptionType && canonical(descriptionType)]);
+  }
   const formalResolver = new Resolver(declaration.doc, issue, symbols, null, false, actualResolver.bindings);
   const ordinary = declaration.parameters.filter(p => !p.pair), pairs = declaration.parameters.filter(p => p.pair);
   const supplied = new Map(), keys = new Set();

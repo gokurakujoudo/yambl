@@ -34,6 +34,33 @@ for (const name of ['NOT_DEFINED', 'NOT_APPLICABLE', 'EMPTY', 'NO_ENTRY', 'NO_DA
 }
 cases.push(["decodes Codes { - 1 ERROR: 'Error' } @title(Codes.ERROR) entity Empty {}"]);
 
+const relationshipStart = cases.length;
+for (const x of ['one', 'many']) for (const [y, target] of [['maybe', 'Target'], ['one', 'Target'], ['maybe', 'collection<Target>'], ['many', 'collection<Target>']]) {
+  const reverse = x === 'one' ? 'Source' : 'collection<Source>';
+  cases.push([`entity Source { id id:string @relationship(${x}, ${y}) attr target:${target} } entity Target { id id:string @reverse_relationship(Source.target) attr sources:${reverse} }`]);
+}
+cases.push(
+  ['entity A { @relationship(maybe, one) attr b:B } entity B {}'],
+  ["entity A { @relationship(one, 'one') attr b:B } entity B {}"],
+  ['entity A { @relationship(one, bad) attr b:B } entity B {}'],
+  ['entity A { @relationship(one, one) attr b:collection<B> } entity B {}'],
+  ['entity A { @relationship(one) attr b:B } entity B {}'],
+  ['entity A { @relationship(x=one, y=one, y=one) attr b:B } entity B {}'],
+  ['entity A { @relationship(one, many) attr b:B } entity B {}'],
+  ['entity A { @relationship(one, one) attr b:string }'],
+  ['entity A { @relationship(many, one) attr b:Entity }'],
+  ['entity A { attr b:B } entity B { @reverse_relationship(A.b) attr a:collection<A> }'],
+  ['entity A { @relationship(one, one) attr b:B } entity B { @reverse_relationship(A.b) attr a:collection<A> }'],
+  ['entity A { @relationship(many, one) @temporal(date:date) scd attr b:B } entity B { @reverse_relationship(A.b) @temporal(day:date) scd attr a:collection<A> }'],
+  ["dimension d { value source:string hierarchy h:Hierarchy = 'H' } entity A { @dimension(d) @relationship(many, one) attr b:B } entity B {}"],
+  ["dimension a { value source:string } dimension b { value source:string } entity A { @dimension(a) @relationship(many,one) attr b:B } entity B { @dimension(b) @reverse_relationship(A.b) attr a:collection<A> }"],
+  ['entity A { @relationship(many,one) attr b:B } entity B { @reverse_relationship(A.missing) attr a:collection<A> }'],
+  ['entity A { @relationship(many,one) attr b:A } entity B { @reverse_relationship(A.b) attr a:collection<A> }'],
+  ['entity A { @relationship(many,one) attr b:B } entity B { @sparse(\'x\') @reverse_relationship(A.b) attr a:collection<A> }'],
+  ['namespace source entity Source { id id:string @relationship(y=one,x=many) attr target:Target } entity Child inherits Source {} entity Target { id id:string }', 'namespace use from source import Child from source import Target extend Target { @reverse_relationship(target=Child.target) attr sources:collection<Child> }'],
+);
+const relationshipEnd = cases.length;
+
 cases.push(
   ["decodes Sources { - 1 Wind: 'Wind' } hierarchy Preferred { - 1 Sources.Wind - 2 'Manual' } dimension source_dim { value source: code<Sources> hierarchy priority: Hierarchy = Preferred } entity E { @dimension(source_dim) snapshot attr price: integer computed attr x: integer { return self.price::best_available(priority=Sources::hierarchy()) } }"],
   ["namespace common decodes Sources { - 1 Wind: 'Wind' } hierarchy Preferred { - 1 Sources.Wind } dimension source_dim { value source: code<Sources> hierarchy priority: Hierarchy = Preferred }", "namespace model from common import source_dim entity E { @dimension(source_dim) snapshot attr price: integer }"],
@@ -97,7 +124,7 @@ cases.forEach((group, i) => {
   const docs = group.map((text, i) => parse(text, String(i))); validate(docs);
   const syntax = docs.map(d => d.errors.length > 0);
   const actual = { syntax, format: docs.map(format), diagnostics: syntax.some(Boolean) ? null : docs.flatMap(d => d.diagnostics.map(x => [x.severity, x.message])).sort() };
-  if (i >= lookupSemanticStart && i < lookupSemanticEnd) {
+  if ((i >= lookupSemanticStart && i < lookupSemanticEnd) || (i >= relationshipStart && i < relationshipEnd)) {
     actual.locations = syntax.some(Boolean) ? null : docs.flatMap(d => d.diagnostics.map(x => [x.severity, x.message, x.range.start.line + 1, x.range.start.character + 1])).sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]) || a[2] - b[2] || a[3] - b[3]);
   } else delete expected[i].locations;
   assert.deepEqual(actual, expected[i], `Compiler parity failed for case ${i}: ${group}`);

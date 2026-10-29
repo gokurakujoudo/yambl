@@ -81,6 +81,11 @@ async function main() {
   }
 
   expectScope('@flags', '@flags', 'entity.name.function.yambl');
+  expectScope('@relationship(many, one)', '@relationship', 'entity.name.function.yambl');
+  expectScope('@relationship(many, one)', 'many', 'constant.language.yambl');
+  expectScope('@relationship(many, one)', 'one', 'constant.language.yambl');
+  expectScope('@reverse_relationship(Security.issuer)', '@reverse_relationship', 'entity.name.function.yambl');
+  expectScope('@reverse_relationship(Security.issuer)', 'issuer', 'variable.other.property.yambl');
   expectScope("@decodes_rank(-5, 'Child')", '@decodes_rank', 'entity.name.function.yambl');
   expectScope('Root::subtypes.Child', 'Root', 'support.type.yambl');
   expectScope('Root::subtypes.Child', '::', 'punctuation.accessor.yambl');

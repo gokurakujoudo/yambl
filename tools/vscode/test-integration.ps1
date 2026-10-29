@@ -29,6 +29,14 @@ attr dynamic:code<'Missing'>
 '@)
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $build "$($manifest.name)-$($manifest.version).vsix"), (Join-Path $testRoot 'package'))
+foreach ($folder in @('', 'language', 'transactions')) {
+    foreach ($module in Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot "lsp/$folder") -Filter '*.cjs' -File) {
+        $packaged = Join-Path $testRoot "package/extension/lsp/$folder/$($module.Name)"
+        if (-not (Test-Path -LiteralPath $packaged -PathType Leaf)) {
+            throw "Packaged language server is missing $folder/$($module.Name)"
+        }
+    }
+}
 $codeRoot = Split-Path (Split-Path (Get-Command code -ErrorAction Stop).Path -Parent) -Parent
 $codeArgs = @('--new-window', '--disable-extensions', '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes', '--disable-gpu',
     "--user-data-dir=`"$profile`"", "--extensions-dir=`"$(Join-Path $testRoot 'extensions')`"",

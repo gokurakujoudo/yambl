@@ -8,6 +8,7 @@ const { Resolver, checkAliases } = require('./expressions.cjs');
 const { collectDimensions, checkDimensions } = require('./dimensions.cjs');
 const { checkComputations } = require('./computation.cjs');
 const { checkLookups } = require('./lookups.cjs');
+const { checkRelationships } = require('./relationship-constraints.cjs');
 const reserved = [...values, ...generics, ...entities, ...structures, ...builtinModels.keys(), ...Object.keys(resultConstants), 'Entity'];
 const namespace = doc => [doc.prefix, doc.namespace].filter(Boolean).join('.');
 const key = (doc, ns, name) => [doc.repository || '', ns, name].join('\0');
@@ -147,6 +148,7 @@ function validate(documents) {
   deriveSubtypes(symbols, issue);
   checkDimensions(documents.filter(d => !d.errors.length), issue, symbols);
   checkDecorators(documents, issue, symbols);
+  checkRelationships(documents, symbols, issue);
   checkAliases(documents, issue, symbols);
   for (const check of pendingChecks) check();
   for (const args of pendingTypes) {

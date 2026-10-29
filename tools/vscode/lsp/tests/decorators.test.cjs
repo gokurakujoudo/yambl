@@ -6,6 +6,49 @@ const { Service } = require('../service.cjs');
 const { parse } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 
+test('relationship annotations check cardinality, coordinates and target fields', () => {
+  const valid = parse(`dimension source { value source: string }
+entity Issuer {
+  id id: string
+  @dimension(source) @temporal(day: date) @reverse_relationship(Security.issuer)
+  scd attr securities: collection<Security>
+}
+entity Security {
+  id id: string
+  @dimension(source) @temporal(day: date) @relationship(many, one)
+  scd attr issuer: Issuer
+}`, 'relationships.yambl');
+  validate([valid]); assert.deepEqual(valid.diagnostics, []);
+  const reverse = valid.declarations[1].fields[1].metadata.find(call => call.name === 'reverse_relationship');
+  assert.equal(reverse.targetField, valid.declarations[2].fields[1]);
+  assert.equal(valid.bindings.get(reverse.arguments[0].type.accesses[0].token.start), reverse.targetField);
+  for (const [source, message] of [
+    ['entity A { @relationship(one, many) attr b:B } entity B {}', 'relationship cardinality does not match field type'],
+    ['entity A { @relationship(maybe, one) attr b:B } entity B {}', 'invalid relationship cardinality'],
+    ['entity A { @relationship(many, one) attr b:string }', 'relationship requires an entity reference'],
+    ['entity A { attr b:B } entity B { @reverse_relationship(A.b) attr a:collection<A> }', 'target must be a forward relationship field'],
+    ['entity A { @relationship(one, one) attr b:B } entity B { @reverse_relationship(A.b) attr a:collection<A> }', 'type does not match source cardinality'],
+    ['entity A { @relationship(many, one) @temporal(date:date) scd attr b:B } entity B { @reverse_relationship(A.b) @temporal(day:date) scd attr a:collection<A> }', 'categories and temporal parameters must match'],
+    ["dimension d { value source:string hierarchy h:Hierarchy = 'H' } entity A { @dimension(d) @relationship(many, one) attr b:B } entity B {}", 'dimensions cannot have hierarchy or fallback'],
+  ]) {
+    const doc = parse(source, 'invalid.yambl'); validate([doc]);
+    assert.ok(doc.diagnostics.some(d => d.message.includes(message)), JSON.stringify(doc.diagnostics));
+  }
+});
+
+test('relationship argument completion and reverse target navigation', () => {
+  const source = 'entity Security { @relationship(many, one) attr issuer:Issuer } entity Issuer { @reverse_relationship(Security.issuer) attr securities:collection<Security> }';
+  const service = new Service(() => {}), uri = 'untitled:relationships';
+  service.open.set(uri, { text: source, version: 1 }); service.refresh();
+  const request = (method, character) => service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 0, character } });
+  const target = source.lastIndexOf('issuer');
+  assert.equal(request('definition', target + 2).range.start.character, source.indexOf('issuer'));
+  assert.deepEqual(request('completion', source.indexOf('many') + 2).items.map(item => item.label), ['one', 'many']);
+  assert.deepEqual(request('completion', source.indexOf('one)') + 2).items.map(item => item.label), ['maybe', 'one']);
+  assert.ok(request('completion', source.lastIndexOf('Security.issuer') + 'Security'.length).items.some(item => item.label === 'Security'));
+  assert.ok(request('completion', target + 2).items.some(item => item.label === 'issuer'));
+});
+
 test('storage decorators complete, navigate and enforce mutually exclusive scalar groups', () => {
   const service = new Service(() => {}), uri = 'untitled:storage';
   for (const [sample, included, excluded] of [
@@ -151,8 +194,8 @@ test('decorator completion filters all definition kinds and attribute categories
     ['value item { @| attr x: string }', [...common, 'value_field']],
     ['value item { @| static attr x: string }', [...common, 'value_field']],
     ['@|', [...common, 'allow_multiple', 'decodes_rank', 'definition', 'flags', 'model', 'targets']],
-    ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'extra_input_param', 'identity', 'overload', 'override', 'setting', 'temporal']],
-    ['entity A {} extend A { @| }', [...common, 'definition', 'dense', 'sparse', 'dimension', 'extra_input_param', 'overload', 'override', 'setting', 'temporal']],
+    ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'extra_input_param', 'identity', 'overload', 'override', 'relationship', 'reverse_relationship', 'setting', 'temporal']],
+    ['entity A {} extend A { @| }', [...common, 'definition', 'dense', 'sparse', 'dimension', 'extra_input_param', 'overload', 'override', 'relationship', 'reverse_relationship', 'setting', 'temporal']],
     ['value item { @|', [...common, 'value_field']],
     ['entity A { @t| # misleading decodes {}\n @title(\'@flags }\') snapshot attr x: string }', [...common.filter(n => n !== 'title'), 'dimension', 'overload', 'override', 'temporal']],
     ['entity A { @tem|poral(day: date) snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],

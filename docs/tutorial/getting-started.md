@@ -249,4 +249,5 @@ python match_product.py files.lclcfg
 
 从[语法总览](../reference/syntax.md)了解更多声明形式；
 用[命名空间与导入](../reference/namespaces.md)将模型拆成多个文件；
+用[实体关系与反向引用](../reference/relationships.md)描述引用基数和只读反向访问；
 在[存储参考](../reference/storage.md)核对生成器和读取接口的支持范围。
