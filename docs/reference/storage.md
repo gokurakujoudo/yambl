@@ -18,8 +18,10 @@ yambl generate -o path ./build/model.yambl-ir.json -o output ./build/generated -
 结构化 value，包括其中的实体引用。字面量和转换函数在 SQLite、JSONL 后端共用执行代码。
 这些结果不产生存储列；存储字段支持范围见下方能力清单。
 
-每个业务根实体有一张身份宽表，保存 ID、实际实体类型及未指定分组的无维度 static 字段；
+每个业务根实体有一张身份宽表，保存 ID 和未指定分组的无维度 static 字段。
 同一继承树共享 ID 空间，子类型字段也并入根实体宽表，读取仍检查实际类型上的适用性。
+身份表可能保存多种实际实体类型时包含 `entity_type`；只有一种类型时省略该列，读取器从布局确定类型。
+final 子类型与父类共享身份表时，仍需要该列。
 无维度的 static 集合将状态放入宽表、成员放入独立表。有维度的 static 字段按根实体和
 维度结构分组，config 按根实体独立存入长表。普通 `attr` 是 `static attr`
 的简写；源码格式化保留写法，签名、筛选和 IR 都使用 static。
@@ -52,7 +54,8 @@ config 集合的记录行全部标量载荷列为 NULL，成员表通过 `(id, f
 field 保存逻辑字段 qualified name，manifest 的 `key_values` 保存选择条件。
 读取仍按实际实现检查类型，只有缺行或 NO_ENTRY 使用模型默认值。
 
-每个字段独立保存 VALUE、NO_ENTRY、EMPTY、NOT_APPLICABLE 状态。缺行或字段状态
+每个字段独立保存 VALUE、NO_ENTRY、EMPTY、NOT_APPLICABLE 状态，物理编码依次为整数 0、1、2、3；
+SQLite 使用 INTEGER，JSONL 使用 JSON 整数。缺行或字段状态
 NO_ENTRY 表示无记录；EMPTY 的载荷为 NULL。集合有记录表和成员表，成员引用去重；
 VALUE 记录存在但无成员表示正常空集合。实体引用不建立强制目标存在的外键；集合
 成员对其记录表建立外键。外部写入程序必须为连接启用 `PRAGMA foreign_keys = ON`。
@@ -60,7 +63,7 @@ VALUE 记录存在但无成员表示正常空集合。实体引用不建立强�
 Decimal、整数和相应 ID 使用 TEXT，避免 SQLite 数值精度限制。bool 使用 0/1，
 date 使用 ISO 日期。本地字典代码按读取会话的字典快照校验成员身份，外部动态字典沿用原有规则。
 不执行任意正则，不生成 Snowflake ID。数据库保存布局修订号和模型摘要，读取器要求匹配。
-当前布局修订号为 7，运行时契约和 IR 修订号均为 8，JSONL 行格式为 2。不提供迁移。
+当前布局修订号为 8，运行时契约和 IR 修订号均为 9，JSONL 行格式为 3。不提供迁移。
 内部元数据表为 `tb_yambl_metadata`，也使用统一前缀。
 
 `schema.md` 包含全部表、列、主键、CHECK、外键、索引、逻辑字段映射和各表 DDL。
@@ -244,7 +247,7 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 `open_sqlite(path)`、`open_files(path)` 是底层快照入口，不负责管理事务仓库。
 
 生成目录的 `repository/` 是 JSONL 空仓库模板，已初始化内置字典。元数据为
-`repository.json`，包括文件格式修订号 2、布局修订号 7、模型摘要和所有表文件的 SHA-256。
+`repository.json`，包括文件格式修订号 3、布局修订号 8、模型摘要和所有表文件的 SHA-256。
 每张表对应 `tables/<表名>.jsonl`，包括空表；每行必须提供完整物理列。
 整数、Decimal、日期及引用 ID 使用精确文本，bool 使用整数 0/1。
 
@@ -262,7 +265,7 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 底层文件读取器逐表加载并核对摘要、行形状和文件状态；该实现细节不改变统一接口的会话语义。
 重复 JSON key、非标准数值、未知列、重复主键、错误状态及载荷组合均拒绝，诊断带文件和行号。
 
-运行时契约修订号为 8。SQLite 布局元数据、文件快照元数据与生成包必须匹配；
+运行时契约修订号为 9。SQLite 布局元数据、文件快照元数据与生成包必须匹配；
 不支持自动迁移。SQLite 的事务记录与业务数据同一原生事务提交，
 文件后端在入口切换前准备 `.yatran`，导出失败由仓库恢复逻辑重新发布。
 
