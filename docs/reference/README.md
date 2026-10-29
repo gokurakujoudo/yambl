@@ -12,6 +12,7 @@
 | [字段关系](field-relationships.md) | 继承、扩展、覆盖和重载 |
 | [元信息](decorators.md) | 内置和自定义 decorator、参数及适用范围 |
 | [计算](computations.md)、[转换函数](functions.md) | 字段读取、输入、维度、聚合和转换 |
+| [具名批量匹配](lookup.md) | 匹配键、准备参数、Python 接口和结果 |
 | [结果状态](constants.md) | 正常值、非正常状态和部分结果 |
 | [事务和数据](transactions.md)、[事务格式参考](transactions-format.md) | Plan、事务、读取、数据校验与回滚 |
 | [中间模型](ir.md)、[存储](storage.md) | IR、生成物、后端及支持范围 |

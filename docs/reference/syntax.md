@@ -316,6 +316,24 @@ value 必填；hierarchy、fallback_days 可省略。fallback_days 只用于 sna
 其余维度须显式提供；无 Hierarchy 时必须提供维度值。snapshot 先按回退窗口内日期倒序，
 再按来源 ordering 升序选择；SCD 不跨缺口回退。见[计算规则](computations.md)。
 
+## 具名匹配规则
+
+`lookup` 是实体上的具名匹配规则，可以写在 entity 或 extend 中。规则内每行左侧是
+外部输入键名，右侧是从候选实体读取值的表达式；多键需要同时精确匹配。
+
+```yambl
+extend Security {
+    lookup by_name {
+        name = self.security_name::value()
+        issuer = self.issuer.issuer_name::value()
+    }
+}
+```
+
+规则名和键名使用 snake_case。路径可以使用 `::value(...)` 给节点绑定时间和维度，
+`input.name` 表示准备匹配器时提供的参数。lookup 不属于属性，也不创建唯一约束。
+字段类别、参数推导、Python 接口和结果处理见[具名批量匹配](lookup.md)。
+
 ## 计算体
 
 ```yambl

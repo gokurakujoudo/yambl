@@ -97,14 +97,15 @@ const builtinDocuments = modelFiles(modelRoot).map(filename => {
   doc.builtin = true;
   return doc;
 });
-const builtinModels = new Map(builtinDocuments.flatMap(doc => doc.declarations.map(d => {
+const builtinLocals = new Map(builtinDocuments.flatMap(doc => doc.declarations.filter(d => d.kind !== 'extend').map(d => {
   d.effective = new Map(d.fields.map(f => [f.name.value, f])); d.ancestors = [];
   if (d.kind === 'value') structures.push(d.name.value);
   if (d.kind === 'entity') entities.push(d.name.value);
   d.key = '\0builtins\0' + d.name.value;
   return [d.name.value, d];
 })));
-for (const doc of builtinDocuments) { doc.scope = builtinModels; doc.bindings = new Map(); doc.valueTypeTokens = new Map(); doc.diagnostics = []; }
+const builtinModels = new Map([...builtinLocals].filter(([, d]) => d.kind !== 'constant'));
+for (const doc of builtinDocuments) { doc.scope = builtinLocals; doc.bindings = new Map(); doc.valueTypeTokens = new Map(); doc.diagnostics = []; }
 const builtinEntities = new Map([...builtinModels].filter(([, d]) => d.kind === 'entity'));
 function overrideType(field, prior, symbols) {
   const actual = new Resolver(field.doc, () => {}, symbols, field.owner, true).resolve(field.type);
@@ -122,4 +123,4 @@ function mappingCandidates(target, mode, symbols) {
   }
   return result;
 }
-module.exports = { relationships, signature, mappingCandidates, builtinEntities, builtinModels, modelRoot };
+module.exports = { relationships, signature, mappingCandidates, builtinEntities, builtinModels, builtinLocals, builtinDocuments, modelRoot };

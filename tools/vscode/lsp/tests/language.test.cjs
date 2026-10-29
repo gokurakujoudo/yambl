@@ -5,6 +5,132 @@ const { parse, format, range } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json')];
 
+test('lookup nodes preserve keys, expressions, comments and formatting', () => {
+  const source = `entity Security {
+    attr name: string
+    lookup by_name {
+        name=self.name::value() # name
+        issuer=self.issuer::value(
+            as_of_date=input.relation_date, # date
+            source=Sources.Wind
+        ).name::value()
+    }
+    lookup by_id { id = self.id::value() }
+}
+extend Security { lookup by_market { market = self.market::value() } }
+`;
+  const doc = parse(source); assert.deepEqual(doc.errors, []);
+  assert.deepEqual(doc.declarations.map(d => d.lookups.map(l => [l.name.value, l.keys.map(k => k.name.value)])), [
+    [['by_name', ['name', 'issuer']], ['by_id', ['id']]], [['by_market', ['market']]],
+  ]);
+  const issuer = doc.declarations[0].lookups[0].keys[1];
+  assert.equal(source.slice(issuer.expression.token.start, issuer.expression.end).includes('input.relation_date'), true);
+  assert.equal(doc.declarations[0].fields.length, 1);
+  const formatted = format(doc);
+  assert.ok(formatted.includes('name = self.name::value()  # name'));
+  assert.ok(formatted.includes('as_of_date=input.relation_date,  # date'));
+  assert.equal(format(parse(formatted)), formatted);
+  validate([doc]);
+  assert.ok(doc.diagnostics.some(d => d.message === 'unknown entity field: issuer'));
+});
+
+test('lookup syntax rejects invalid placement and incomplete declarations', () => {
+  for (const source of [
+    'lookup by_name { name = self.name::value() }',
+    'value value_type { lookup by_name { name = self.name::value() } }',
+    'entity A { lookup { name = self.name::value() } }',
+    'entity A { lookup by_name { name self.name::value() } }',
+    'entity A { lookup by_name { name = self.name::value() }',
+  ]) assert.ok(parse(source).errors.length, source);
+  const doc = parse("# lookup ignored\nentity A { @title('lookup ignored') attr x: string }\n---\nlookup ignored\n---\n");
+  assert.deepEqual(doc.errors, []); assert.deepEqual(doc.declarations[0].lookups, []);
+});
+
+test('shared lookup corpus distinguishes complete and incomplete syntax', () => {
+  require('./lookup-cases.json').forEach(([source], index) => {
+    const doc = parse(source);
+    assert.equal(doc.errors.length > 0, index >= 4, source);
+    if (!doc.errors.length) {
+      const formatted = format(doc);
+      assert.equal(format(parse(formatted)), formatted);
+    }
+  });
+});
+
+test('lookup identities preserve extension and branch rules and reject duplicates', () => {
+  const docs = [parse(`entity Base { lookup by_name { name = self.name::value() } }
+    entity Left inherits Base { lookup branch { left = self.left::value() } }
+    entity Right inherits Base { lookup branch { right = self.right::value() } }
+    entity Child inherits Base { lookup by_name { name = self.name::value() } }`),
+  parse('extend Base { lookup extra { x = self.x::value() x = self.x::value() } lookup empty {} lookup extra { x = self.x::value() } }')];
+  validate(docs);
+  const base = docs[0].scope.get('Base'), left = docs[0].scope.get('Left'), right = docs[0].scope.get('Right');
+  assert.deepEqual([...base.ownLookups.keys()], ['by_name', 'extra', 'empty']);
+  assert.equal(left.effectiveLookups.get('by_name'), base.ownLookups.get('by_name'));
+  assert.notEqual(left.ownLookups.get('branch'), right.ownLookups.get('branch'));
+  const messages = docs.flatMap(doc => doc.diagnostics.map(d => d.message));
+  for (const message of ['lookup redeclares inherited rule: by_name', 'duplicate lookup key: x', 'lookup requires at least one key', 'duplicate lookup declaration: extra']) assert.ok(messages.includes(message), message);
+});
+
+test('lookup paths infer their keys and independent preparation parameters', () => {
+  const doc = parse(`entity Issuer { static attr name: string @temporal(rating_date: date) scd attr rating: string }
+    entity Security { id id: string static attr issuer: Issuer @temporal(code_date: date) scd attr code: string
+      lookup by_code { code = self.code::value(code_date=input.day) name = self.issuer.name::value() rating = self.issuer.rating::value() }
+    }`);
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  const lookup = doc.declarations[1].lookups[0];
+  assert.deepEqual(lookup.keys.map(k => [k.name.value, k.resolvedType.name]), [['code', 'string'], ['name', 'string'], ['rating', 'string']]);
+  assert.deepEqual(lookup.inferredInputs.map(p => [p.name, p.type.name]), [['day', 'date'], ['rating_date', 'date']]);
+});
+
+test('lookup rejects calculations and unsupported stored paths', () => {
+  const doc = parse(`entity A { id id: string config attr label: string = 'x' static attr numbers: values<integer>
+    lookup invalid { arbitrary = self.id::value() + 'x' configured = self.label::value() many = self.numbers::value() missing = self.unknown::value() } }`);
+  validate([doc]);
+  const messages = doc.diagnostics.map(d => d.message);
+  for (const message of ['lookup key requires a self field path ending in ::value()', 'lookup does not support config fields', 'lookup key requires a supported non-collection type', 'unknown entity field: unknown']) assert.ok(messages.includes(message), message);
+});
+
+test('lookup keeps unbound parameters across nodes and checks renamed type conflicts', () => {
+  const doc = parse(`entity Issuer { @temporal(event_date: date) scd attr name: string }
+    entity Security {
+      dimension source { value source: string }
+      dimension market { value market: string }
+      @dimension(source) @dimension(market) @temporal(event_date: date) scd attr issuer: Issuer
+      lookup selected { name = self.issuer::value(event_date='2026-10-28', source=input.provider).name::value() }
+      lookup conflict { name = self.issuer::value(event_date=input.shared, source=input.shared).name::value() }
+    }`);
+  validate([doc]);
+  const selected = doc.declarations[1].lookups[0];
+  assert.deepEqual(selected.inferredInputs.map(p => [p.name, p.type.name]), [['event_date', 'date'], ['market', 'string'], ['provider', 'string']]);
+  assert.ok(doc.diagnostics.some(d => d.message === 'conflicting inferred parameter: shared'));
+});
+
+test('lookup string bindings retain regex constraints without selecting a regex dialect', () => {
+  for (const literal of ['GOOD', 'bad']) {
+    const doc = parse(`entity A { dimension d { value source: string['[A-Z]+'] } @dimension(d) attr x: string lookup a { x = self.x::value(source='${literal}') } }`);
+    validate([doc]);
+    assert.deepEqual(doc.diagnostics, []);
+  }
+});
+
+test('lookup keys use the common type of an overload group', () => {
+  const doc = parse(`decodes Sources { - 1 Primary: 'Primary' }
+    entity Parent { id id: string } entity One inherits Parent {} entity Two inherits Parent {}
+    entity Base { id id: string lookup by_target { target = self.target::value() } lookup by_label { label = self.label::value() } }
+    entity A inherits Base { @overload attr target: One @overload attr label: code<Sources> lookup by_specific { target = self.target::value() label = self.label::value() } }
+    entity B inherits Base { @overload attr target: Two @overload attr label: string }`);
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  const rules = doc.scope.get('Base').ownLookups;
+  assert.equal(rules.get('by_target').keys[0].resolvedType.name, 'Parent');
+  assert.equal(rules.get('by_label').keys[0].resolvedType.name, 'string');
+  const specific = doc.scope.get('A').ownLookups.get('by_specific');
+  assert.equal(specific.keys[0].resolvedType.name, 'One');
+  assert.equal(specific.keys[1].resolvedType.name, 'code');
+});
+
 test('ordinary attrs share static identity, targets and filtering', () => {
   const doc = parse('entity A { dimension sources { value source: string } @dimension(sources) attr label: string } entity B inherits A { @override @dimension(sources) static attr label: string }');
   validate([doc]); assert.deepEqual(doc.diagnostics, []);

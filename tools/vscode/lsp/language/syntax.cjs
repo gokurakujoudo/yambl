@@ -9,7 +9,7 @@ const resultConstants = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtin
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
   'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as', 'decorator',
-  'const', 'computed', 'dimension', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
+  'const', 'computed', 'dimension', 'lookup', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
 const annotations = ['title', 'description', 'temporal', 'dimension', 'sparse', 'dense', 'overload', 'override', 'flags', 'allow_multiple', 'targets', 'decodes_rank'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'dimension_ref', 'input_type'];
 const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
@@ -254,7 +254,7 @@ function parse(text, uri = '') {
       const start = index; const final = is('final') ? take() : null; const token = take();
       if (final && token.value !== 'entity') throw token;
       if (!['entity', 'extend', 'decodes', 'value'].includes(token.value) || (token.value === 'extend' && metadata.length)) throw token;
-      const declaration = { kind: token.value, token: final || token, final: Boolean(final), name: name(), metadata, fields: [], entries: [], dimensions: [], doc };
+      const declaration = { kind: token.value, token: final || token, final: Boolean(final), name: name(), metadata, fields: [], entries: [], dimensions: [], lookups: [], doc };
       if (declaration.kind === 'entity' && is('inherits')) { take(); declaration.parent = name(); }
       declaration.bodyStart = take('{').end; piece(start, 0);
       while (!is('}')) {
@@ -265,6 +265,18 @@ function parse(text, uri = '') {
           if (!peek().value.startsWith("'")) fail();
           declaration.entries.push({ token, order, code, value: take() }); piece(start, 1);
         } else {
+          if (is('lookup') && declaration.kind !== 'value') {
+            const start = index, token = take(), lookupName = name(); take('{'); piece(start, 1);
+            const lookup = { kind: 'lookup', token, name: lookupName, keys: [], doc, owner: declaration };
+            while (!is('}')) {
+              const keyStart = index, key = name(), equals = take('=');
+              const expression = calculation();
+              lookup.keys.push({ kind: 'lookup_key', token: key, name: key, expression, doc, owner: lookup, end: expression.end });
+              piece(keyStart, 2, true); Object.assign(doc.pieces.at(-1), { lookupKey: true, lookupEquals: equals.start });
+            }
+            const close = index; lookup.end = take('}').end; piece(close, 1);
+            declaration.lookups.push(lookup); continue;
+          }
           if (is('dimension') && declaration.kind !== 'value') {
             const start = index, token = take(), dimensionName = name(); take('{'); piece(start, 1);
             const dimension = { kind: 'dimension', token, name: dimensionName, doc, owner: declaration };
@@ -316,7 +328,7 @@ function parse(text, uri = '') {
 function format(doc) {
   if (doc.errors.length) return null;
   const calculationPieces = doc.pieces.flatMap(piece => {
-    if (!piece.calculation || !['let', 'return'].includes(piece.tokens[0].value)) return [piece];
+    if (!piece.calculation || (!piece.lookupKey && !['let', 'return'].includes(piece.tokens[0].value))) return [piece];
     const groups = [];
     for (const token of piece.tokens) {
       if (!groups.length || groups.at(-1).at(-1).range.end.line !== token.range.start.line) groups.push([]);
@@ -343,7 +355,7 @@ function format(doc) {
   });
   const pieces = splitPieces.map(piece => {
     let text = '', previous = '', priorEquals = false;
-    const declarationEquals = ['let', 'const'].includes(piece.tokens[0].value) ? piece.tokens.find(t => t.value === '=')?.start : null;
+    const declarationEquals = piece.lookupKey ? piece.lookupEquals : ['let', 'const'].includes(piece.tokens[0].value) ? piece.tokens.find(t => t.value === '=')?.start : null;
     const keywordEquals = new Set(piece.tokens.filter((t, i) => t.value === '=' && ((piece.tokens[0].value === '@' && piece.tokens[i - 2]?.value !== ':') || (piece.calculation && i !== 2 && piece.tokens[0].value === 'let') || (piece.calculation && !['let', 'hierarchy', 'fallback_days'].includes(piece.tokens[0].value))) && /^[A-Za-z_]/.test(piece.tokens[i - 1]?.value)).map(t => t.start));
     for (const token of piece.tokens) {
       const value = token.value;
@@ -360,7 +372,7 @@ function format(doc) {
     const nearby = doc.pieces.find(p => p.indent === 2 && p.tokens[0].start <= token.start && token.start < p.tokens.at(-1).end);
     const nested = doc.pieces.filter(p => p.indent === 1 && ['{', '}'].includes(p.tokens.at(-1).value) && p.tokens[0].start < token.start).at(-1);
     let indent = nearby || nested?.tokens.at(-1).value === '{' ? 2 : Number(doc.declarations.some(d => token.start >= d.bodyStart && token.end < d.end));
-    if (nearby?.calculation && ['let', 'return'].includes(nearby.tokens[0].value)) indent += nearby.tokens.filter(t => t.end <= token.start).reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
+    if (nearby?.calculation && (nearby.lookupKey || ['let', 'return'].includes(nearby.tokens[0].value))) indent += nearby.tokens.filter(t => t.end <= token.start).reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
     pieces.push({ ...token, text: '# ' + token.value.slice(1).trim(), indent, comment: true });
   }
   pieces.push(...doc.blocks.map(block => ({ ...block, indent: 0 })));

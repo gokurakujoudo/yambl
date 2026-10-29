@@ -1,12 +1,16 @@
 'use strict';
 
-const { Resolver, type, accepts, equal, base, canonical, unknown } = require('./expressions.cjs');
+const { Resolver, type, accepts, equal, base, canonical, commonType, unknown } = require('./expressions.cjs');
 const { semantic, resolveDimension } = require('./dimensions.cjs');
 const { resultConstants } = require('./syntax.cjs');
 const numbers = ['integer', 'decimal', 'float'];
 const conversions = require('./conversions.cjs');
 const constants = require('./constant-evaluation.cjs');
 const snake = name => /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name);
+function lookupSupported(resolved, symbols) {
+  const dictionary = resolved.name === 'code' && symbols.get(resolved.args[0]?.key);
+  return resolved.kind === 'unknown' || (!resolved.dependency && (resolved.kind === 'reference' || (resolved.name === 'code' ? !dictionary || !require('./decodes.cjs').isFlags(dictionary) : !resolved.key && ['string', 'bool', 'integer', 'snowflake_id', 'decimal', 'date'].includes(resolved.name))));
+}
 
 function checkComputations(documents, symbols, report) {
   const completed = new Map(), active = new Set();
@@ -413,6 +417,64 @@ function checkComputations(documents, symbols, report) {
       return { type: type('sequence', 'collection', { args: [returned] }) };
     }
   }
+  class LookupChecker extends Checker {
+    inferNode(node, environment, expected) {
+      let result = super.inferNode(node, environment, expected);
+      if (node.kind === 'member' && result.field) {
+        const receiver = symbols.get(node.operands[0].inferred?.type.key);
+        if (receiver && !receiver.effective?.has(node.value) && !result.field.owner.ancestors?.includes(receiver)) {
+          const descendant = [...symbols.values()].find(entity => entity.kind === 'entity' && entity.ancestors?.includes(receiver) && entity.effective?.has(node.value));
+          if (descendant) {
+            const field = descendant.effective.get(node.value);
+            this.doc.bindings.set(node.memberToken.start, field);
+            result = { type: new Resolver(field.doc, report, symbols, field.owner, true).resolve(field.type), field };
+          } else {
+            this.doc.bindings.delete(node.memberToken.start);
+            this.issue(node, `unknown entity field: ${node.value}`);
+            return { type: unknown };
+          }
+        }
+        if (receiver && (result.field.commonType || result.field.identity?.commonType)) {
+          const fields = [...symbols.values()].filter(entity => entity === receiver || entity.ancestors?.includes(receiver))
+            .map(entity => entity.effective?.get(node.value)).filter(field => field?.identity === result.field.identity);
+          const common = commonType(fields.map(field => new Resolver(field.doc, report, symbols, field.owner, true).resolve(field.type)), symbols);
+          if (common) result = { ...result, type: common };
+        }
+      }
+      return result;
+    }
+    addInput(parameter, node) {
+      const prior = this.inputs.get(parameter.name);
+      if (prior && !equal(prior.type, parameter.type)) {
+        if (accepts(prior.type, parameter.type, symbols)) this.inputs.set(parameter.name, { ...prior, type: parameter.type });
+        else if (accepts(parameter.type, prior.type, symbols)) parameter = { ...parameter, type: prior.type };
+      }
+      super.addInput(parameter, node);
+    }
+    parameters(value, operation, node) {
+      if (!['id', 'static', 'scd'].includes(value.field.mode)) this.issue(node, `lookup does not support ${value.field.mode} fields`);
+      if (operation !== 'value') this.issue(node, 'lookup supports only ::value()');
+      return super.parameters(value, operation, node);
+    }
+    bindInput(parameter, expression, environment) {
+      if (expression.kind === 'member' && expression.operands[0].kind === 'name' && expression.operands[0].value === 'input') return super.bindInput(parameter, expression, environment);
+      const root = expression.kind === 'member' && expression.operands[0].kind === 'name' ? expression.operands[0].value : expression.kind === 'name' ? expression.value : null;
+      const fixed = ['string', 'integer', 'decimal', 'bool'].includes(expression.kind) || (expression.kind === 'member' && this.doc.scope.get(root)?.kind === 'decodes') || (expression.kind === 'name' && this.doc.scope.get(root)?.kind === 'constant');
+      if (!fixed) { this.issue(expression, 'lookup binding requires a literal, constant, dictionary member or input'); return; }
+      let actual = this.read(this.infer(expression, environment, parameter.type), expression).type;
+      if (expression.kind === 'string' && parameter.type.name === 'string') actual = { ...parameter.type, exact: expression.value };
+      if (!compatible(parameter.type, actual)) this.issue(expression, `incompatible binding for parameter: ${parameter.name}`);
+    }
+  }
+  function lookupPath(node) {
+    if (node.kind === 'name') return node.value === 'self';
+    if (node.kind === 'member') return lookupPath(node.operands[0]);
+    if (node.kind === 'call') {
+      const selected = node.operands[0];
+      return selected.kind === 'descriptor' && selected.value === 'value' && selected.operands[0].kind === 'member' && node.arguments.every(a => a.name) && lookupPath(selected.operands[0]);
+    }
+    return false;
+  }
   for (const doc of documents.filter(d => !d.errors.length)) for (const declaration of doc.declarations) {
     if (declaration.kind === 'constant') constant(declaration);
     for (const dimension of declaration.dimensions || []) if (dimension.fallback && dimension.owner) {
@@ -422,6 +484,39 @@ function checkComputations(documents, symbols, report) {
       if (checker.inputs.size || checker.dependencies.size) checker.issue(dimension.fallback, 'fallback_days requires stored static or config dependencies without external parameters');
     }
     for (const field of declaration.fields) if (field.calculation && field.owner?.kind === 'entity') analyze(field);
+    for (const lookup of declaration.lookups || []) {
+      const owner = lookup.entity;
+      if (!owner) continue;
+      let descriptorError = false;
+      const checker = new LookupChecker(doc, owner, (node, message) => {
+        if (message === 'field operation requires a field descriptor') {
+          if (descriptorError) return;
+          descriptorError = true;
+        }
+        const selected = node.kind === 'call' ? node.operands[0] : node;
+        const operator = selected.kind === 'descriptor' ? '::' : selected.kind === 'member' ? '.' : '';
+        const token = operator && doc.tokens.findLast(t => t.end <= selected.memberToken.start && t.value === operator);
+        report(doc, token || node.token, message);
+      });
+      const environment = new Map([['self', { type: type(owner.name.value, 'reference', { key: owner.key }) }]]);
+      for (const key of lookup.keys) {
+        descriptorError = false;
+        const source = key.expression;
+        if (source.kind !== 'call' || !lookupPath(source)) { checker.issue(source, 'lookup key requires a self field path ending in ::value()'); continue; }
+        const result = checker.read(checker.infer(source, environment), source);
+        key.resolvedType = result.type;
+        if (!lookupSupported(result.type, symbols)) checker.issue(source, 'lookup key requires a supported non-collection type');
+      }
+      lookup.inferredInputs = [...checker.inputs.values()].sort((a, b) => a.name.localeCompare(b.name));
+      const inputs = new Map();
+      for (const node of require('./calculation-tools.cjs').nodes(lookup)) {
+        if (node.kind !== 'member' || node.operands[0].kind !== 'name' || node.operands[0].value !== 'input') continue;
+        const parameter = checker.inputs.get(node.value);
+        if (!parameter) continue;
+        if (!inputs.has(node.value)) inputs.set(node.value, { kind: 'lookup_input', name: node.memberToken, doc, resolvedType: parameter.type });
+        doc.bindings.set(node.memberToken.start, inputs.get(node.value));
+      }
+    }
   }
   const contracts = new Map();
   for (const [field, checker] of completed) {
@@ -431,4 +526,4 @@ function checkComputations(documents, symbols, report) {
   }
 }
 
-module.exports = { checkComputations };
+module.exports = { checkComputations, lookupSupported };

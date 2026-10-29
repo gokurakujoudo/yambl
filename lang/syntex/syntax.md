@@ -46,6 +46,9 @@
 <a id="dimension"></a>
 - [Dimension](../../docs/reference/syntax.md#dimension)
 
+<a id="具名匹配规则"></a>
+- [具名匹配规则](../../docs/reference/syntax.md#具名匹配规则)
+
 <a id="计算体"></a>
 - [计算体](../../docs/reference/syntax.md#计算体)
 

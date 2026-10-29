@@ -5,7 +5,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 修订与独立性
 
-当前 `format_revision` 为整数 `7`。格式尚未固化，不承诺修订间兼容；结构变化时递增
+当前 `format_revision` 为整数 `8`。格式尚未固化，不承诺修订间兼容；结构变化时递增
 修订号。读取器拒绝不支持的修订号，要求重新编译，不自动迁移。
 
 文件完整保存本次采用的内置声明、原语目录和七个无载荷结果常量及携带载荷的 PARTIAL的含义。独立校验仅依赖
@@ -36,9 +36,10 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 声明、字段与身份
 
-声明的 `kind` 为 `entity`、`value`、`type_alias`、`decorator` 或 `decodes`。
+声明的 `kind` 为 `entity`、`value`、`type_alias`、`decorator`、`decodes` 或 `constant`。
 每个声明保存 `name`、`identity`、`final`、`parent`、`parameters`、`expression`、
-`decorators`、`dimensions`、`fields`、`effective`、`entries`、`initializer`、`references`、`source` 和 `derived`。
+`decorators`、`dimensions`、`fields`、`effective`、`entries`、`initializer`、`references`、
+`lookups`、`effective_lookups`、`source` 和 `derived`。
 
 `name` 是完整 qualified name。通常 `identity` 与它相同。普通仓库允许在
 `namespace builtins` 中编写本地定义，这些定义与工具提供的全局内置定义仍是不同
@@ -51,6 +52,9 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 - `expression` 保存别名正文或 constant 声明类型，其他声明为 `null`。
 - `initializer` 仅 constant 非空；`references` 保存初始化表达式作用域中的名称及解析身份。
 - `fields` 保存本声明及合并 extend 的实现；继承来的字段通过 `effective` 选取。
+- `lookups` 保存本实体及合并 extend 的规则；`effective_lookups` 记录该实体可用的
+  规则名称及声明身份，包括继承规则。每条规则保存有序键、推导输入、作用域引用和来源。
+  键保存表达式、推导类型及字段路径步骤；步骤保留访问身份和参数的固定绑定或输入绑定。
 - `entries` 保存 `{code, ordering, decode, generated, source}`；flags 包括生成的
   `None` 和 `All`，`ordering` 保存十进制整数字符串。
 - `derived` 标记由语言模型派生的声明；子类型字典的 identity 是所属实体 identity 加
@@ -172,7 +176,7 @@ decorator 使用绑定结果，忽略 arguments 的位置/命名拼写。JSON �
 [ir.schema.json](../../lang/syntex/ir.schema.json) 使用 Draft 2020-12，随编译器分发且只包含本地引用。
 加载先拒绝重复 key 和非标准数值，再进行 Schema、类型化解码与语义一致性校验。
 Schema 由 IR 数据类型生成；`yambl schema -o output ./build/ir.schema.json` 可导出同一契约。
-当前 IR 修订号为 7，包含计算表达式、命名 dimension、推导参数和 PARTIAL。
+当前 IR 修订号为 8，包含计算表达式、命名 dimension、lookup 规则、推导参数和 PARTIAL。
 Decorator 调用的 Argument 使用 `default: Expression | null` 保留 pair 默认值。
 隐含 description 仍是有绑定身份的普通元信息；输入说明通过 extra_input_params 的 pair key 关联。
 Constant 声明保留结构化初始化表达式和声明作用域 references。

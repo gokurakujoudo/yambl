@@ -177,6 +177,13 @@ async function main() {
   expectScope('entity Fund {', 'Fund', 'entity.name.type.yambl');
   expectScope('extend Security {', 'extend', 'keyword.declaration.yambl');
   expectScope('extend Security {', 'Security', 'entity.name.type.yambl');
+  expectScope('lookup by_name {', 'lookup', 'keyword.declaration.yambl');
+  expectScope('lookup by_name {', 'by_name', 'entity.name.function.yambl');
+  expectScope('issuer_name = self.issuer.name::value(as_of_date=input.date)', 'issuer_name', 'variable.parameter.yambl');
+  expectScope('name = self.issuer.name::value(as_of_date=input.date)', 'issuer', 'variable.other.property.yambl');
+  expectScope('issuer_name = self.issuer.name::value(as_of_date=input.date)', 'input', 'keyword.declaration.yambl');
+  expectScope("'lookup by_name'", 'lookup', 'string.quoted.single.yambl');
+  expectScope('# lookup by_name', 'lookup', 'comment.line.number-sign.yambl');
   expectScope('entity Bond inherits Security {', 'inherits', 'keyword.declaration.yambl');
   expectScope('entity Bond inherits Security {', 'Security', 'entity.name.type.yambl');
   expectScope('scd attr notional: decimal', 'scd', 'keyword.declaration.yambl');

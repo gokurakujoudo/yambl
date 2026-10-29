@@ -1,0 +1,15 @@
+[
+  ["entity Security { lookup by_name { name = self.name::value() } }"],
+  ["entity Security { attr name: string lookup by_name { name = self.name::value() market = self.market::value() } lookup by_id { id = self.id::value() } }"],
+  ["entity Issuer { static attr name: string } entity Security { dimension sources { value source: string } @dimension(sources) @temporal(as_of_date: date) scd attr issuer: Issuer } extend Security { lookup by_issuer { issuer = self.issuer::value(\n  as_of_date=input.relation_date, # relation\n  source='Wind'\n).name::value() } }"],
+  ["entity Security {\n# lookup ignored\n---\nlookup ignored\n---\n@title('lookup ignored') attr label: string\nlookup by_label { label = self.label::value() # text\n}\n}"],
+  ["lookup by_name { name = self.name::value() }"],
+  ["value label { lookup by_name { name = self.name::value() } }"],
+  ["entity Security { lookup { name = self.name::value() } }"],
+  ["entity Security { lookup by_name { name self.name::value() } }"],
+  ["entity Security { lookup by_name { name = self.name::value() }"],
+  ["entity Security { lookup by_"],
+  ["entity Security { lookup by_name { name = self."],
+  ["entity Security { lookup by_name { name = self.name::value("],
+  ["entity Security { lookup by_name { name = self.name::value(as_of_date=input."]
+]

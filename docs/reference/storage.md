@@ -60,7 +60,7 @@ VALUE 记录存在但无成员表示正常空集合。实体引用不建立强�
 Decimal、整数和相应 ID 使用 TEXT，避免 SQLite 数值精度限制。bool 使用 0/1，
 date 使用 ISO 日期。本地字典代码按读取会话的字典快照校验成员身份，外部动态字典沿用原有规则。
 不执行任意正则，不生成 Snowflake ID。数据库保存布局修订号和模型摘要，读取器要求匹配。
-当前布局和运行时契约修订号均为 7，IR 修订号为 7，JSONL 行格式为 2。不提供迁移。
+当前布局修订号为 7，运行时契约和 IR 修订号均为 8，JSONL 行格式为 2。不提供迁移。
 内部元数据表为 `tb_yambl_metadata`，也使用统一前缀。
 
 `schema.md` 包含全部表、列、主键、CHECK、外键、索引、逻辑字段映射和各表 DDL。
@@ -109,6 +109,11 @@ dense 为主键 id 的宽表，每个字段有独立载荷和状态列，行为�
 `tb_config_group`、`tb_config_group_when` 和 `tb_config_group_then_set`。
 三个 final 内置实体以各自声明的 ID 字段为主键，无需实际子类型列。集合和映射状态保存在
 所属身份宽表，子表有指向所属身份表的实际外键。
+
+当前内置物理布局针对 `Decodes`、`Hierarchy` 和 `ConfigGroup`。它们的已有受支持字段可用于
+lookup；其他内嵌内置实体自身声明 lookup 时，生成阶段报错，不生成缺失的存储。三个实体
+仅支持仓库中已定义的字段；新增字段、修改为不支持的类型或使用维度和非 static 类别时，
+生成阶段报错。不带 lookup 的其他内嵌内置声明不会仅因上述 lookup 限制而被拒绝。
 
 Decodes 条目主键为 `(decodes_id, code)`；Hierarchy 条目主键为 `(hierarchy_id, ordering)`。
 条目字段来自 IR 内携带的 value 定义，整数 ordering 使用精确 TEXT。DDL 初始化所有已声明
@@ -167,7 +172,9 @@ description（如有），不推断元信息继承。attr 的点查询和区间�
 批量顺序和重复项、config 默认值及错误行为。title/description 等模型文本作为 rST 字面块
 保留，并转义 Python 字符串；文档中的引号、反斜杠和 rST 指令不会改变生成代码或文档结构。
 
-`ReadResult[T] = Success[T] | NonNormalResult`。所有正常 API 失败通过结果返回：
+`ReadResult[T] = Success[T] | Partial[T] | NonNormalResult`。计算在支持尽力模式时可返回
+携带部分结果的 `Partial`；lookup 准备与匹配的具体返回类型见[具名批量匹配](lookup.md)。
+非正常结果通过结果对象返回：
 
 | 情况 | 结果 |
 | --- | --- |
@@ -187,7 +194,7 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 ## 能力清单
 
 下表的“静态”包括 Python 检查器和 LSP；IR 保留完整语言能力，后端只接受已实现的业务类型。
-不支持的业务字段会报告身份、源码位置和原因；未使用的内置声明不阻止生成。
+不支持的业务字段会报告身份、源码位置和原因；内置声明的布局限制见上文。
 
 | 能力 | 规范 | Python / LSP | IR | SQLite / JSONL | Python 类型 / 读取 |
 | --- | --- | --- | --- | --- | --- |
@@ -221,6 +228,7 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 | Decodes、Hierarchy、ConfigGroup 存储 | 已定义 | 静态已实现 | 保留 | 身份宽表和条目/映射子表 | 可读取身份及隐藏类型属性；其他通用内置字段读取待实现 |
 | 七个非正常结果 | 已定义 | 已实现 | 保留 | 三种字段状态 | 统一结果对象 |
 | computed、参数推导、recover、PARTIAL | 已定义 | 已实现 | 独立 AST 和依赖/参数图 | 不生成物理字段 | 类型化单次/批量计算 |
+| lookup 具名批量匹配 | 已定义 | 已实现 | 保存规则、键及准备参数 | 准备时读取快照并建立内存索引 | 显式 Key、Matcher 和准备方法 |
 | Hierarchy 回退与有效 ConfigGroup | 已定义 | 已实现 | 命名维度及配置契约 | 批量候选与配置读取 | 共享精确运算与结果处理 |
 
 对应验收集中于编译器 `tests/storage/`、`tests/ir/test_schema.py` 和 LSP/高亮对照测试。
@@ -254,7 +262,7 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 底层文件读取器逐表加载并核对摘要、行形状和文件状态；该实现细节不改变统一接口的会话语义。
 重复 JSON key、非标准数值、未知列、重复主键、错误状态及载荷组合均拒绝，诊断带文件和行号。
 
-运行时契约修订号为 7。SQLite 布局元数据、文件快照元数据与生成包必须匹配；
+运行时契约修订号为 8。SQLite 布局元数据、文件快照元数据与生成包必须匹配；
 不支持自动迁移。SQLite 的事务记录与业务数据同一原生事务提交，
 文件后端在入口切换前准备 `.yatran`，导出失败由仓库恢复逻辑重新发布。
 

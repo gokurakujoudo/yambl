@@ -67,6 +67,7 @@ function nodes(field) {
   field.calculation?.bindings.forEach(b => visit(b.expression));
   if (field.calculation) visit(field.calculation.result);
   if (field.initializer) visit(field.initializer);
+  for (const key of field.keys || []) visit(key.expression);
   return result;
 }
 

@@ -10,13 +10,58 @@ const typeTools = require('./language/type-tools.cjs');
 
 const { sources, readPrefix, rootName, configError } = require('./repository.cjs');
 const { modelRoot } = require('./language/relationships.cjs');
-const { Resolver } = require('./language/expressions.cjs');
+const { Resolver, accepts } = require('./language/expressions.cjs');
+const { lookupSupported } = require('./language/computation.cjs');
 const { codeEntries } = require('./language/decodes.cjs');
 const transactions = require('./transactions/syntax.cjs');
 const transactionModels = require('./transactions/model.cjs');
 const transactionValidation = require('./transactions/validation.cjs');
 const isTransaction = (uri, item) => /\.(yaplan|yatran)$/i.test(uri) || ['yaplan', 'yatran'].includes(item?.languageId);
 const { targetContract, allowsTarget, allowsMultiple } = require('./language/decorators.cjs');
+
+function bodyContext(doc, offset) {
+  const stack = []; let segment = [];
+  for (const token of doc.tokens) {
+    if (token.start >= offset) break;
+    if (token.value === '{') {
+      stack.push(segment.findLast(t => ['entity', 'extend', 'value', 'decodes', 'lookup', 'dimension', 'computed'].includes(t.value))?.value || 'block');
+      segment = [];
+    } else if (token.value === '}') { stack.pop(); segment = []; }
+    else segment.push(token);
+  }
+  return stack.at(-1);
+}
+
+function recoverMalformedLookup(doc) {
+  const error = doc.errors[0]?.range.start;
+  if (!error) return null;
+  const offset = doc.text.split('\n').slice(0, error.line).reduce((n, line) => n + line.length + 1, 0) + error.character;
+  for (let i = 0; i < doc.tokens.length; i++) {
+    const token = doc.tokens[i];
+    if (token.value !== 'lookup') continue;
+    const open = doc.tokens[i + 1]?.value === '{' ? i + 1 : doc.tokens[i + 2]?.value === '{' ? i + 2 : -1;
+    let depth = 0, end = null;
+    if (open < 0 && doc.tokens[i + 2]?.value === '}') end = doc.tokens[i + 1].end;
+    if (open >= 0) for (let j = open; j < doc.tokens.length; j++) {
+      if (doc.tokens[j].value === '{') depth++;
+      if (doc.tokens[j].value === '}' && --depth === 0) { end = doc.tokens[j].end; break; }
+    }
+    const atEof = end === null && offset === doc.text.length;
+    if (atEof) end = doc.text.length;
+    if (end === null || offset < token.start || offset > (open < 0 && !atEof ? doc.tokens[i + 2].start : end)) continue;
+    const masked = doc.text.slice(0, token.start) + doc.text.slice(token.start, end).replace(/[^\r\n]/g, ' ') + doc.text.slice(end);
+    const outerDepth = atEof ? doc.tokens.slice(0, i).reduce((n, t) => n + Number(t.value === '{') - Number(t.value === '}'), 0) : 0;
+    const recovered = parse(masked + '}'.repeat(Math.max(0, outerDepth)), doc.uri);
+    if (!recovered.errors.length) return { start: token.start, end, doc: recovered };
+  }
+  return null;
+}
+
+function validationCopy(doc) {
+  const parsed = parse(doc.text, doc.uri);
+  const copy = recoverMalformedLookup(parsed)?.doc || parsed;
+  return Object.assign(copy, { text: doc.text, prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
+}
 
 // Use lexer tokens so comments, strings and Markdown cannot invent a surrounding declaration.
 function decoratorSites(doc, start, used) {
@@ -183,9 +228,21 @@ class Service {
         const belongs = root ? openRoot && uriKey(pathToFileURL(openRoot).href) === uriKey(pathToFileURL(root).href) : openUri === uri;
         if (belongs) texts.set(uriKey(openUri), { uri: openUri, text: item.text });
       }
-      const docs = [...texts.values()].map(item => Object.assign(parse(item.text, item.uri), { prefix, repository: !builtin && root ? uriKey(pathToFileURL(root).href) : '', builtin }));
+      const docs = [...texts.values()].map(item => {
+        const original = parse(item.text, item.uri), recovery = recoverMalformedLookup(original);
+        const doc = recovery?.doc || original;
+        if (recovery) { doc.text = item.text; doc.lookupOriginal = original; }
+        return Object.assign(doc, { prefix, repository: !builtin && root ? uriKey(pathToFileURL(root).href) : '', builtin });
+      });
       for (const doc of docs) if (builtin && doc.namespace !== 'builtins') doc.errors.push({ range: range(doc.text, 0, 0), severity: 1, message: 'built-in models must declare namespace builtins', source: 'yambl' });
       const symbols = validate(docs);
+      for (const doc of docs) if (doc.lookupOriginal) {
+        doc.errors = doc.lookupOriginal.errors;
+        doc.tokens = doc.lookupOriginal.tokens;
+        doc.blocks = doc.lookupOriginal.blocks;
+        doc.diagnostics.push(...doc.errors);
+        doc.diagnostics.sort((a, b) => a.range.start.line - b.range.start.line || a.range.start.character - b.range.start.character || a.message.localeCompare(b.message));
+      }
       if (root) catalogs.set(uriKey(pathToFileURL(root).href), { symbols, readError });
       if (readError?.uri) {
         const errorDoc = parse('', readError.uri);
@@ -229,7 +286,7 @@ class Service {
     }
     Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
     const root = rootFor(doc.uri);
-    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(validationCopy);
     validate([...siblings, recovered]);
     onRecovered?.(recovered);
     return recovered.scope;
@@ -261,24 +318,32 @@ class Service {
     Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
     if (recovered.errors.length) return doc.scope;
     const rootDir = rootFor(doc.uri);
-    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && rootDir && rootFor(d.uri) === rootDir).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && rootDir && rootFor(d.uri) === rootDir).map(validationCopy);
     validate([...siblings, recovered]);
     return recovered.scope;
   }
   calculationDocument(doc, offset) {
     const before = doc.text.slice(0, offset);
     const descriptor = /::[a-z_0-9]*$/.test(before);
-    if ((!doc.errors.length && !descriptor) || !(/(?:\.|::)[a-z_0-9]*$/.test(before) || /\b[a-z][a-z_0-9]*\([^()]*$/.test(before))) return doc;
-    let prefix = /(?:\.|::)[a-z_0-9]*$/.test(before) ? before.replace(/[a-z_0-9]*$/, '__completion') : before;
-    if (/[=,]\s*$/.test(prefix)) prefix += '__completion';
+    const lookupContext = bodyContext(doc, offset) === 'lookup';
+    const incompleteLookupArgument = lookupContext && /::value\([^()]*,\s*[a-z_0-9]+$/.test(before) && !/^[a-z_0-9]*\s*=/.test(doc.text.slice(offset));
+    if ((!doc.errors.length && !descriptor && !incompleteLookupArgument) || !(/(?:\.|::)[a-z_0-9]*$/.test(before) || /\b[a-z][a-z_0-9]*\([^()]*$/.test(before))) return doc;
+    const lookupDescriptor = descriptor && lookupContext;
+    const lookupMember = lookupContext && !descriptor && /\.[a-z_0-9]*$/.test(before) && !/\binput\.[a-z_0-9]*$/.test(before);
+    let prefix = /(?:\.|::)[a-z_0-9]*$/.test(before) ? before.replace(/[a-z_0-9]*$/, lookupDescriptor ? 'value' : '__completion') : before;
+    if (lookupContext && /::value\([^()]*,\s*[a-z_0-9]*$/.test(prefix)) prefix = prefix.replace(/[a-z_0-9]*$/, 'completion=input.completion');
+    else if (/[=,]\s*$/.test(prefix)) prefix += '__completion';
     const balance = doc.tokens.reduce((n, t) => n + Number(t.value === '(') - Number(t.value === ')'), 0);
-    const suffix = ')'.repeat(Math.max(0, balance)) + doc.text.slice(offset);
+    const remainder = lookupDescriptor || lookupMember ? doc.text.slice(offset).replace(/^[a-z_0-9]*/, '') : doc.text.slice(offset);
+    if (lookupDescriptor && !/^\s*\(/.test(remainder)) prefix += '()';
+    if (lookupMember && !/^\s*(?:[.:]|\()/.test(remainder)) prefix += '::value()';
+    const suffix = ')'.repeat(Math.max(0, balance)) + remainder;
     let recovered = parse(prefix + suffix, doc.uri);
-    if (descriptor && !/^[a-z_0-9]*\s*\(/.test(doc.text.slice(offset)) && recovered.declarations.flatMap(d => d.fields).some(f => f.calculation && f.token.start <= offset && offset <= f.end)) recovered = parse(prefix + '()' + suffix, doc.uri);
+    if (descriptor && !lookupDescriptor && !/^[a-z_0-9]*\s*\(/.test(doc.text.slice(offset)) && recovered.declarations.some(d => [...d.fields.filter(f => f.calculation), ...(d.lookups || [])].some(f => f.token.start <= offset && offset <= f.end))) recovered = parse(prefix + '()' + suffix, doc.uri);
     Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
     if (recovered.errors.length) return doc;
     const root = rootFor(doc.uri);
-    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+    const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(validationCopy);
     validate([...siblings, recovered]);
     return recovered;
   }
@@ -287,7 +352,7 @@ class Service {
     if (!target) return locations;
     for (const doc of this.documents.values()) for (const token of doc.tokens) {
       if (doc.bindings.get(token.start) !== target) continue;
-      if (!includeDeclaration && uriKey(doc.uri) === uriKey(target.doc.uri) && token.start === target.name.start) continue;
+      if (!includeDeclaration && target.kind !== 'lookup_input' && uriKey(doc.uri) === uriKey(target.doc.uri) && token.start === target.name.start) continue;
       locations.push({ uri: doc.uri, range: token.range });
     }
     return locations;
@@ -308,7 +373,7 @@ class Service {
     if (params.position && doc.blocks.some(b => { const r = range(doc.text, b.start, b.end); return params.position.line >= r.start.line && params.position.line <= r.end.line; })) return null;
     const token = params.position && this.tokenAt(doc, params.position);
     const target = token && doc.bindings.get(token.start);
-    const expressionNodes = doc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes)]);
+    const expressionNodes = doc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes), ...(d.lookups || []).flatMap(nodes)]);
     if (method === 'textDocument/definition') {
       const targets = token && doc.markerTargets.get(token.start);
       if (targets) return targets.map(field => ({ uri: field.doc.uri, range: field.name.range }));
@@ -330,6 +395,19 @@ class Service {
       return { data };
     }
     if (method === 'textDocument/hover') {
+      if (target?.kind === 'lookup') {
+        const owner = target.entity?.name.value || target.owner.name.value;
+        const snake = name => name.replace(/(?<!^)(?=[A-Z])/g, '_').toLowerCase();
+        const inputs = (target.inferredInputs || []).map(p => `${p.name}: ${typeLabel(p.type)}`);
+        const keys = target.keys.map(k => `${k.name.value}: ${typeLabel(k.resolvedType)}`);
+        const matcher = owner + target.name.value.split('_').map(part => part[0].toUpperCase() + part.slice(1)).join('') + 'Matcher';
+        const signature = name => `prepare_${snake(name)}_${target.name.value}(${inputs.length ? '*, ' : ''}${inputs.join(', ')}) -> Success<${matcher}> | NonNormalResult`;
+        const descendants = new Map([...this.documents.values()].flatMap(d => [...(d.scope || new Map()).values()]).filter(d => d.kind === 'entity' && d.ancestors?.includes(target.entity)).map(d => [d.key, d.name.value]));
+        const inherited = [...descendants.values()].sort().map(name => `\nInherited Python: ${signature(name)}`).join('');
+        return { contents: { kind: 'plaintext', value: `lookup ${target.name.value}\nKeys: ${keys.join(', ') || '(none)'}\nPreparation parameters: ${inputs.join(', ') || '(none)'}\nCandidates: ${owner} and descendants\nPython: ${signature(owner)}${inherited}` }, range: token.range };
+      }
+      if (target?.kind === 'lookup_key') return { contents: { kind: 'plaintext', value: `${target.name.value}: ${typeLabel(target.resolvedType)}\nSource: ${doc.text.slice(target.expression.token.start, target.expression.end)}` }, range: token.range };
+      if (target?.kind === 'lookup_input') return { contents: { kind: 'plaintext', value: `input.${target.name.value}: ${typeLabel(target.resolvedType)} (required)` }, range: token.range };
       const computation = token && doc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= token.start && token.end <= f.end);
       if (token?.value === 'input' && computation) return { contents: { kind: 'plaintext', value: inputTypeHelp(computation) }, range: token.range };
       const invoked = token && expressionNodes.find(n => ['call', 'recover'].includes(n.kind) && (n.operands[0].memberToken || (n.operands[0].kind === 'name' ? n.operands[0].token : null))?.start === token.start);
@@ -349,7 +427,7 @@ class Service {
       const typeContext = typeTools.context(doc, offset);
       if (typeContext) return typeTools.signatureHelp(typeContext);
       const calculationDoc = this.calculationDocument(doc, offset);
-      const call = calculationDoc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes)]).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
+      const call = calculationDoc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes), ...(d.lookups || []).flatMap(nodes)]).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
       if (!call) return null;
       const name = call.operands[0].value;
       const parameters = (call.parameters || []).map(p => ({ label: `${p.name}: ${typeLabel(p.type)}`, documentation: p.default ? 'Default: ' + defaultLabel(p.default) : p.required ? 'Unbound inputs are inferred into the caller.' : 'Optional selection parameter.' }));
@@ -379,6 +457,7 @@ class Service {
       }
       const calculationDoc = this.calculationDocument(doc, offset);
       const computation = calculationDoc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= offset && offset <= f.end);
+      const lookup = calculationDoc.declarations.flatMap(d => d.lookups || []).find(l => l.token.start <= offset && offset <= l.end);
       const constantContext = calculationDoc.declarations.find(d => d.kind === 'constant' && d.token.start <= offset && offset <= d.end);
       const builtinCall = /\b([a-z][a-z_0-9]*)\(([^()]*)$/.exec(before);
       const builtinSignature = builtinCall && require('./language/conversions.cjs').signatures[builtinCall[1]];
@@ -392,13 +471,13 @@ class Service {
         const selected = calculationDoc.bindings.get(memberStart);
         const operator = /::[a-z_]*$/.exec(before);
         const receiver = calculationDoc.accessTerms?.get(operator.index);
-        const labels = computation ? selected ? selected.mode === 'computed' ? ['value'] : ['value', 'best_available'] : [] : receiver?.sort === 'field' ? ['type', ...(receiver.instance ? ['value'] : []), ...(receiver.source?.owner?.kind === 'entity' ? ['entity'] : [])] : [];
-        return { isIncomplete: false, items: labels.map(label => computation ? { label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 } : { label, kind: 10, detail: help[label] || help.self }) };
+        const labels = lookup ? selected && ['id', 'static', 'scd'].includes(selected.mode) ? ['value'] : [] : computation ? selected ? selected.mode === 'computed' ? ['value'] : ['value', 'best_available'] : [] : receiver?.sort === 'field' ? ['type', ...(receiver.instance ? ['value'] : []), ...(receiver.source?.owner?.kind === 'entity' ? ['entity'] : [])] : [];
+        return { isIncomplete: false, items: labels.map(label => computation || lookup ? { label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 } : { label, kind: 10, detail: help[label] || help.self }) };
       }
-      if (/\binput\.[a-z_0-9]*$/.test(before) && computation) return { isIncomplete: false, items: (computation.inferredInputs || []).filter(p => p.name !== '__completion').map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
+      if (/\binput\.[a-z_0-9]*$/.test(before) && (computation || lookup)) return { isIncomplete: false, items: ((computation || lookup).inferredInputs || []).filter(p => p.name !== '__completion').map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
       const member = /\.([a-z_0-9]*)$/.exec(before);
-      if (member && (computation || constantContext)) {
-        const expression = nodes(computation || constantContext).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
+      if (member && (computation || constantContext || lookup)) {
+        const expression = nodes(computation || constantContext || lookup).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
         const receiver = expression?.operands[0]?.inferred?.type;
         if (receiver && receiver.kind !== 'unknown') {
           const symbols = new Map([...this.documents.values(), calculationDoc].flatMap(d => [...d.scope.values()].map(s => [s.key, s])));
@@ -408,17 +487,24 @@ class Service {
           if (receiver.kind === 'reference' && owner) {
             let root = owner; while (root.base) root = root.base;
             for (const candidate of symbols.values()) if (candidate.kind === 'entity') {
+              if (lookup && candidate !== owner && !candidate.ancestors?.includes(owner)) continue;
               let ancestor = candidate; while (ancestor.base) ancestor = ancestor.base;
               if (ancestor === root) for (const [name, field] of candidate.effective || []) if (!fields.has(name)) fields.set(name, field);
             }
           }
-          const items = [...fields].map(([label, field]) => ({ label, kind: 5, detail: describe(field) }));
+          const items = [...fields].flatMap(([label, field]) => {
+            if (!lookup) return [{ label, kind: 5, detail: describe(field) }];
+            if (!['id', 'static', 'scd'].includes(field.mode)) return [];
+            const resolved = new Resolver(field.doc, () => {}, symbols, field.owner, true).resolve(field.type);
+            if (!lookupSupported(resolved, symbols)) return [];
+            return [{ label, kind: 5, detail: `${resolved.kind === 'reference' ? 'Entity reference; path can continue' : 'Value'} · ${describe(field)}` }];
+          });
           if (receiver.name === 'partial') items.push(...['value', 'issues'].map(label => ({ label, kind: 5, detail: label === 'value' ? typeLabel(receiver.args[0]) : 'Immutable issue details' })));
           if (computation) items.push(...methodNames(receiver).map(label => ({ label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 })));
           return { isIncomplete: false, items };
         }
       }
-      if (member && !computation) {
+      if (member && !computation && !lookup) {
         const receiver = calculationDoc.accessTerms?.get(member.index);
         if (receiver) {
           const symbols = new Map([...calculationDoc.scope.values()].map(d => [d.key, d]));
@@ -429,10 +515,26 @@ class Service {
         }
       }
       const fieldCall = /\.([a-z][a-z0-9_]*)::(best_available|value)\(([^()]*)$/.exec(before);
+      const boundArgument = lookup && fieldCall && /\b([a-z][a-z0-9_]*)\s*=\s*[a-zA-Z_0-9]*$/.exec(fieldCall[3]);
+      if (boundArgument) {
+        const analyzed = nodes(lookup).find(n => n.kind === 'call' && n.operands[0].operands[0]?.memberToken?.start === fieldCall.index + 1);
+        const parameter = analyzed?.parameters?.find(p => p.name === boundArgument[1]);
+        if (parameter) {
+          const symbols = new Map([...calculationDoc.scope.values()].map(d => [d.key, d]));
+          const dictionary = parameter.type.name === 'code' && symbols.get(parameter.type.args[0]?.key);
+          const items = dictionary?.kind === 'decodes' ? codeEntries(dictionary).map(e => ({ label: `${dictionary.name.value}.${e.name.value}`, kind: 20, detail: describe(e) })) : [];
+          for (const [label, declaration] of calculationDoc.scope) if (declaration.kind === 'constant') {
+            const type = new Resolver(declaration.doc, () => {}, symbols, declaration, true).resolve(declaration.type);
+            if (accepts(parameter.type, type, symbols)) items.push({ label, kind: 21, detail: describe(declaration) });
+          }
+          items.push({ label: 'input', kind: 6, insertText: 'input.${1:name}', insertTextFormat: 2, detail: `Rename ${parameter.name}: ${typeLabel(parameter.type)}` });
+          return { isIncomplete: false, items };
+        }
+      }
       if (fieldCall && /(?:^|,)\s*[a-z_0-9]*$/.test(fieldCall[3])) {
         const field = calculationDoc.bindings.get(fieldCall.index + 1);
         const inputs = [];
-        const analyzed = computation && nodes(computation).find(n => n.kind === 'call' && n.operands[0].operands[0]?.memberToken?.start === fieldCall.index + 1);
+        const analyzed = (computation || lookup) && nodes(computation || lookup).find(n => n.kind === 'call' && n.operands[0].operands[0]?.memberToken?.start === fieldCall.index + 1);
         if (analyzed?.parameters) inputs.push(...analyzed.parameters.map(p => ({ name: p.name, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : ''), documentation: p.description })));
         else if (field?.mode === 'computed') inputs.push(...(field.inferredInputs || []).map(p => ({ name: p.name, detail: typeLabel(p.type), documentation: p.description })));
         else if (field) {
@@ -497,7 +599,7 @@ class Service {
           const recovered = Object.assign(parse(prefix + doc.text.slice(offset), doc.uri), { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
           if (!recovered.errors.length) {
             const root = rootFor(doc.uri);
-            const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(d => Object.assign(parse(d.text, d.uri), { prefix: d.prefix, repository: d.repository, builtin: d.builtin }));
+            const siblings = [...this.documents.values()].filter(d => !d.transactionLanguage && d !== doc && root && rootFor(d.uri) === root).map(validationCopy);
             validate([...siblings, recovered]); completionDoc = recovered;
           }
         }
@@ -516,7 +618,8 @@ class Service {
         return { isIncomplete: false, items: [...(owner?.effective || [])].map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
       }
       if (member) return { isIncomplete: false, items: [] };
-      const items = [...keywords, ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: constants.includes(label) ? 21 : 14, detail: help[label] || 'YAMBL built-in' }));
+      const items = [...keywords.filter(word => word !== 'lookup'), ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: constants.includes(label) ? 21 : 14, detail: help[label] || 'YAMBL built-in' }));
+      if (['entity', 'extend'].includes(bodyContext(doc, offset))) items.push({ label: 'lookup', kind: 15, detail: 'Named entity lookup rule', insertText: 'lookup ${1:name} {\n    ${2:key} = self.${3:field}::value()\n}', insertTextFormat: 2 });
       if (computation || constantContext) {
         for (const [label, parameters] of Object.entries(require('./language/conversions.cjs').signatures)) items.push({ label, kind: 3, detail: `${label}(${parameters.map(p => p.join(': ')).join(', ')})`, insertText: label + '($0)', insertTextFormat: 2 });
         if (computation) items.push({ label: 'input', kind: 6, detail: 'External input: input.name; omitted input fallback: input.name ?? expression', insertText: 'input.${1:name}', insertTextFormat: 2 });
@@ -533,10 +636,14 @@ class Service {
     if (method === 'textDocument/documentSymbol') {
       const fieldSymbol = (field, prefix = '') => ({ name: prefix + field.name.value, kind: 8,
         range: range(doc.text, field.metadata[0]?.token.start ?? field.token.start, field.name.end), selectionRange: field.name.range });
-      return doc.declarations.flatMap(decl => decl.kind === 'extend' ? decl.fields.map(f => fieldSymbol(f, decl.name.value + '.')) : [{
+      const lookupSymbol = (lookup, prefix = '') => ({ name: prefix + lookup.name.value, kind: 6,
+        range: range(doc.text, lookup.token.start, lookup.end), selectionRange: lookup.name.range,
+        children: lookup.keys.map(key => ({ name: key.name.value, kind: 8, range: range(doc.text, key.token.start, key.end), selectionRange: key.name.range })) });
+      const members = (decl, prefix = '') => [...decl.fields.map(f => ({ start: f.token.start, symbol: fieldSymbol(f, prefix) })), ...(decl.lookups || []).map(l => ({ start: l.token.start, symbol: lookupSymbol(l, prefix) }))].sort((a, b) => a.start - b.start).map(item => item.symbol);
+      return doc.declarations.flatMap(decl => decl.kind === 'extend' ? members(decl, decl.name.value + '.') : [{
         name: decl.name.value, kind: decl.kind === 'entity' ? 5 : 10,
         range: range(doc.text, decl.metadata[0]?.token.start ?? decl.token.start, decl.end), selectionRange: decl.name.range,
-        children: ['entity', 'value'].includes(decl.kind) ? decl.fields.map(f => fieldSymbol(f)) : decl.entries.map(e => ({ name: e.code.value, kind: 22, range: range(doc.text, e.token.start, e.value.end), selectionRange: e.code.range })),
+        children: ['entity', 'value'].includes(decl.kind) ? members(decl) : decl.entries.map(e => ({ name: e.code.value, kind: 22, range: range(doc.text, e.token.start, e.value.end), selectionRange: e.code.range })),
       }]);
     }
     return null;

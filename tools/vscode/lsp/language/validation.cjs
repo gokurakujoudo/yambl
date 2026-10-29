@@ -3,10 +3,11 @@ const { checkDecorators } = require('./decorators.cjs');
 const { isFlags, codeEntries, checkDecodes, deriveSubtypes } = require('./decodes.cjs');
 
 const { values, generics, entities, structures, stringValue, resultConstants } = require('./syntax.cjs');
-const { relationships, builtinModels } = require('./relationships.cjs');
+const { relationships, builtinModels, builtinLocals, builtinDocuments } = require('./relationships.cjs');
 const { Resolver, checkAliases } = require('./expressions.cjs');
 const { collectDimensions, checkDimensions } = require('./dimensions.cjs');
 const { checkComputations } = require('./computation.cjs');
+const { checkLookups } = require('./lookups.cjs');
 const reserved = [...values, ...generics, ...entities, ...structures, ...builtinModels.keys(), ...Object.keys(resultConstants), 'Entity'];
 const namespace = doc => [doc.prefix, doc.namespace].filter(Boolean).join('.');
 const key = (doc, ns, name) => [doc.repository || '', ns, name].join('\0');
@@ -39,16 +40,29 @@ function validate(documents) {
       else { doc.scope.set(name, target); bind(doc, imported.name, target); }
     }
   }
-  for (const builtin of builtinModels.values()) {
-    builtin.doc.diagnostics = []; builtin.doc.bindings = new Map(); builtin.doc.valueTypeTokens = new Map();
+  for (const doc of builtinDocuments) {
+    doc.diagnostics = []; doc.bindings = new Map(); doc.valueTypeTokens = new Map(); doc.markerTargets = new Map(); doc.accessTerms = new Map();
+  }
+  for (const builtin of builtinLocals.values()) {
     if (!symbols.has(builtin.key)) symbols.set(builtin.key, builtin);
+    if (symbols.get(builtin.key) === builtin) builtin.ownFields = new Map();
     for (const field of builtin.fields) field.owner = builtin;
   }
+  const embeddedDocuments = builtinDocuments
+    .filter(doc => !documents.some(item => item.builtin && item.uri === doc.uri))
+    .map(doc => ({ ...doc, declarations: doc.declarations.filter(declaration => {
+      if (declaration.kind !== 'extend') return symbols.get(declaration.key) === declaration;
+      const target = builtinLocals.get(declaration.name.value);
+      return target && symbols.get(target.key) === target;
+    }) }))
+    .filter(doc => doc.declarations.length);
+  for (const doc of embeddedDocuments) doc.scope = new Map([...builtinLocals].map(([name, declaration]) => [name, symbols.get(declaration.key)]));
+  const analysisDocuments = [...documents, ...embeddedDocuments];
   for (const doc of documents) for (const [name, declaration] of builtinModels) if (!doc.scope.has(name)) doc.scope.set(name, declaration);
   function checkType(doc, node, owner, allowExact = false) {
     return new Resolver(doc, issue, symbols, owner, allowExact).resolve(node).kind;
   }
-  for (const doc of documents.filter(d => !d.errors.length)) {
+  for (const doc of analysisDocuments.filter(d => !d.errors.length)) {
     for (const decl of doc.declarations) {
       if (decl.kind === 'decodes') {
         checkDecodes(decl, issue);
@@ -108,8 +122,9 @@ function validate(documents) {
       if (!seen.has(target)) { seen.add(target); pending.push(...next(target)); }
     }
   }
-  collectDimensions(documents.filter(d => !d.errors.length), issue);
+  collectDimensions(analysisDocuments.filter(d => !d.errors.length), issue);
   relationships(symbols, issue);
+  checkLookups(analysisDocuments, symbols, issue);
   deriveSubtypes(symbols, issue);
   checkDimensions(documents.filter(d => !d.errors.length), issue, symbols);
   checkDecorators(documents, issue, symbols);
@@ -121,7 +136,7 @@ function validate(documents) {
     if (args[1].name === 'input_type') issue(args[0], args[1].token, 'input_type is only a decorator pair constraint');
     if (args[2]?.kind === 'value' && kind === 'collection') issue(args[0], args[1].token, 'value fields cannot be collections');
   }
-  checkComputations(documents, symbols, issue);
+  checkComputations(analysisDocuments, symbols, issue);
   const invalidField = field => field.doc.diagnostics.some(d => d.severity === 1 &&
     field.doc.tokens.some(t => t.start >= (field.metadata[0]?.token || field.token).start && t.start < field.end &&
       t.range.start.line === d.range.start.line && t.range.start.character === d.range.start.character));
@@ -148,7 +163,7 @@ function formatType(node) {
 function describe(target) {
   if (target.kind === 'constant') return `const ${target.name.value}: ${formatType(target.type)} = ${target.doc.text.slice(target.initializer.token.start, target.initializer.end)}`;
   const { typeLabel } = require('./calculation-tools.cjs');
-  if (target.kind === 'calculation_binding') return `${target.name.value}: ${typeLabel(target.resolvedType)}`;
+  if (['calculation_binding', 'lookup_input'].includes(target.kind)) return `${target.name.value}: ${typeLabel(target.resolvedType)}`;
   if (target.kind === 'decorator_parameter') return `${target.pair ? '*' : ''}${target.name.value}${target.optional ? '?' : ''}: ${formatType(target.type)}${target.default ? ' = ' + formatType(target.default) : ''}`;
   if (target.kind === 'decorator') {
     const targets = target.metadata.filter(a => a.name === 'targets').map(a => `@targets(${a.arguments.map(arg => (arg.mode === 'keyword' ? arg.key.value + '=' : '') + formatType(arg.type)).join(', ')})\n`).join('');

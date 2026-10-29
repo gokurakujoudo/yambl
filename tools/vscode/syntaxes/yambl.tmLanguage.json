@@ -27,6 +27,13 @@
       "match": "#.*$"
     },
     {
+      "match": "\\b(lookup)\\s+([a-z][a-z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "keyword.declaration.yambl" },
+        "2": { "name": "entity.name.function.yambl" }
+      }
+    },
+    {
       "match": "\\b(from)\\s+([A-Za-z_][A-Za-z0-9_.]*)\\s+(import)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
       "captures": {
         "1": {
@@ -162,7 +169,7 @@
     },
     {
       "name": "keyword.declaration.yambl",
-      "match": "\\b(?:const|decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|computed|dimension|hierarchy|fallback_days|final|self|input|as|attr)\\b"
+      "match": "\\b(?:const|decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|computed|dimension|lookup|hierarchy|fallback_days|final|self|input|as|attr)\\b"
     },
     {
       "name": "keyword.control.yambl",
@@ -223,6 +230,13 @@
     {
       "name": "variable.parameter.yambl",
       "match": "\\b[a-z][a-z0-9_]*(?=\\s*=)"
+    },
+    {
+      "match": "(\\.)([a-z][a-z0-9_]*)\\b",
+      "captures": {
+        "1": { "name": "punctuation.accessor.yambl" },
+        "2": { "name": "variable.other.property.yambl" }
+      }
     },
     {
       "name": "keyword.operator.yambl",

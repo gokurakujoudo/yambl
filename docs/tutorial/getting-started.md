@@ -61,6 +61,10 @@ entity Product {
     static attr unit_price: decimal[18, 2]
     static attr quantity: integer
 
+    lookup by_name {
+        name = self.name::value()
+    }
+
     computed attr total: decimal {
         return self.unit_price::value() * self.quantity::value()
     }
@@ -184,7 +188,42 @@ asyncio.run(main())
 `get_product` 和 `read_total` 返回结果对象，正常结果的 `value` 分别为商品句柄和
 十进制计算结果；非正常结果需要单独处理。`with` 在使用后关闭读取会话和数据接口。
 
-## 8. 使用文件后端
+## 8. 批量匹配商品
+
+模型中的 `by_name` 将商品名称作为外部输入键。准备一次匹配器后，可以重复处理批次。
+在 `yambl-demo` 中创建 `match_product.py`：
+
+```python
+import asyncio
+import sys
+from pathlib import Path
+
+from example_model import ExampleData, ProductByNameKey, Success
+
+
+async def main():
+    config = Path(sys.argv[1])
+    with await ExampleData.open(config) as data:
+        with data.read() as reader:
+            prepared = reader.prepare_product_by_name()
+            if not isinstance(prepared, Success):
+                raise RuntimeError(f'准备匹配器失败：{prepared.message}')
+        batch = prepared.value.match_many([ProductByNameKey(name='Notebook')])
+        if not isinstance(batch, Success):
+            raise RuntimeError(f'匹配批次失败：{batch.message}')
+        result = batch.value[0]
+        if not isinstance(result, Success):
+            raise RuntimeError(f'商品未唯一匹配：{result}')
+        print(f'商品编号：{result.value}')
+
+
+asyncio.run(main())
+```
+
+运行 `python match_product.py repository.lclcfg`，输出 `商品编号：P1`。匹配器在读取会话
+关闭后仍可使用。未命中、歧义及批次输入错误的处理见[具名批量匹配](../reference/lookup.md)。
+
+## 9. 使用文件后端
 
 同一个生成包也可以使用文件后端。在 `yambl-demo` 中创建 `files.lclcfg`：
 
@@ -200,6 +239,7 @@ python -m example_model create -o config files.lclcfg
 python -m example_model apply -o config files.lclcfg -o source initial.yaplan
 python -m example_model check-data -o config files.lclcfg
 python read_product.py files.lclcfg
+python match_product.py files.lclcfg
 ```
 
 输出同样包含 `商品金额：37.50`。两个配置指向各自的数据仓库；文件后端的路径必须是
