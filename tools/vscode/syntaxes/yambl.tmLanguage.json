@@ -240,6 +240,10 @@
           "2": { "name": "punctuation.accessor.yambl" },
           "3": { "name": "variable.other.property.yambl" }
         } },
+        { "match": "(\\.)([a-z][A-Za-z0-9_]*)\\b", "captures": {
+          "1": { "name": "punctuation.accessor.yambl" },
+          "2": { "name": "variable.other.property.yambl" }
+        } },
         { "name": "variable.parameter.yambl", "match": "\\btarget(?=\\s*=)" },
         { "include": "#strings" }
       ]

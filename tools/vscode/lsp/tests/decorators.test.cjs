@@ -49,6 +49,23 @@ test('relationship argument completion and reverse target navigation', () => {
   assert.ok(request('completion', target + 2).items.some(item => item.label === 'issuer'));
 });
 
+test('multi-hop reverse paths navigate each step and complete the next relationship', () => {
+  const source = 'entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(one, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.c) attr a:A }';
+  const service = new Service(() => {}), uri = 'untitled:reverse-path';
+  service.open.set(uri, { text: source, version: 1 }); service.refresh();
+  assert.deepEqual(service.document(uri).diagnostics.filter(d => d.severity === 1), []);
+  const request = (method, character) => service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 0, character } });
+  const path = source.lastIndexOf('A.b.c');
+  assert.equal(request('definition', path + 2).range.start.character, source.indexOf('b:B'));
+  assert.equal(request('definition', path + 4).range.start.character, source.indexOf('c:C'));
+  assert.ok(request('completion', path + 'A.b.'.length).items.some(item => item.label === 'c'));
+  const incomplete = source.replace('A.b.c', 'A.b.');
+  service.open.set(uri, { text: incomplete, version: 2 }); service.refresh();
+  assert.ok(request('completion', incomplete.lastIndexOf('A.b.') + 'A.b.'.length).items.some(item => item.label === 'c'));
+  const invalid = parse(source.replace('A.b.c', 'A.b.missing')); validate([invalid]);
+  assert.ok(invalid.diagnostics.some(d => d.message.includes('hop 2 missing')));
+});
+
 test('storage decorators complete, navigate and enforce mutually exclusive scalar groups', () => {
   const service = new Service(() => {}), uri = 'untitled:storage';
   for (const [sample, included, excluded] of [

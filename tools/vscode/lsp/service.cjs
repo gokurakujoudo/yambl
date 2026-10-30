@@ -523,11 +523,27 @@ class Service {
         const values = key === 'x' ? ['one', 'many'] : fieldType?.name === 'collection' ? ['maybe', 'many'] : fieldType?.kind === 'reference' ? ['maybe', 'one'] : ['maybe', 'one', 'many'];
         return { isIncomplete: false, items: values.map(label => ({ label, kind: 21, detail: 'Relationship cardinality' })) };
       }
-      const reverseCall = /@reverse_relationship\(\s*(?:target\s*=\s*)?([A-Z][A-Za-z0-9]*)\.([a-z_0-9]*)$/.exec(before);
+      const reverseCall = /@reverse_relationship\(\s*(?:target\s*=\s*)?([A-Z][A-Za-z0-9]*)((?:\.[a-z][a-z0-9_]*)*\.[a-z_0-9]*)$/.exec(before);
       if (reverseCall) {
-        const scope = doc.errors.length ? this.completionScope(doc, reverseCall.index, offset) : doc.scope;
-        const owner = scope.get(reverseCall[1]);
-        return { isIncomplete: false, items: [...(owner?.effective?.values() || [])].filter(field => field.metadata.some(call => call.name === 'relationship')).map(field => ({ label: field.name.value, kind: 5, detail: describe(field) })) };
+        const close = doc.text.indexOf(')', offset);
+        const scope = doc.errors.length ? this.completionScope(doc, reverseCall.index, close < 0 ? offset : close + 1) : doc.scope;
+        const symbols = new Map([...this.documents.values(), calculationDoc].flatMap(item => [...(item.scope || new Map()).values()].map(symbol => [symbol.key, symbol])));
+        for (const symbol of scope.values()) symbols.set(symbol.key, symbol);
+        let owner = scope.get(reverseCall[1]);
+        const segments = reverseCall[2].split('.').slice(1, -1);
+        for (const name of segments) {
+          const field = owner?.effective?.get(name);
+          if (!field) { owner = null; break; }
+          const resolved = new Resolver(field.doc, () => {}, symbols, field.owner, true).resolve(field.type);
+          owner = resolved.kind === 'reference' ? symbols.get(resolved.key) : null;
+        }
+        return { isIncomplete: false, items: [...(owner?.effective?.values() || [])].filter(field => {
+          const relation = field.metadata.find(call => call.name === 'relationship');
+          if (!relation || field.metadata.some(call => call.name === 'reverse_relationship')) return false;
+          if (!segments.length) return true;
+          const type = new Resolver(field.doc, () => {}, symbols, field.owner, true).resolve(field.type);
+          return type.kind === 'reference' && relation.relationship?.[0] === 'one' && ['one', 'maybe'].includes(relation.relationship?.[1]);
+        }).map(field => ({ label: field.name.value, kind: 5, detail: describe(field) })) };
       }
       const reverseOwner = /@reverse_relationship\(\s*(?:target\s*=\s*)?([A-Z][A-Za-z0-9]*)?$/.exec(before);
       if (reverseOwner) {

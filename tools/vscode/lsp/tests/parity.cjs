@@ -8,6 +8,9 @@ const { parse, format } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json'), ...require('./computation-cases.json')];
 cases.push(
+  ['entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(one, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.c) attr a:A }'],
+  ['entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(many, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.c) attr a:A }'],
+  ['entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(one, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.missing) attr a:A }'],
   ['entity A { attr n: integer constraint valid { let x = self.n::value() assert x > 0 let y = 2 assert y > x } }'],
   ['entity A { constraint valid { assert later > 0 let later = 1 assert 2 } } entity B inherits A { constraint valid {} }'],
   ['entity A { snapshot attr n: integer constraint c { assert self.n::value() > 0 } }'],

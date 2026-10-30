@@ -125,14 +125,24 @@ function bindCall(call, node, issue, symbols, values = null) {
     }
     const syntax = supplied.get('target')?.type;
     if (!syntax) return '';
-    const owner = doc.scope.get(syntax.name), access = syntax.accesses?.[0];
-    call.targetSpecified = true;
-    const valid = owner?.kind === 'entity' && syntax.accesses?.length === 1 && access.operator.value === '.' && !syntax.args && !syntax.params && !syntax.operations?.length;
-    const field = valid && owner.effective?.get(access.token.value);
+    const owner = doc.scope.get(syntax.name), accesses = syntax.accesses || [];
+    call.targetSpecified = true; call.targetMissing = null; call.targetPath = []; call.targetOwner = null; call.targetField = null;
+    const valid = owner?.kind === 'entity' && accesses.length > 0 && accesses.every(access => access.operator.value === '.') && !syntax.args && !syntax.params && !syntax.operations?.length;
     if (!valid) actualResolver.issue(syntax, 'reverse relationship requires an entity field reference');
-    else { doc.bindings.set(syntax.token.start, owner); call.targetOwner = owner; if (field) { doc.bindings.set(access.token.start, field); call.targetField = field; } }
-    const root = field && (field.owner.ancestors?.at(-1) || field.owner).key;
-    return JSON.stringify([declaration.key, field ? root + '\0' + field.name.value : '', descriptionType && canonical(descriptionType)]);
+    const path = []; let current = owner;
+    if (valid) {
+      doc.bindings.set(syntax.token.start, owner); call.targetOwner = owner;
+      for (const access of accesses) {
+        const field = current?.effective?.get(access.token.value);
+        if (!field) { call.targetMissing = access.token; break; }
+        doc.bindings.set(access.token.start, field); path.push({ owner: current, field, token: access.token });
+        const resolved = new Resolver(field.doc, () => {}, symbols, field.owner, true).resolve(field.type);
+        const target = resolved.name === 'collection' ? resolved.args[0] : resolved;
+        current = symbols.get(target?.key);
+      }
+      call.targetPath = path; call.targetField = path[0]?.field;
+    }
+    return JSON.stringify([declaration.key, path.map(step => [(step.field.owner.ancestors?.at(-1) || step.field.owner).key, step.field.name.value]), descriptionType && canonical(descriptionType)]);
   }
   const formalResolver = new Resolver(declaration.doc, issue, symbols, null, false, actualResolver.bindings);
   const ordinary = declaration.parameters.filter(p => !p.pair && !p.variadic), pairs = declaration.parameters.filter(p => p.pair), variadic = declaration.parameters.find(p => p.variadic);

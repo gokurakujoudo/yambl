@@ -284,7 +284,7 @@ entity Security {
 | `@temporal(day: date)` | snapshot/scd 时间参数名 |
 | `@dimension(name)` | 引用命名 dimension，可重复 |
 | `@relationship(x, y)` | 正向引用基数 |
-| `@reverse_relationship(Entity.field)` | 只读反向引用 |
+| `@reverse_relationship(Entity.field)` | 只读反向引用；多跳一对一可继续写字段路径 |
 | `@extra_input_param(name: Type = value, '说明')` | computed 或 lookup 可选输入，默认值可省略 |
 | `@sparse('cat')`、`@dense('cat')` | 无维度、非集合 static 的长表/宽表分组 |
 | `@flags` | flags 字典 |

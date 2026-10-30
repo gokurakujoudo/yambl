@@ -164,6 +164,7 @@ resolved fields. Field uses participate in definition navigation and reference s
 completion and signature help. The editor inserts `name=` and preserves snippets.
 Selection results offer completion for `value` and the selected `dimensions`.
 Entity constraints support ordered `let` and `assert` statements, diagnostics, and field navigation.
+Multi-hop reverse relationships support completion and navigation at each field.
 `input.` lists inferred and explicitly declared inputs, their types and defaults.
 `@extra_input_param` supplies optional input declarations and descriptions; `??`
 handles omitted inputs.

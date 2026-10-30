@@ -28,14 +28,25 @@ function checkRelationships(documents, symbols, issue) {
       else if (y && !(own.collection ? ['maybe', 'many'] : ['maybe', 'one']).includes(y)) issue(doc, forward.token, 'relationship cardinality does not match field type');
     }
     if (!reverse?.targetSpecified) continue;
-    const source = reverse.targetField, sourceCall = source?.metadata.find(call => call.name === 'relationship');
-    if (!sourceCall || source.metadata.some(call => call.name === 'reverse_relationship')) { issue(doc, reverse.token, 'reverse relationship target must be a forward relationship field'); continue; }
-    const target = shape(source);
-    if (target.target !== field.owner.key) issue(doc, reverse.token, 'forward relationship target must match reverse owner');
-    if (own.target !== reverse.targetOwner.key || (sourceCall.relationship?.[0] === 'one' && own.collection) || (sourceCall.relationship?.[0] === 'many' && !own.collection)) issue(doc, reverse.token, 'reverse relationship type does not match source cardinality');
-    if (field.mode !== source.mode || time(field) !== time(source)) issue(doc, reverse.token, 'relationship categories and temporal parameters must match');
-    const first = coordinates(field), second = coordinates(source);
-    if (first.length !== second.length || first.some(dimension => !second.includes(dimension))) issue(doc, reverse.token, 'relationship dimensions must match by declaration identity');
+    const steps = reverse.targetPath || [], syntax = reverse.arguments.find(a => a.mode === 'positional' || a.key?.value === 'target')?.type;
+    if (!reverse.targetOwner || steps.length !== (syntax?.accesses?.length || 0)) {
+      if ((syntax?.accesses?.length || 0) > 1 && reverse.targetMissing) issue(doc, reverse.targetMissing, `reverse relationship hop ${steps.length + 1} ${reverse.targetMissing.value} is not a visible field`);
+      else issue(doc, reverse.token, 'reverse relationship target must be a forward relationship field');
+      continue;
+    }
+    let target = null, cardinality = null, valid = true;
+    for (const [index, step] of steps.entries()) {
+      const source = step.field, sourceCall = source.metadata.find(call => call.name === 'relationship'), suffix = steps.length > 1 ? ` at hop ${index + 1} ${source.name.value}` : '';
+      if (!sourceCall || source.metadata.some(call => call.name === 'reverse_relationship')) { issue(doc, reverse.token, steps.length > 1 ? `reverse relationship hop ${index + 1} ${source.name.value} must be a forward relationship field` : 'reverse relationship target must be a forward relationship field'); valid = false; break; }
+      target = shape(source); cardinality = sourceCall.relationship?.[0];
+      if (steps.length > 1 && (target.collection || cardinality !== 'one' || !['one', 'maybe'].includes(sourceCall.relationship?.[1]))) { issue(doc, reverse.token, `reverse relationship hop ${index + 1} ${source.name.value} requires a one-to-one reference`); valid = false; }
+      if (field.mode !== source.mode || time(field) !== time(source)) issue(doc, reverse.token, 'relationship categories and temporal parameters must match' + suffix);
+      const first = coordinates(field), second = coordinates(source);
+      if (first.length !== second.length || first.some(dimension => !second.includes(dimension))) issue(doc, reverse.token, 'relationship dimensions must match by declaration identity' + suffix);
+    }
+    if (!valid) continue;
+    if (target?.target !== field.owner.key) issue(doc, reverse.token, 'forward relationship target must match reverse owner');
+    if (own.target !== reverse.targetOwner.key || (cardinality === 'one' && own.collection) || (cardinality === 'many' && !own.collection)) issue(doc, reverse.token, 'reverse relationship type does not match source cardinality');
   }
 }
 
