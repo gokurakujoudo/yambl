@@ -10,7 +10,7 @@ const resultConstants = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtin
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
   'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'abstract', 'final', 'self', 'value', 'type', 'as', 'decorator',
   'const', 'computed', 'dimension', 'lookup', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
-const annotations = ['title', 'description', 'temporal', 'dimension', 'relationship', 'reverse_relationship', 'sparse', 'dense', 'overload', 'override', 'flags', 'allow_multiple', 'targets', 'decodes_rank'];
+const annotations = ['title', 'description', 'temporal', 'dimension', 'relationship', 'reverse_relationship', 'sparse', 'dense', 'overload', 'override', 'flags', 'allow_multiple', 'targets', 'decodes_rank', 'unique_by'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'dimension_ref', 'input_type'];
 const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact', 'one_of'];
 const entities = [];
@@ -39,7 +39,7 @@ function parse(text, uri = '') {
     masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, ' ') + masked.slice(end);
   }
   let offset = text.charCodeAt(0) === 0xfeff ? 1 : 0;
-  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\/\/|::|->|\?\?|==|!=|<=|>=|[{}\[\]()<>,:.=@+*?\/-]/y;
+  const pattern = /\s+|#[^\r\n]*|'(?:[^'\\\r\n]|\\[^\r\n])*'|[A-Za-z_][A-Za-z_0-9]*|-?0b[01]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\.\.\.|\/\/|::|->|\?\?|==|!=|<=|>=|[{}\[\]()<>,:.=@+*?\/-]/y;
   while (offset < text.length) {
     pattern.lastIndex = offset;
     const match = pattern.exec(masked);
@@ -260,11 +260,11 @@ function parse(text, uri = '') {
         take('(');
         while (!is(')')) {
           if (parameters.length) take(',');
-          const parameterToken = peek(), pair = is('*'); if (pair) take();
+          const parameterToken = peek(), pair = is('*'), variadic = is('...'); if (pair || variadic) take();
           const parameterName = name(), optional = is('?'); if (optional) take();
           take(':'); const constraint = type();
           let defaultValue = null; if (is('=')) { take(); defaultValue = type(); }
-          parameters.push({ token: parameterToken, name: parameterName, type: constraint, pair, optional, default: defaultValue });
+          parameters.push({ token: parameterToken, name: parameterName, type: constraint, pair, variadic, optional, default: defaultValue });
           if (!is(',')) break;
         }
         take(')');
@@ -414,7 +414,7 @@ function format(doc) {
       if (token.start === declarationEquals) keywordEquals.delete(token.start);
       const expressionContext = piece.calculation && (declarationEquals == null || token.start > declarationEquals);
       const noBefore = expressionContext ? ['?', '.', '::', ':', ',', ')', ']', '}', '('] : ['?', '.', '::', ':', ',', ')', '>', ']', '(', '[', '<'];
-      const noAfter = expressionContext ? ['.', '::', '@', '(', '[', '{'] : ['*', '.', '::', '@', '(', '<', '['];
+      const noAfter = expressionContext ? ['.', '::', '@', '(', '[', '{'] : ['*', '...', '.', '::', '@', '(', '<', '['];
       const space = !keywordEquals.has(token.start) && !priorEquals && text && !noBefore.includes(value) && !noAfter.includes(previous);
       text += (space ? ' ' : '') + value; previous = value; priorEquals = keywordEquals.has(token.start);
     }

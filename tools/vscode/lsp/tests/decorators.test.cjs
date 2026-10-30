@@ -118,6 +118,20 @@ test('incomplete decorator calls offer visible names and named value parameters'
   assert.deepEqual(result.items.map(i => i.insertText), ['text=', 'rank=', 'description=']);
 });
 
+test('unique_by provides variadic signature and static field completion', () => {
+  const service = new Service(() => {}), uri = 'untitled:unique-by';
+  const text = '@unique_by(self.) entity A { id id: string attr name: string config attr setting: string attr many: values<string> }';
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  const offset = text.indexOf('self.') + 'self.'.length;
+  const params = { textDocument: { uri }, position: { line: 0, character: offset } };
+  const choices = service.feature('textDocument/completion', params).items.map(item => item.label);
+  assert.ok(choices.includes('name'));
+  assert.ok(!choices.includes('id'));
+  assert.ok(!choices.includes('setting'));
+  assert.ok(!choices.includes('many'));
+  assert.match(service.feature('textDocument/signatureHelp', params).signatures[0].label, /\.\.\.fields:/);
+});
+
 test('captured field owners and normalized metadata distinguish valid overrides', () => {
   const text = "@targets(DecoratorTargets.All) decorator @proxy(target: type<self::entity>) @targets(DecoratorTargets.All) decorator @tag(text: string = 'x') entity Holding { @proxy(Holding) @tag attr security: Security } entity Security {} entity Child inherits Holding { @override @proxy(Holding) @tag(text='x') attr security: Security }";
   const doc = parse(text); validate([doc]);
@@ -177,9 +191,9 @@ test('decorator completion filters all definition kinds and attribute categories
   ].join('\n') + '\n';
   const common = ['anywhere', 'description', 'title'];
   const examples = [
-    ['@| entity A {}', [...common, 'definition', 'model']],
-    ['@| final entity A {}', [...common, 'definition', 'model']],
-    ['entity Root {} @| entity A inherits Root {}', [...common, 'decodes_rank', 'definition', 'model']],
+    ['@| entity A {}', [...common, 'definition', 'model', 'unique_by']],
+    ['@| final entity A {}', [...common, 'definition', 'model', 'unique_by']],
+    ['entity Root {} @| entity A inherits Root {}', [...common, 'decodes_rank', 'definition', 'model', 'unique_by']],
     ['@| value item {}', [...common, 'definition']],
     ['@| decodes Codes {}', [...common, 'definition', 'flags']],
     ['@| type label = string', [...common, 'definition', 'model']],
@@ -193,7 +207,7 @@ test('decorator completion filters all definition kinds and attribute categories
     ['entity A {} extend A { @| snapshot attr x: string }', [...common, 'dimension', 'overload', 'override', 'temporal']],
     ['value item { @| attr x: string }', [...common, 'value_field']],
     ['value item { @| static attr x: string }', [...common, 'value_field']],
-    ['@|', [...common, 'allow_multiple', 'decodes_rank', 'definition', 'flags', 'model', 'targets']],
+    ['@|', [...common, 'allow_multiple', 'decodes_rank', 'definition', 'flags', 'model', 'targets', 'unique_by']],
     ['entity A { @|', [...common, 'dense', 'sparse', 'definition', 'dimension', 'extra_input_param', 'identity', 'overload', 'override', 'relationship', 'reverse_relationship', 'setting', 'temporal']],
     ['entity A {} extend A { @| }', [...common, 'definition', 'dense', 'sparse', 'dimension', 'extra_input_param', 'overload', 'override', 'relationship', 'reverse_relationship', 'setting', 'temporal']],
     ['value item { @|', [...common, 'value_field']],

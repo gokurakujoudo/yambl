@@ -11,7 +11,21 @@ function capture(node, symbols) {
 }
 
 function argumentType(resolver, syntax, expected) {
-  let actual = resolver.valueType(resolver.evaluate(syntax));
+  const termValue = resolver.evaluate(syntax);
+  let actual = resolver.valueType(termValue);
+  if (expected.name === 'attrs' && termValue.sort === 'field' && termValue.source && expected.args.length === 2) {
+    const [category, target] = expected.args;
+    for (const owner of resolver.symbols.values()) {
+      if (owner.kind !== 'entity' || (owner.key !== target.key && !owner.ancestors?.some(item => item.key === target.key))) continue;
+      const field = owner.effective?.get(termValue.source.name.value);
+      if (field !== termValue.source) continue;
+      const resolved = new Resolver(field.doc, () => {}, resolver.symbols, field.owner, true).resolve(field.type);
+      if (field.mode === 'id' || resolved.kind === 'collection' || (category.exact !== null && !category.exact.split('+').includes(field.mode[0].toUpperCase() + field.mode.slice(1)))) continue;
+      const root = owner.ancestors?.at(-1) || owner;
+      const qualified = root.key.split('\0').slice(-2).filter(Boolean).join('.');
+      actual = { ...expected, exact: qualified + '.' + field.name.value };
+    }
+  }
   const literalKind = syntax.quoted ? 'STRING' : ['true', 'false'].includes(syntax.name) ? 'BOOLEAN' : /^-?\d+$/.test(syntax.name) ? 'INT' : 'NUMBER';
   const literalTypes = { string: ['STRING'], integer: ['INT'], snowflake_id: ['INT'], float: ['INT', 'NUMBER'], decimal: ['INT', 'NUMBER'], bool: ['BOOLEAN'] };
   if ((syntax.quoted || syntax.literal) && !syntax.args && !syntax.params && !syntax.accesses?.length && !syntax.operations?.length && literalTypes[expected.name]?.includes(literalKind)) actual = { ...expected, exact: actual.exact };
@@ -36,7 +50,7 @@ function argumentType(resolver, syntax, expected) {
 function checkParameters(declaration, issue, symbols) {
   if (declaration.name.value === 'extra_input_params') issue(declaration.doc, declaration.token, 'use @extra_input_param instead of @extra_input_params');
   if (!declaration.metadata.some(a => a.name === 'targets')) issue(declaration.doc, declaration.token, 'decorator requires explicit @targets');
-  const seen = new Set(); let pairSeen = false, optionalSeen = false;
+  const seen = new Set(); let pairSeen = false, optionalSeen = false, variadicSeen = false;
   const resolver = new Resolver(declaration.doc, issue, symbols, null);
   for (const formal of declaration.parameters) {
     const name = formal.name.value;
@@ -47,7 +61,10 @@ function checkParameters(declaration, issue, symbols) {
     seen.add(name);
     if ((pairSeen && !formal.pair) || (optionalSeen && !formal.optional)) resolver.issue(formal, 'ordinary parameters precede pairs; optional pairs come last');
     if ((formal.optional && !formal.pair) || (formal.pair && formal.default)) resolver.issue(formal, 'only pairs use ?; only ordinary parameters use defaults');
+    if (variadicSeen) resolver.issue(formal, 'variadic parameter must be last');
+    if (formal.variadic && (pairSeen || formal.optional || formal.default)) resolver.issue(formal, 'variadic parameter cannot use pairs, ? or defaults');
     pairSeen ||= formal.pair; optionalSeen ||= formal.optional;
+    variadicSeen ||= formal.variadic;
     if (!hasSelf(formal.type)) {
       const expected = resolver.resolve(formal.type);
       if (expected.name === 'input_type' && !formal.pair) resolver.issue(formal.type, 'input_type is only a decorator pair constraint');
@@ -58,11 +75,11 @@ function checkParameters(declaration, issue, symbols) {
 }
 
 function callArguments(call, declaration, resolver) {
-  const ordinary = declaration.parameters.filter(p => !p.pair);
+  const ordinary = declaration.parameters.filter(p => !p.pair && !p.variadic), variadic = declaration.parameters.some(p => p.variadic);
   const args = [], supplied = new Set(); let description = null, position = 0, pairSeen = false;
   for (const [i, argument] of call.arguments.entries()) {
     const named = argument.mode === 'keyword' && argument.key.value === 'description';
-    const trailing = argument.mode === 'positional' && i === call.arguments.length - 1 && (pairSeen || ordinary.every(p => supplied.has(p.name.value))) && argument.type.quoted && !argument.type.accesses.length && !argument.type.operations?.length && !argument.type.args && !argument.type.params;
+    const trailing = argument.mode === 'positional' && !variadic && i === call.arguments.length - 1 && (pairSeen || ordinary.every(p => supplied.has(p.name.value))) && argument.type.quoted && !argument.type.accesses.length && !argument.type.operations?.length && !argument.type.args && !argument.type.params;
     if (named || trailing) {
       if (description) resolver.issue(argument, 'duplicate decorator description');
       if (i !== call.arguments.length - 1) resolver.issue(argument, 'description must be the final decorator argument');
@@ -118,8 +135,8 @@ function bindCall(call, node, issue, symbols, values = null) {
     return JSON.stringify([declaration.key, field ? root + '\0' + field.name.value : '', descriptionType && canonical(descriptionType)]);
   }
   const formalResolver = new Resolver(declaration.doc, issue, symbols, null, false, actualResolver.bindings);
-  const ordinary = declaration.parameters.filter(p => !p.pair), pairs = declaration.parameters.filter(p => p.pair);
-  const supplied = new Map(), keys = new Set();
+  const ordinary = declaration.parameters.filter(p => !p.pair && !p.variadic), pairs = declaration.parameters.filter(p => p.pair), variadic = declaration.parameters.find(p => p.variadic);
+  const supplied = new Map(), keys = new Set(), variadicArguments = [];
   let position = 0, pairPosition = 0, keywordSeen = false, pairSeen = false;
   for (const argument of args) {
     let formal;
@@ -134,10 +151,11 @@ function bindCall(call, node, issue, symbols, values = null) {
       if (formal) doc.bindings.set(argument.key.start, formal);
     } else {
       if (keywordSeen) actualResolver.issue(argument, 'positional arguments must precede named arguments');
-      formal = ordinary[position++];
+      formal = ordinary[position++] || variadic;
     }
     if (pairSeen && argument.mode !== 'pair') actualResolver.issue(argument, 'new pairs must follow ordinary arguments');
     if (!formal) actualResolver.issue(argument, `unexpected argument for decorator: ${name}`);
+    else if (formal.variadic) variadicArguments.push(argument);
     else if (supplied.has(formal.name.value)) actualResolver.issue(argument, `duplicate decorator argument: ${formal.name.value}`);
     else supplied.set(formal.name.value, argument);
   }
@@ -145,6 +163,10 @@ function bindCall(call, node, issue, symbols, values = null) {
   for (const formal of declaration.parameters) {
     const expected = formalResolver.resolve(formal.type), name = formal.name.value;
     if (expected.kind === 'collection') formalResolver.issue(formal.type, 'decorator parameters cannot be collections');
+    if (formal.variadic) {
+      for (const argument of variadicArguments) bound.push([name, '', canonical(argumentType(actualResolver, argument.type, expected))]);
+      continue;
+    }
     const argument = supplied.get(name);
     if (!argument) {
       if (formal.default) {
@@ -216,6 +238,20 @@ function checkDecorators(documents, issue, symbols) {
         bindCall(call, node, issue, symbols, values);
         const definition = doc.scope.get(name);
         if (definition?.kind === 'decorator') checkTarget(call, node, declaration, issue, symbols);
+        if (name === 'unique_by' && definition?.key.split('\0').at(-2) === 'builtins' && node.kind === 'entity') {
+          const args = call.arguments.filter(argument => argument.mode === 'positional'), seenFields = new Set();
+          if (!args.length) issue(doc, call.token, 'unique_by requires at least one field');
+          for (const argument of args) {
+            const syntax = argument.type, access = syntax.accesses?.[0];
+            if (syntax.name !== 'self' || syntax.accesses?.length !== 1 || access.operator.value !== '.' || syntax.args || syntax.params || syntax.operations?.length) { issue(doc, argument.token, 'unique_by requires direct self fields'); continue; }
+            const field = node.effective?.get(access.token.value);
+            if (!field) continue;
+            const resolved = new Resolver(field.doc, () => {}, symbols, field.owner, true).resolve(field.type);
+            if (field.mode !== 'static' || resolved.kind === 'collection' || field.metadata.some(item => item.name === 'dimension')) { issue(doc, argument.token, 'unique_by requires an undimensioned static scalar field'); continue; }
+            if (seenFields.has(field.name.value)) issue(doc, argument.token, 'unique_by repeats a logical field');
+            seenFields.add(field.name.value);
+          }
+        }
         if (definition?.kind === 'decorator' && seen.has(name) && !allowsMultiple(definition)) issue(doc, call.token, `duplicate decorator: ${name}`);
         seen.add(name);
         if (['sparse', 'dense'].includes(name)) {

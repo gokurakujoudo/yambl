@@ -197,7 +197,7 @@ function describe(target) {
   if (target.kind === 'constant') return `const ${target.name.value}: ${formatType(target.type)} = ${target.doc.text.slice(target.initializer.token.start, target.initializer.end)}`;
   const { typeLabel } = require('./calculation-tools.cjs');
   if (['calculation_binding', 'lookup_input'].includes(target.kind)) return `${target.name.value}: ${typeLabel(target.resolvedType)}`;
-  if (target.kind === 'decorator_parameter') return `${target.pair ? '*' : ''}${target.name.value}${target.optional ? '?' : ''}: ${formatType(target.type)}${target.default ? ' = ' + formatType(target.default) : ''}`;
+  if (target.kind === 'decorator_parameter') return `${target.pair ? '*' : target.variadic ? '...' : ''}${target.name.value}${target.optional ? '?' : ''}: ${formatType(target.type)}${target.default ? ' = ' + formatType(target.default) : ''}`;
   if (target.kind === 'decorator') {
     const targets = target.metadata.filter(a => a.name === 'targets').map(a => `@targets(${a.arguments.map(arg => (arg.mode === 'keyword' ? arg.key.value + '=' : '') + formatType(arg.type)).join(', ')})\n`).join('');
     return `${targets}${target.metadata.some(a => a.name === 'allow_multiple') ? '@allow_multiple\n' : ''}decorator @${target.name.value}(${target.parameters.map(describe).join(', ')})\nOptional trailing metadata: description: string`;

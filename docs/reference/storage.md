@@ -281,6 +281,8 @@ SQL、JSONL、manifest、文档及关系图共用存储模型。
 ## 显式实例校验
 
 `reader.validate()` 返回 `ReadResult[ValidationReport]`，报告及问题列表不可变。
+它检查模型声明的 `@unique_by` 唯一键；事务最终候选使用相同规则。冲突报告包含
+声明实体、字段、注解来源及所有冲突实例，缺值跳过组合而 `ERROR` 会报告。
 统一数据接口通过 `data.read()` 创建固定快照，包内校验命令读取仓库配置：
 
 ```console

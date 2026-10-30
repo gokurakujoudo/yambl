@@ -117,6 +117,7 @@ async function main() {
   expectScope('decorator @tag(text: string)', 'decorator', 'keyword.declaration.yambl');
   expectScope('decorator @tag(text: string)', '@tag', 'entity.name.function.yambl');
   expectScope('@allow_multiple', '@allow_multiple', 'entity.name.function.yambl');
+  expectScope('@unique_by(self.name)', '@unique_by', 'entity.name.function.yambl');
   expectScope('decorator @tag(*source?: string)', '*', 'keyword.operator.yambl');
   expectScope('decorator @tag(*source?: string)', '?', 'keyword.operator.yambl');
   expectScope('decorator @tag(*source?: string)', 'source', 'variable.other.property.yambl');

@@ -565,5 +565,35 @@
   ],
   [
     "entity A {} entity B inherits A { @overload @sparse('info') attr x: string } entity C inherits A { @overload @dense('info') attr x: string }"
+  ],
+  [
+    "@targets(DecoratorTargets.Entity) decorator @labels(prefix: integer, ...values: string) @labels(1, 'a', 'b', description='notes') entity A {}"
+  ],
+  [
+    "@targets(DecoratorTargets.Entity) decorator @labels(...values: string) @labels(1) entity A {}"
+  ],
+  [
+    "@targets(DecoratorTargets.Entity) decorator @labels(*pair: string, ...values: string)"
+  ],
+  [
+    "@unique_by(self.market, self.symbol) entity Instrument { id id: string attr market: string attr symbol: string }"
+  ],
+  [
+    "@unique_by() entity A {}"
+  ],
+  [
+    "@unique_by(self.x, self.x) entity A { attr x: string }"
+  ],
+  [
+    "@unique_by(self.x) entity A { config attr x: string }"
+  ],
+  [
+    "@unique_by(A.x) entity A { attr x: string }"
+  ],
+  [
+    "entity A { attr x: string } @unique_by(self.x) entity B inherits A {}"
+  ],
+  [
+    "@unique_by(self.primary) entity Issuer { id id: string @reverse_relationship(Security.lead) attr primary: Security } entity Security { id id: string @relationship(one, maybe) attr lead: Issuer }"
   ]
 ]

@@ -589,6 +589,7 @@ function checkComputations(documents, symbols, report) {
     const candidates = [];
     for (const expression of node.candidates) {
       const checker = new Checker(doc, null, issue), before = doc.diagnostics.length;
+      if (expression.kind === 'name' && expression.value in resultConstants) { issue(expression, `result constant ${expression.value} cannot be used in model expressions`); continue; }
       function flagsExpression(value) {
         if (value.kind === 'member' && value.operands[0].kind === 'name') {
           const root = value.operands[0], symbol = doc.scope.get(root.value);

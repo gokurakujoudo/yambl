@@ -23,12 +23,42 @@ Type 按现有类型兼容规则检查。每个 `*` 参数只接收一个 pair�
 所有 pair 在普通实参之后；`*selector?: Hierarchy` 可省略，可选 pair 只能在末尾。
 同一次调用的 key 不可重复；temporal 与引用的命名 dimension 参数还须在同一字段内互不重复。
 
+末尾的 `...values: Type` 接收零个或多个位置实参，每个实参单独检查类型。
+一个声明最多有一个普通变参，不能带默认值或 `?`，也不能与 `*` pair 参数混用；
+调用不能通过 `values=` 传入集合。
+
 每个 decorator 隐含一个可选 string `description` 元信息，不写入声明的形式参数列表。
 它位于全部显式实参之后，既可写成末尾字符串，也可写成 `description='说明'`。
 已有普通参数先正常绑定，只有剩余的末尾 string 才作为说明。例如
 `@title('标题', '说明')`、`@title(text='标题', '说明')` 与
 `@title('标题', description='说明')` 等价。description 为保留形式参数名，重复说明、
 非 string 说明以及说明后继续传参均报错。
+包含 `...` 参数时，位置字符串属于变参；附加说明必须写为 `description='说明'`。
+
+## 唯一键
+
+`@unique_by` 可以在实体上重复声明，定义一个或多个字段的组合唯一键：
+
+```yambl
+@unique_by(self.market, self.symbol)
+@unique_by(self.external_id)
+entity Instrument {
+    id instrument_id: string
+    static attr market: string
+    static attr symbol: string
+    static attr external_id: string
+}
+```
+
+每次调用至少提供一个直接的 `self.attr`，同一逻辑字段不能重复。字段可以继承，
+必须是无维度的 static 单值属性，也可以是符合该条件的单体反向属性；ID、集合、
+config、snapshot、SCD 和 computed 属性不能作为唯一键。
+父实体声明的键在它及其所有子类型之间检查；子实体声明的键只检查其子树。
+不同注解分别检查，不自动生成 lookup 或数据库唯一索引。
+
+组合中有非错误的非正常结果时跳过该实例，`false`、零和空字符串仍参与比较。
+所有字段都会读取，任何 `ERROR` 都会报告。显式数据校验和事务最终候选校验使用
+同一规则；候选失败不发布数据。报告包含声明、字段、来源和全部冲突实例。
 
 `input_type` 仅用于 decorator pair 的类型约束，接受非集合值类型和实体引用，拒绝
 集合、字段描述、dimension_ref 和 input_type 本身。内置声明为：

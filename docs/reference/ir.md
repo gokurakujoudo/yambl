@@ -5,7 +5,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 修订与独立性
 
-当前 `format_revision` 为整数 `12`。格式尚未固化，不承诺修订间兼容；结构变化时递增
+当前 `format_revision` 为整数 `13`。格式尚未固化，不承诺修订间兼容；结构变化时递增
 修订号。读取器拒绝不支持的修订号，要求重新编译，不自动迁移。
 
 文件完整保存本次采用的内置声明、原语目录和七个无载荷结果常量及携带载荷的 PARTIAL的含义。独立校验仅依赖
@@ -49,7 +49,9 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 - `parent` 是显式父类型身份，未写继承时为空字符串；`Entity` 可作为显式父类型。
 - `abstract` 标识不能直接实例化的实体，不能与 `final` 同时为 true。
 - `parameters` 保持形式参数顺序；每项保存 `name`、类型表达式 `type`、可选默认表达式
-  `default`、是否为 pair 的 `pair`、是否可省略的 `optional` 和 `source`。
+  `default`、是否为 pair 的 `pair`、是否可省略的 `optional`、是否为普通变参的
+  `variadic` 和 `source`。
+- `unique_keys` 保存实体直接声明的唯一键、逻辑字段身份及注解来源。
 - `expression` 保存别名正文或 constant 声明类型，其他声明为 `null`。
 - `initializer` 仅 constant 非空；`references` 保存初始化表达式作用域中的名称及解析身份。
 - `fields` 保存本声明及合并 extend 的实现；继承来的字段通过 `effective` 选取。
@@ -149,7 +151,8 @@ string 的原表达式参数保留 `${类型名}`；`references` 保留格式引
 
 decorator 调用保存 `{target, arguments, bound, source}`。`arguments` 保留
 位置、命名和 pair 区别及顺序；`bound` 按声明参数顺序保存 `{name, key, type}`，
-补齐普通参数默认值，保留 pair 的调用处 key 和类型。省略的可选 pair 不产生绑定项。
+补齐普通参数默认值，保留 pair 的调用处 key 和类型；普通变参逐项保存绑定。
+省略的可选 pair 和零个普通变参不产生绑定项。
 普通参数值位于绑定类型的 `exact` 中；相同的可重复调用保留多次。
 
 调用目标、参数类型和默认值均已解析。调用处 self 捕获、targets 和重复限制由共享

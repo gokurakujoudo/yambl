@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
 const { parse, format, range, position, stringValue, keywords, annotations, values, generics, entities, structures, constants, resultConstants } = require('./language/syntax.cjs');
-const { validate, describe } = require('./language/validation.cjs');
+const { validate, describe, formatType } = require('./language/validation.cjs');
 const { typeLabel, methodNames, methodHelp, nodes, defaultLabel, inputTypeHelp } = require('./language/calculation-tools.cjs');
 const typeTools = require('./language/type-tools.cjs');
 
@@ -429,6 +429,17 @@ class Service {
       if (doc.comments.some(c => c.start <= offset && offset <= c.end) || doc.tokens.some(t => t.value.startsWith("'") && t.start < offset && offset < t.end) || doc.text.slice(previous?.end ?? 0, offset).includes("'")) return null;
       const typeContext = typeTools.context(doc, offset);
       if (typeContext) return typeTools.signatureHelp(typeContext);
+      const decoratorCall = /@([a-z][a-z0-9_]*)\(([^@{}()]*)$/.exec(doc.text.slice(0, offset));
+      if (decoratorCall && !/\bdecorator\s*$/.test(doc.text.slice(0, decoratorCall.index))) {
+        const close = doc.text.indexOf(')', offset);
+        const scope = doc.errors.length ? this.completionScope(doc, decoratorCall.index, close < 0 ? offset : close + 1) : doc.scope;
+        const declaration = scope.get(decoratorCall[1]);
+        if (declaration?.kind === 'decorator') {
+          const parameters = declaration.parameters.map(p => ({ label: `${p.pair ? '*' : p.variadic ? '...' : ''}${p.name.value}${p.optional ? '?' : ''}: ${formatType(p.type)}` }));
+          const active = Math.min(decoratorCall[2].split(',').length - 1, Math.max(0, parameters.length - 1));
+          return { signatures: [{ label: `@${decoratorCall[1]}(${parameters.map(p => p.label).join(', ')})`, parameters }], activeSignature: 0, activeParameter: active };
+        }
+      }
       const calculationDoc = this.calculationDocument(doc, offset);
       const call = calculationDoc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes), ...(d.lookups || []).flatMap(nodes)]).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
       if (!call) return null;
@@ -523,6 +534,15 @@ class Service {
         const scope = doc.errors.length ? this.completionScope(doc, reverseOwner.index, offset) : doc.scope;
         return { isIncomplete: false, items: [...scope.values()].filter(owner => owner.kind === 'entity' && [...(owner.effective?.values() || [])].some(field => field.metadata.some(call => call.name === 'relationship'))).map(owner => ({ label: owner.name.value, kind: 7, insertText: owner.name.value + '.', detail: 'Entity with a forward relationship' })) };
       }
+      const uniqueField = /@unique_by\([^@{}()]*\bself\.([a-z_0-9]*)$/.exec(before);
+      if (uniqueField) {
+        const close = doc.text.indexOf(')', offset); let recovered = doc;
+        const scope = doc.errors.length ? this.completionScope(doc, uniqueField.index, close < 0 ? offset : close + 1, false, value => { recovered = value; }) : doc.scope;
+        const owner = recovered.declarations.find(d => d.kind === 'entity' && d.token.start >= uniqueField.index);
+        const symbols = new Map([...scope.values()].map(item => [item.key, item]));
+        const items = [...(owner?.effective || [])].filter(([, field]) => field.mode === 'static' && !field.metadata.some(item => item.name === 'dimension') && new Resolver(field.doc, () => {}, symbols, field.owner, true).resolve(field.type).kind !== 'collection').map(([label, field]) => ({ label, kind: 5, detail: describe(field) }));
+        return { isIncomplete: false, items };
+      }
       const member = /\.([a-z_0-9]*)$/.exec(before);
       if (member && (computation || constantContext || lookup)) {
         const expression = nodes(computation || constantContext || lookup).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
@@ -611,7 +631,8 @@ class Service {
           return { isIncomplete: false, items: [...dimensions].map(([label, d]) => ({ label, kind: 5, detail: describe(d) })) };
         }
         const used = new Set([...call[2].matchAll(/\b([a-z][a-z0-9_]*)\s*=/g)].map(m => m[1]));
-        const items = declaration?.kind === 'decorator' ? declaration.parameters.filter(p => !p.pair && !used.has(p.name.value)).map(p => ({ label: p.name.value, kind: 5, insertText: p.name.value + '=', detail: describe(p) })) : [];
+        const items = declaration?.kind === 'decorator' ? declaration.parameters.filter(p => !p.pair && !p.variadic && !used.has(p.name.value)).map(p => ({ label: p.name.value, kind: 5, insertText: p.name.value + '=', detail: describe(p) })) : [];
+        if (call[1] === 'unique_by') items.push({ label: 'self', kind: 6, insertText: 'self.', detail: 'Field of the decorated entity.' });
         if (declaration?.kind === 'decorator' && !used.has('description')) items.push({ label: 'description', kind: 5, insertText: 'description=', detail: 'Optional trailing string metadata.' });
         return { isIncomplete: false, items };
       }
