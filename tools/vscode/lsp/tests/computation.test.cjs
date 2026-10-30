@@ -187,7 +187,7 @@ entity E {
 test('descriptor completions use the receiver and reject invalid member contexts', () => {
   const service = new Service(() => {}), uri = 'untitled:descriptor-completions';
   for (const [text, marker, labels] of [
-    ['entity E { static attr n: integer computed attr c: integer { return self.n::value() } }', 'self.n::', ['value', 'best_available']],
+    ['entity E { static attr n: integer computed attr c: integer { return self.n::value() } }', 'self.n::', ['value', 'best_available', 'records']],
     ['entity E { computed attr n: integer { return 1 } computed attr c: integer { return self.n::value() } }', 'self.n::', ['value']],
     ['entity E { computed attr c: integer { let n = 1 return n::value() } }', 'n::', []],
     ['entity E { static attr n: integer static attr related: self.n::type }', 'self.n::', ['type', 'value', 'entity']],
@@ -206,7 +206,7 @@ test('example model completion handles unfinished inputs and typed collection/re
   const { original, open, feature } = exampleEditor();
   for (const [prefix, name, expected] of [
     ['input.', 'industry_date', ['industry_date', 'price_date', 'as_of_date', 'price_source', 'price_hierarchy']],
-    ['holdings.', 'group_by', ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'recover']],
+    ['holdings.', 'group_by', ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'all', 'recover']],
     ['h.security.', 'wind_level1_industry', ['issuer', 'currency', 'price', 'wind_level1_industry']],
   ]) {
     const start = original.indexOf(prefix + name) + prefix.length;
@@ -316,6 +316,16 @@ test('calculation comments retain branch boundaries and formatting is idempotent
   assert.equal(format(parse(text)), text);
 });
 
+test('records infer custom time and dimension members for completion', () => {
+  const service = new Service(() => {}), uri = 'untitled:records';
+  const text = "dimension source { value source: string } entity A { @dimension(source) @temporal(day: date) snapshot attr price: integer computed attr valid: bool { return self.price::records().all(r -> r.value > 0) } }";
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  const offset = text.indexOf('r.value') + 'r.'.length;
+  const result = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: offset } });
+  assert.deepEqual(result.items.map(item => item.label), ['day', 'source', 'value']);
+  assert.deepEqual(service.document(uri).declarations.find(item => item.name.value === 'A').fields.find(field => field.name.value === 'valid').inferredInputs, []);
+});
+
 test('calculated descriptors, arguments, inferred hover and field navigation', () => {
   const service = new Service(() => {}), uri = 'untitled:computations';
   service.open.set(uri, { text: source, version: 1 }); service.refresh();
@@ -324,7 +334,7 @@ test('calculated descriptors, arguments, inferred hover and field navigation', (
     return service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: prefix.length - 1, character: prefix.at(-1).length } });
   };
   const labels = offset => request('completion', offset).items.map(i => i.label);
-  assert.deepEqual(labels(source.indexOf('::best_available') + 2), ['value', 'best_available']);
+  assert.deepEqual(labels(source.indexOf('::best_available') + 2), ['value', 'best_available', 'records']);
   assert.deepEqual(labels(source.indexOf('self.value::value') + 'self.value::'.length), ['value']);
   assert.deepEqual(labels(source.indexOf('best_available(') + 'best_available('.length), ['as_of_date', 'source', 'hierarchy']);
   assert.ok(request('hover', source.indexOf('total:')).contents.value.includes('price_date: date = input.as_of_date'));
@@ -378,7 +388,7 @@ entity Fund {
   assert.match(feature('hover', text.indexOf('holdings.group_by')).contents.value, /collection<HoldingEntry>/);
   assert.match(feature('hover', text.indexOf('group_by(h')).contents.value, /Grouped<string, HoldingEntry>/);
   assert.match(feature('hover', text.indexOf('h.security')).contents.value, /h: HoldingEntry/);
-  assert.deepEqual(feature('completion', text.indexOf('holdings.group_by') + 'holdings.'.length).items.map(i => i.label), ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'recover']);
+  assert.deepEqual(feature('completion', text.indexOf('holdings.group_by') + 'holdings.'.length).items.map(i => i.label), ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'all', 'recover']);
   assert.ok(feature('completion', text.indexOf('h.security') + 2).items.some(i => i.label === 'security'));
   assert.ok(feature('completion', text.indexOf('h.security.industry') + 'h.security.'.length).items.some(i => i.label === 'industry'));
   for (const [use, declaration] of [['security.industry', 'security: Security'], ['industry::value', 'industry: string']]) {
@@ -434,9 +444,9 @@ test('extra inputs merge, declared defaults win, descriptions and lambda layout 
 test('unfinished double-colon calls complete stored and computed example fields', () => {
   const { original, open, feature } = exampleEditor();
   for (const [needle, expected] of [
-    ['self.holdings::value()', ['value', 'best_available']],
+    ['self.holdings::value()', ['value', 'best_available', 'records']],
     ['h.market_value::value(as_of_date=input.price_date ?? input.as_of_date)', ['value']],
-    ['self.security.price::best_available()', ['value', 'best_available']],
+    ['self.security.price::best_available()', ['value', 'best_available', 'records']],
   ]) {
     const start = original.indexOf(needle), end = start + needle.indexOf('::') + 2;
     assert.ok(start >= 0);

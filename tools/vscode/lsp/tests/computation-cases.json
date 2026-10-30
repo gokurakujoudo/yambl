@@ -196,5 +196,17 @@
   ],
   [
     "entity E { computed attr n: integer { return 1 } computed attr result: integer { return self.n::at() } }"
+  ],
+  [
+    "dimension source { value source: string } entity A { @dimension(source) @temporal(day: date) snapshot attr price: integer computed attr valid: bool { return self.price::records().all(r -> r.day > parse_date('2026-01-01') and r.source == 'X' and r.value > 0) } }"
+  ],
+  [
+    "entity A { computed attr value: integer { return 1 } computed attr bad: bool { return self.value::records().all(r -> true) } }"
+  ],
+  [
+    "entity A { attr x: integer computed attr bad: bool { return self.x::records(day=input.day).all(r -> true) } }"
+  ],
+  [
+    "entity A { computed attr bad: bool { return [1].all(x -> x) } }"
   ]
 ]

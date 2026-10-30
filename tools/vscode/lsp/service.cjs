@@ -508,7 +508,7 @@ class Service {
         const selected = calculationDoc.bindings.get(memberStart);
         const operator = /::[a-z_]*$/.exec(before);
         const receiver = calculationDoc.accessTerms?.get(operator.index);
-        const labels = lookup ? selected && ['id', 'static', 'scd'].includes(selected.mode) ? ['value'] : [] : computation ? selected ? selected.mode === 'computed' ? ['value'] : ['value', 'best_available'] : [] : receiver?.sort === 'field' ? ['type', ...(receiver.instance ? ['value'] : []), ...(receiver.source?.owner?.kind === 'entity' ? ['entity'] : [])] : [];
+        const labels = lookup ? selected && ['id', 'static', 'scd'].includes(selected.mode) ? ['value'] : [] : computation ? selected ? selected.mode === 'computed' ? ['value'] : ['value', 'best_available', ...(selected.mode !== 'id' && !selected.metadata.some(call => call.name === 'reverse_relationship') ? ['records'] : [])] : [] : receiver?.sort === 'field' ? ['type', ...(receiver.instance ? ['value'] : []), ...(receiver.source?.owner?.kind === 'entity' ? ['entity'] : [])] : [];
         return { isIncomplete: false, items: labels.map(label => computation || lookup ? { label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 } : { label, kind: 10, detail: help[label] || help.self }) };
       }
       if (/\binput\.[a-z_0-9]*$/.test(before) && (computation || lookup)) return { isIncomplete: false, items: ((computation || lookup).inferredInputs || []).filter(p => p.name !== '__completion').map(p => ({ label: p.name, kind: 5, detail: typeLabel(p.type) + (p.default ? ' = ' + defaultLabel(p.default) : p.required ? ' (required)' : ' (optional)'), documentation: p.description })) };
@@ -548,6 +548,7 @@ class Service {
         const expression = nodes(computation || constantContext || lookup).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
         const receiver = expression?.operands[0]?.inferred?.type;
         if (receiver && receiver.kind !== 'unknown') {
+          if (receiver.name === 'record') return { isIncomplete: false, items: receiver.params.map(([label], index) => ({ label, kind: 5, detail: typeLabel(receiver.args[index]) })) };
           const symbols = new Map([...this.documents.values(), calculationDoc].flatMap(d => [...d.scope.values()].map(s => [s.key, s])));
           const owner = symbols.get(receiver.key);
           const fields = new Map(owner?.kind === 'value' ? owner.fields.map(f => [f.name.value, f]) : owner?.effective || []);

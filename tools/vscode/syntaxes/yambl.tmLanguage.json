@@ -96,7 +96,7 @@
       }
     },
     {
-      "match": "(::)(type|value|entity|best_available|subtypes)\\b",
+      "match": "(::)(type|value|entity|best_available|records|subtypes)\\b",
       "captures": {
         "1": {
           "name": "punctuation.accessor.yambl"
@@ -285,7 +285,7 @@
     },
     {
       "name": "support.function.yambl",
-      "match": "\\b(?:to_string|to_integer|to_decimal|to_float|parse_date|format_date|parse_datetime|format_datetime|truncate|round)(?=\\s*\\()"
+      "match": "\\b(?:to_string|to_integer|to_decimal|to_float|parse_date|format_date|parse_datetime|format_datetime|truncate|round|all)(?=\\s*\\()"
     },
     {
       "name": "constant.other.yambl",
@@ -318,6 +318,13 @@
     {
       "name": "variable.parameter.yambl",
       "match": "\\b[a-z][a-z0-9_]*(?=\\s*=)"
+    },
+    {
+      "match": "(\\.)(all)(?=\\s*\\()",
+      "captures": {
+        "1": { "name": "punctuation.accessor.yambl" },
+        "2": { "name": "support.function.yambl" }
+      }
     },
     {
       "match": "(\\.)([a-z][a-z0-9_]*)\\b",

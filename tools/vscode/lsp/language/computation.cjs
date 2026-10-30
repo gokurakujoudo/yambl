@@ -181,6 +181,10 @@ function checkComputations(documents, symbols, report) {
         this.dependencies.add(field);
         return [...analyze(field).inputs.values()];
       }
+      if (operation === 'records') {
+        if (field.mode === 'id' || field.metadata.some(call => call.name === 'reverse_relationship')) this.issue(node, 'records requires a physically stored attribute');
+        return [];
+      }
       if (!['value', 'best_available'].includes(operation)) this.issue(node, 'stored fields support ::value or ::best_available');
       const result = [];
       for (const call of field.metadata) {
@@ -262,6 +266,11 @@ function checkComputations(documents, symbols, report) {
           return { type: new Resolver(this.doc, report, symbols, this.owner).evaluate(syntax).type };
         }
         const parent = this.read(this.infer(receiver, environment), receiver, true);
+        if (parent.type.name === 'record') {
+          const index = parent.type.params.findIndex(([name]) => name === node.value);
+          if (index < 0) { this.issue(node, `unknown record member: ${node.value}`); return { type: unknown }; }
+          return { type: parent.type.args[index] };
+        }
         if (parent.type.kind === 'value') {
           const owner = symbols.get(parent.type.key), field = owner?.kind === 'value' && owner.fields.find(f => f.name.value === node.value);
           if (field) { this.doc.bindings.set(node.memberToken.start, field); return { type: new Resolver(field.doc, report, symbols, owner, true).resolve(field.type) }; }
@@ -388,6 +397,20 @@ function checkComputations(documents, symbols, report) {
           return { type: type('Hierarchy', 'reference', { key: this.doc.scope.get('Hierarchy').key }) };
         }
         if (!value.field) { this.issue(node, 'field operation requires a field descriptor'); return { type: unknown }; }
+        if (method === 'records') {
+          this.parameters(value, method, node);
+          if (node.arguments.length) this.issue(node, '::records() does not accept arguments');
+          const field = value.field, members = [];
+          if (field.mode === 'snapshot') members.push([field.metadata.find(call => call.name === 'temporal')?.dimensions[0]?.token.value || 'as_of_date', type('date')]);
+          else if (field.mode === 'scd') members.push(['valid_from', type('date')], ['valid_to', type('date')]);
+          for (const call of field.metadata.filter(item => item.name === 'dimension')) {
+            const dimension = call.dimension || resolveDimension(field.owner, call.arguments[0]?.type.name);
+            if (dimension) members.push([dimension.value.value, new Resolver(dimension.doc, report, symbols, dimension.owner).resolve(dimension.type)]);
+          }
+          members.push(['value', value.type]);
+          const record = type('record', 'value', { args: members.map(([, resolved]) => resolved), params: members.map(([name]) => [name, '']) });
+          return { type: type('sequence', 'collection', { args: [record] }) };
+        }
         const explicit = new Map(node.arguments.map(a => [a.name, a.expression]));
         const substitute = expression => expression.kind === 'member' && expression.operands[0].kind === 'name' && expression.operands[0].value === 'input' ? explicit.get(expression.value) || expression : { ...expression, operands: expression.operands.map(substitute), arguments: expression.arguments.map(a => ({ ...a, expression: substitute(a.expression) })) };
         const parameters = this.parameters(value, method, node).map(p => p.default ? { ...p, default: substitute(p.default) } : p), requirements = new Map(parameters.map(p => [p.name, p])), supplied = new Set();
@@ -440,7 +463,7 @@ function checkComputations(documents, symbols, report) {
         }
         return { type: resultType };
       }
-      if (!['map', 'filter', 'flat_map', 'group_by', 'sum_by'].includes(method)) { this.issue(node, `unknown calculation method: ${method}`); return { type: unknown }; }
+      if (!['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'all'].includes(method)) { this.issue(node, `unknown calculation method: ${method}`); return { type: unknown }; }
       if (node.arguments.length !== 1 || node.arguments[0].name || node.arguments[0].expression.kind !== 'lambda') { this.issue(node, `${method} requires one lambda argument`); return { type: unknown }; }
       if (!['collection', 'values', 'sequence', 'grouped'].includes(value.type.name) || !value.type.args.length) { this.issue(node, `${method} requires a sequence`); return { type: unknown }; }
       const grouped = value.type.name === 'grouped';
@@ -449,9 +472,9 @@ function checkComputations(documents, symbols, report) {
       if (environment.has(fn.value) || !snake(fn.value)) this.issue(fn, 'lambda requires a unique snake_case parameter');
       const local = new Map(environment); const declaration = { kind: 'calculation_binding', name: fn.token, doc: this.doc, resolvedType: value.type.args.at(-1) }; this.doc.bindings.set(fn.token.start, declaration); local.set(fn.value, { type: value.type.args.at(-1), declaration });
       const returned = base(this.read(this.infer(fn.operands[0], local), fn.operands[0]).type);
-      if (method === 'filter') {
-        if (returned.name !== 'bool' && returned.kind !== 'unknown') this.issue(fn, 'filter predicate requires bool');
-        return value;
+      if (method === 'filter' || method === 'all') {
+        if (returned.name !== 'bool' && returned.kind !== 'unknown') this.issue(fn, `${method} predicate requires bool`);
+        return method === 'all' ? { type: type('bool') } : value;
       }
       if (method === 'flat_map') {
         if (!['sequence', 'collection', 'values'].includes(returned.name) || !returned.args.length) { this.issue(fn, 'flat_map requires a sequence result'); return { type: unknown }; }

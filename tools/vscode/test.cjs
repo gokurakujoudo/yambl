@@ -137,6 +137,8 @@ async function main() {
   expectScope('let x = self.price::value(as_of_date=input.day)', '::', 'punctuation.accessor.yambl');
   expectScope('let x = self.price::value(as_of_date=input.day)', 'value', 'variable.language.yambl');
   expectScope('let x = self.price::best_available()', 'best_available', 'variable.language.yambl');
+  expectScope('self.price::records().all(r -> true)', 'records', 'variable.language.yambl');
+  expectScope('self.price::records().all(r -> true)', 'all', 'support.function.yambl');
   assert.ok(!grammar.tokenizeLine('self.price::at()', textmate.INITIAL).tokens.some(t => t.scopes.includes('variable.language.yambl')));
   checks++;
   expectScope('type selected<t: type<Entity>> = t', 'selected', 'support.type.yambl');

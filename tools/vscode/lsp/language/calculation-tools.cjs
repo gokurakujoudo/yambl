@@ -13,12 +13,14 @@ function typeLabel(type) {
 const methods = {
   map: ['map(f: T -> U) -> Seq<U>', 'Transform each contribution once. Preserve order, row count and duplicates.'],
   filter: ['filter(predicate: T -> bool) -> Seq<T>', 'Keep contributions whose predicate is true. Failures and Partial issues are preserved.'],
+  all: ['all(predicate: T -> bool) -> bool', 'Check each element in order, stopping at the first false or non-normal result. An empty sequence returns true.'],
   flat_map: ['flat_map(f: T -> Seq<U>) -> Seq<U>', 'Expand exactly one sequence level. Preserve duplicate contributions.'],
   group_by: ['group_by(key: T -> K) -> Grouped<K, T>', 'Group by typed key equality. Do not deduplicate contributions.'],
   sum_by: ['sum_by(value: T -> Number) -> Number | mapping<K, Number>', 'Sum numeric contributions; grouped input returns a mapping. Empty input produces zero or an empty mapping. Integer and decimal arithmetic is exact.'],
   recover: ['recover(case STATUS[, STATUS] -> value, ...)', 'Evaluate only the matched branch. Normal results and unmatched states remain unchanged. case PARTIAL as p exposes p.value and p.issues; accepting p.value explicitly clears Partial.'],
   best_available: ['field::best_available(named_parameters...) -> ReadResult<T>', 'Explicit dimension value overrides Hierarchy. Choose the latest date within the per-instance config fallback window, then source priority. SCD never crosses gaps.'],
   value: ['field::value(named_parameters...) -> ReadResult<T>', 'Read a stored coordinate or evaluate a computed field. Snapshot reads match the exact date; SCD reads match the active interval. Unbound parameters merge by name; explicit bindings affect only this dependency.'],
+  records: ['field::records() -> Seq<Record>', 'Read the physically stored coordinates and their native value results without applying configuration defaults.'],
 };
 const conversions = require('./conversions.cjs');
 for (const [name, parameters] of Object.entries(conversions.signatures)) {
@@ -28,7 +30,7 @@ for (const [name, parameters] of Object.entries(conversions.signatures)) {
 
 function methodNames(type) {
   return ['collection', 'values', 'sequence'].includes(type?.name)
-    ? ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'recover']
+    ? ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'all', 'recover']
     : type?.name === 'grouped' ? ['sum_by', 'recover'] : ['recover'];
 }
 

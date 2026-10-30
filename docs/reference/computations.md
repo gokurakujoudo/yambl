@@ -90,6 +90,7 @@ Hierarchy 名称使用 PascalCase，按 namespace/import 查找；条目可混�
 | --- | --- |
 | `field::value(...)` | 存储字段按日期和全部维度精确取值；计算字段绑定参数并求值 |
 | `field::best_available(...)` | 仅存储字段按声明的 Hierarchy 和回退规则选择 |
+| `field::records()` | 读取当前实例该存储属性的物理记录序列 |
 
 `::value` 对 snapshot 只读取指定日期，对 SCD 读取当天有效期间；static 无日期，
 config 读取有效配置。它不自动使用 Hierarchy 或日期回退。计算字段的参数和省略默认关系
@@ -97,11 +98,29 @@ config 读取有效配置。它不自动使用 Hierarchy 或日期回退。计�
 保持不变，不能直接用于计算字段。
 
 字段描述不能直接作为计算值。`let x = self.quantity`、`return self.quantity`、
-`self.quantity * 2` 均报错，须在末端加 `::value(...)` 或 `::best_available(...)`。
+`self.quantity * 2` 均报错，须使用 `::value(...)`、`::best_available(...)` 或
+读取物理记录的 `::records()`。
 同样要求适用于 lambda、参数、recover 接收者及 dimension 的 fallback_days 表达式。
 中间引用允许 `h.security.price::value()`；单独保存引用须写
 `let security = h.security::value()`。`input.name`、局部变量及已取得的结构化 value 成员
 不是实体字段描述，仍直接使用。类型表达式中的 `self.field::value` 保持原含义与写法。
+
+`::records()` 不接收参数，只适用于有物理存储的属性，不适用于计算字段或只读反向关系。
+每条记录包含 `value` 及该属性的坐标：维度名、snapshot 声明的日期参数名，或 SCD 的
+`valid_from` 和 `valid_to`。没有物理行时返回空序列；已有行的 EMPTY、NO_ENTRY 和
+NOT_APPLICABLE 保留在记录的 `value` 中。config 的记录是实例实际存储行，不代入
+ConfigGroup 或模型默认值。坐标无效时外层返回 ERROR，单条值解码失败保留在该记录中。
+
+```yambl
+entity Account {
+    id account_id: string
+    @temporal(day: date)
+    snapshot attr balance: integer
+    computed attr positive_history: bool {
+        return self.balance::records().all(r -> r.value > 0)
+    }
+}
+```
 
 显式 value 优先于 hierarchy，显式 hierarchy 优先于声明默认值。没有可用 Hierarchy
 时必须提供 value；最多自动选择一个 Hierarchy，其余维度必须明确提供。
@@ -166,6 +185,7 @@ computed attr amount: money {
 | --- | --- |
 | map(f) | Seq<T> → Seq<U>，保留行数和重复贡献 |
 | filter(predicate) | Seq<T> → Seq<T>，保留条件为真的行 |
+| all(predicate) | Seq<T> → bool，按顺序检查，首个 false 或非正常结果短路；空序列为 true |
 | flat_map(f) | Seq<T> → Seq<U>，展开一层 |
 | group_by(key) | Seq<T> → Grouped<K,T>，按类型化键相等分组 |
 | sum_by(value) | 序列返回数值；分组返回 mapping<K, Number> |
@@ -204,7 +224,7 @@ when 只读取存储 static 字段并作等值 AND；非错误非正常值为不
 
 ## 产物、执行与边界
 
-IR 修订号 11，运行时契约 12，存储布局 9，JSONL 封装格式 3。
+IR 修订号 14，运行时契约 16，存储布局 9，JSONL 封装格式 3。
 IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
 生成包要求 Python 3.14+，运行依赖由生成项目的 `pyproject.toml` 声明。
 计算执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。
