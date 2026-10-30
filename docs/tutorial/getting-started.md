@@ -76,6 +76,10 @@ entity Product {
 计算属性 `total` 不存储额外的列，读取时从当前商品的单价和数量计算；
 `::value()` 是读取字段值的操作。这里定义的是数据结构，尚未创建商品数据。
 
+需要只作为继承基类的实体时，可使用 `abstract entity`；抽象计算属性由具体子类
+实现。字符串格式也可以通过 `${类型名}` 组合已有约束。规则和示例见
+[计算字段](../reference/computations.md)与[内置值类型](../reference/value-types.md#string)。
+
 ## 3. 检查和格式化
 
 在 `model` 的父目录运行：

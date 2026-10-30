@@ -6,9 +6,9 @@ const { Resolver, type, entity, canonical, equal, accepts, commonType } = requir
 function typeSignature(node, doc, owner, symbols) {
   return canonical(new Resolver(doc, () => {}, symbols, owner, true).resolve(node));
 }
-function signature(field, symbols = new Map(), includeType = true) {
+function signature(field, symbols = new Map(), includeType = true, ignoreExtraInput = false) {
   const { bindCall } = require('./decorators.cjs');
-  const annotations = field.metadata.filter(a => !['override', 'overload', 'sparse', 'dense'].includes(a.name)).map(a => bindCall(a, field, () => {}, symbols));
+  const annotations = field.metadata.filter(a => !['override', 'overload', 'sparse', 'dense'].includes(a.name) && !(ignoreExtraInput && a.name === 'extra_input_param')).map(a => bindCall(a, field, () => {}, symbols));
   annotations.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   return JSON.stringify([field.mode, includeType ? typeSignature(field.type, field.doc, field.owner, symbols) : '', annotations]);
 }
@@ -41,7 +41,7 @@ function relationships(symbols, issue) {
       if (ancestor) {
         const prior = ancestor.ownFields.get(name);
         if (marker(field) !== 'override') issue(field.doc, field.token, `duplicate inherited field: ${name}; use @override`);
-        else if (signature(field, symbols, false) !== signature(prior, symbols, false) || !overrideType(field, prior, symbols)) issue(field.doc, field.token, `override signature mismatch: ${name}`);
+        else if (signature(field, symbols, false, field.abstract || prior.abstract) !== signature(prior, symbols, false, field.abstract || prior.abstract) || !overrideType(field, prior, symbols)) issue(field.doc, field.token, `override signature mismatch: ${name}`);
         else { field.identity = prior.identity || prior; navigation(field, [prior]); }
       } else if (marker(field) === 'override') issue(field.doc, field.token, `override requires an inherited field: ${name}`);
       else if (field.mode !== 'id') {

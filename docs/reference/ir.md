@@ -5,7 +5,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 修订与独立性
 
-当前 `format_revision` 为整数 `10`。格式尚未固化，不承诺修订间兼容；结构变化时递增
+当前 `format_revision` 为整数 `11`。格式尚未固化，不承诺修订间兼容；结构变化时递增
 修订号。读取器拒绝不支持的修订号，要求重新编译，不自动迁移。
 
 文件完整保存本次采用的内置声明、原语目录和七个无载荷结果常量及携带载荷的 PARTIAL的含义。独立校验仅依赖
@@ -37,7 +37,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 ## 声明、字段与身份
 
 声明的 `kind` 为 `entity`、`value`、`type_alias`、`decorator`、`decodes`、`constant`、`dimension` 或 `hierarchy`。
-每个声明保存 `name`、`identity`、`final`、`parent`、`parameters`、`expression`、
+每个声明保存 `name`、`identity`、`final`、`abstract`、`parent`、`parameters`、`expression`、
 `decorators`、`dimensions`、`fields`、`effective`、`entries`、`initializer`、`references`、
 `lookups`、`effective_lookups`、`hierarchy_entries`、`source` 和 `derived`。
 
@@ -47,6 +47,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 该前缀仅是 IR 身份域，不是新增 YAMBL 语法。引用使用 `identity`，不含检出路径。
 
 - `parent` 是显式父类型身份，未写继承时为空字符串；`Entity` 可作为显式父类型。
+- `abstract` 标识不能直接实例化的实体，不能与 `final` 同时为 true。
 - `parameters` 保持形式参数顺序；每项保存 `name`、类型表达式 `type`、可选默认表达式
   `default`、是否为 pair 的 `pair`、是否可省略的 `optional` 和 `source`。
 - `expression` 保存别名正文或 constant 声明类型，其他声明为 `null`。
@@ -64,10 +65,12 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 字段保存 `name`、逻辑 `identity`、声明 `implementation`、`category`、原始解析表达式
 `expression`、别名展开表达式 `expanded`、有效 `type`、`default`、`decorators`、
-`extension`、`calculation`、`source` 和 `builtin`。`category` 为 `id/static/config/snapshot/scd/computed`。
+`extension`、`calculation`、`source`、`builtin` 和 `abstract`。`category` 为 `id/static/config/snapshot/scd/computed`。
 
-`calculation` 仅在 computed 字段上非空，保存独立表达式 AST、let/return、
+具体 computed 字段的 `calculation` 非空，保存独立表达式 AST、let/return、
 解析后的字段访问、依赖实现、推导参数及默认关系；参数 sites 使用相对来源位置。
+抽象 computed 字段以 `abstract: true` 标识，`calculation` 为 null；其他字段的
+`abstract` 为 false。抽象声明和具体实现共享逻辑身份。
 `dimensions` 保存实体内或共享维度的完整声明身份、value/hierarchy 参数、结构化默认值和 fallback 表达式，以及表达式引用的声明身份。维度注解保留 `dimension_identity`；输入参数的 `default_dimension` 标识提供默认 selector 的维度。
 `extension` 标记来源是否为 extend；它不会创建额外实体。`builtin` 标记由语言派生的
 隐藏类型属性，普通源码字段为 false。每个实体的 `entity_type` 和 `root_entity_type`
@@ -77,9 +80,10 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 字段实现。override 保留逻辑身份；overload 的多处实现共享已有检查器确定的逻辑身份。
 继承未重声明的字段仍指向原实现，原字段的声明上下文和元信息不会改成子类上下文。
 
-顶层 `fields` 每项保存 `{identity, type, implementations, applicable}`。type 是已经
+顶层 `fields` 每项保存 `{identity, type, implementations, applicable, inputs}`。type 是已经
 检查并协调 overload 后的共同契约；implementations 列出全部实现，applicable 列出
-字段实际存在的实体或 value。后端无需重新判定字段关系或计算共同类型。
+字段实际存在的实体或 value。inputs 保存计算字段的统一输入契约，其他字段为空列表。
+后端无需重新判定字段关系或计算共同类型。
 
 ## 类型、依赖表达式和字面值
 
@@ -103,12 +107,15 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 | `operations` | 有序 `{operator, operand}`，operator 为 `+` 或 `-` |
 | `binding` | mapping 的 `as` 绑定名，无绑定时为空 |
 | `source` | 原表达式位置 |
+| `references` | 正则格式引用使用的局部名称及解析后的声明身份 |
 
 `self` 的上下文由所属字段或 decorator 应用对象确定。可静态确定的字段选择在 access
 中保存逻辑字段身份；参数和实例依赖的选择保留操作节点。`::type`、`::value`、
 `::entity` 均保存为独立 access。mapping 绑定按参数顺序建立词法作用域。
 字段的 `expanded` 消除透明别名，保留替换后的依赖表达式；后端无需重新解释 import
 或展开别名。`dependent` 不是宽泛类型替代品，必须连同表达式使用。
+string 的原表达式参数保留 `${类型名}`；`references` 保留格式引用的词法绑定，
+已解析类型的参数使用展开后的正则。独立校验重新检查引用与展开结果。
 
 字面值统一保存 `{kind, text, target, selections, mask}`。`kind` 区分
 `string/integer/decimal/bool/reference/type/dictionary/code/flags`。不用 JSON null
@@ -177,7 +184,7 @@ decorator 使用绑定结果，忽略 arguments 的位置/命名拼写。JSON �
 [ir.schema.json](../../lang/syntex/ir.schema.json) 使用 Draft 2020-12，随编译器分发且只包含本地引用。
 加载先拒绝重复 key 和非标准数值，再进行 Schema、类型化解码与语义一致性校验。
 Schema 由 IR 数据类型生成；`yambl schema -o output ./build/ir.schema.json` 可导出同一契约。
-当前 IR 修订号为 10，包含计算表达式、共享与实体内 dimension、具名 Hierarchy、lookup 规则、推导参数和 PARTIAL。
+当前 IR 修订号为 11，包含抽象实体、计算契约、格式引用、计算表达式、dimension、Hierarchy、lookup、推导参数和 PARTIAL。
 Decorator 调用的 Argument 使用 `default: Expression | null` 保留 pair 默认值。
 隐含 description 仍是有绑定身份的普通元信息；输入说明通过 extra_input_param 的 pair key 关联。
 Constant 声明保留结构化初始化表达式和声明作用域 references。
@@ -189,4 +196,4 @@ TypeHint 包含名称、泛型实参、参数约束、成员访问、flags 运�
 CalculationAccess.operation 限定为 `value` 与 `best_available`。
 `value` 同时读取存储字段和计算字段，具体行为由已解析的字段定义决定。
 导出前拒绝隐式末端字段读取；中间引用导航记录为显式的 value 访问节点。
-运行时契约为 11，存储布局为 9，文件格式为 3；不支持的修订号需要重新编译。
+运行时契约为 12，存储布局为 9，文件格式为 3；不支持的修订号需要重新编译。

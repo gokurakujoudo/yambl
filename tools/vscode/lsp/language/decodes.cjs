@@ -31,8 +31,13 @@ function deriveSubtypes(symbols, issue) {
   const children = parent => entities.filter(d => d.base === parent).sort((a, b) => a.name.value < b.name.value ? -1 : a.name.value > b.name.value ? 1 : 0);
   for (const owner of entities) {
     const entries = [], codes = new Set(), visited = new Set([owner]);
+    function visibleChildren(parent, path = new Set()) {
+      if (path.has(parent)) return [];
+      const next = new Set(path); next.add(parent);
+      return children(parent).flatMap(child => child.abstract ? visibleChildren(child, next) : [child]).sort((a, b) => a.name.value < b.name.value ? -1 : a.name.value > b.name.value ? 1 : 0);
+    }
     function visit(parent, parentOrder) {
-      for (const child of children(parent)) {
+      for (const child of visibleChildren(parent)) {
         if (visited.has(child)) continue;
         visited.add(child);
         const code = child.name.value;

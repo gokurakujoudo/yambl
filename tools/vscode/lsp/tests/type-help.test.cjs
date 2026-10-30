@@ -79,6 +79,101 @@ test('unfinished type expressions retain local declarations and do not trigger i
   assert.equal(request('entity E { attr field: decimal # collection<|\n}', 'signatureHelp'), null);
 });
 
+test('string format references resolve, navigate and complete constrained aliases', () => {
+  const source = "type first = string['[A-Z]+']\ntype plain = string\ntype combined = string['${first}_${first}']";
+  const doc = parse(source); validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  const { Resolver } = require('../language/expressions.cjs');
+  const symbols = new Map([...doc.scope.values()].map(d => [d.key, d]));
+  const resolved = new Resolver(doc, () => {}, symbols, null).resolve(doc.declarations[2].type);
+  assert.deepEqual(resolved.params, [['regex', '(?:[A-Z]+)_(?:[A-Z]+)']]);
+  assert.equal(request("type first = string['[A-Z]+']\ntype combined = string['${fir|st}']", 'definition').range.start.line, 0);
+  const choices = labels("type first = string['[A-Z]+']\ntype plain = string\ntype combined = string['${|}']");
+  assert.ok(choices.includes('first'));
+  assert.ok(!choices.includes('plain'));
+  assert.ok(labels("type first = string['[A-Z]+']\ntype combined = string['${|").includes('first'));
+  assert.deepEqual(labels("type first = string['[A-Z]+']\ntype combined = string['\\${|}']"), []);
+  assert.deepEqual(labels("type first = string['[A-Z]+']\ntype combined = string['\\\\${|}']"), []);
+  assert.ok(labels("type first = string['[A-Z]+']\ntype combined = string['\\\\\\\\${|}']").includes('first'));
+  const invalid = parse("type a = string['${missing}']\ntype b = string['${a}']"); validate([invalid]);
+  assert.ok(invalid.diagnostics.some(d => d.message.includes('unknown string format type')));
+});
+
+test('format reference completion excludes invalid and cyclic candidates', () => {
+  const definitions = "type bad = string['${missing}']\ntype cycle = string['${cycle}']\ntype via = string['${use}']\ntype good = string['[A-Z]+']\n";
+  assert.deepEqual(labels(definitions + "type use = string['${|}']"), ['good']);
+  assert.deepEqual(labels(definitions + "type use = string['${|"), ['good']);
+});
+
+test('abstract entities require implementations and promote concrete subtype entries', () => {
+  const doc = parse("abstract entity Root { abstract computed attr family: string } abstract entity Group inherits Root {} entity Zeta inherits Group { @override computed attr family: string { return 'Z' } } entity Alpha inherits Group { @override computed attr family: string { return 'A' } } entity Middle inherits Root { @override computed attr family: string { return 'M' } }");
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  assert.deepEqual(doc.declarations[0].subtypes.entries.map(e => [e.code.value, e.order.value]), [['Alpha', '100'], ['Middle', '200'], ['Zeta', '300']]);
+  const missing = parse('abstract entity Root { abstract computed attr family: string } entity Child inherits Root {}');
+  validate([missing]);
+  assert.ok(missing.diagnostics.some(d => d.message.includes('has no implementation')));
+  assert.ok(missing.diagnostics.some(d => d.message.includes('lacks implementation')));
+});
+
+test('override resolves an abstract subtype dictionary before comparing signatures', () => {
+  const doc = parse('abstract entity Root { abstract computed attr family: code<Root::subtypes> } entity Child inherits Root { @override computed attr family: code<Root::subtypes> { return Root::subtypes.Child } }');
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+});
+
+test('abstract computation inputs detect conflicting implementations and cycles', () => {
+  const conflict = parse("abstract entity Root { abstract computed attr result: integer } entity One inherits Root { snapshot attr n: integer @override computed attr result: integer { return self.n::value(as_of_date=input.day) } } entity Two inherits Root { @override computed attr result: integer { return 1 } }");
+  validate([conflict]);
+  assert.ok(conflict.diagnostics.some(d => d.message.includes('computed parameter signature mismatch')));
+  const cyclic = parse('abstract entity Root { abstract computed attr result: integer } entity One inherits Root { @override computed attr result: integer { return self.result::value() } }');
+  validate([cyclic]);
+  assert.ok(cyclic.diagnostics.some(d => d.message.includes('computed field dependency cycle')));
+  const extras = date => parse(`abstract entity Root { abstract computed attr v: integer } entity A inherits Root { @override @extra_input_param(day: date = '2026-01-01') computed attr v: integer { return 1 } } entity B inherits Root { @override @extra_input_param(day: date = '${date}') computed attr v: integer { return 2 } }`);
+  const matching = extras('2026-01-01'); validate([matching]);
+  assert.deepEqual(matching.diagnostics, []);
+  const mismatching = extras('2026-02-01'); validate([mismatching]);
+  assert.equal(mismatching.diagnostics.filter(d => d.message.includes('computed parameter signature mismatch')).length, 1);
+});
+
+test('string format references use the declaring scope and detect cycles', () => {
+  const first = parse("namespace a type segment = string['[A-Z]+'] type full = string['${segment}']", 'first');
+  const second = parse("namespace b from a import full type segment = string['[0-9]+'] type identifier = string['${full}']", 'second');
+  validate([first, second]);
+  assert.deepEqual(first.diagnostics, []);
+  assert.deepEqual(second.diagnostics, []);
+  const { Resolver } = require('../language/expressions.cjs');
+  const symbols = new Map([...first.scope.values(), ...second.scope.values()].map(d => [d.key, d]));
+  assert.deepEqual(new Resolver(second, () => {}, symbols, null).resolve(second.declarations[1].type).params, [['regex', '(?:(?:[A-Z]+))']]);
+  const cycle = parse("type first = string['${second}'] type second = string['${first}']");
+  validate([cycle]);
+  assert.ok(cycle.diagnostics.some(d => d.message.includes('cycle')));
+});
+
+test('abstract extend and subtype rank use the promoted parent', () => {
+  const base = parse('namespace core abstract entity Root {} abstract entity Group inherits Root {}', 'base');
+  const extension = parse("namespace derived from core import Root from core import Group extend Root { abstract computed attr label: string } @decodes_rank(7, 'A') entity Alpha inherits Group { @override computed attr label: string { return 'A' } } @decodes_rank(3, 'Leaf') entity Leaf inherits Alpha {}", 'extension');
+  validate([base, extension]);
+  assert.deepEqual(base.diagnostics, []);
+  assert.deepEqual(extension.diagnostics, []);
+  assert.deepEqual(base.declarations[0].subtypes.entries.map(e => [e.code.value, e.order.value]), [['Alpha', '7'], ['Leaf', '10']]);
+  const invalid = parse("abstract entity Root {} @decodes_rank(3, 'Group') abstract entity Group inherits Root {}");
+  validate([invalid]);
+  assert.ok(invalid.diagnostics.some(d => d.message.includes('abstract entity cannot have decodes_rank')));
+});
+
+test('escaped string references stay literal after decoding', () => {
+  const doc = parse("type id = string['[A-Z]+'] type one = string['\\${missing}'] type two = string['\\\\${missing}'] type four = string['\\\\\\\\${id}']");
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  const { Resolver } = require('../language/expressions.cjs');
+  const symbols = new Map([...doc.scope.values()].map(d => [d.key, d]));
+  const resolve = name => new Resolver(doc, () => {}, symbols, null).resolve(doc.declarations.find(d => d.name.value === name).type).params[0][1];
+  assert.equal(resolve('one'), '\\${missing}');
+  assert.equal(resolve('two'), '\\${missing}');
+  assert.equal(resolve('four'), '\\\\(?:[A-Z]+)');
+});
+
 test('unfinished target definitions do not crash computations in another source file', () => {
   const target = parse('namespace core\nentity Security { attr currency: code<> }', 'file:///target.yambl');
   const extension = parse('namespace core\nextend Security { computed attr price: decimal { return 1.25 } }', 'file:///extension.yambl');

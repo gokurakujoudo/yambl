@@ -81,6 +81,16 @@ async function main() {
   }
 
   expectScope('@flags', '@flags', 'entity.name.function.yambl');
+  expectScope('abstract entity Security {', 'abstract', 'keyword.declaration.yambl');
+  expectScope('abstract computed attr family: string', 'abstract', 'keyword.declaration.yambl');
+  expectScope("type holding_id = string['${portfolio_id}_${date_id}']", 'portfolio_id}', 'support.type.yambl');
+  expectScope("type holding_id = string[regex: '${portfolio_id}']", '${', 'punctuation.section.interpolation.begin.yambl');
+  expectScope("type holding_id = string['\\${portfolio_id}']", '\\$', 'constant.character.escape.yambl');
+  expectScope("type holding_id = string['\\\\${portfolio_id}']", 'portfolio_id}', 'string.quoted.single.yambl');
+  expectScope("type holding_id = string['\\\\\\\\${portfolio_id}']", 'portfolio_id}', 'support.type.yambl');
+  const escapedReference = "type holding_id = string['\\\\${portfolio_id}']";
+  const escapedToken = grammar.tokenizeLine(escapedReference, textmate.INITIAL).tokens.find(t => t.startIndex <= escapedReference.indexOf('portfolio_id}') && escapedReference.indexOf('portfolio_id}') < t.endIndex);
+  assert.ok(!escapedToken.scopes.includes('support.type.yambl')); checks++;
   expectScope('@relationship(many, one)', '@relationship', 'entity.name.function.yambl');
   expectScope('@relationship(many, one)', 'many', 'constant.language.yambl');
   expectScope('@relationship(many, one)', 'one', 'constant.language.yambl');

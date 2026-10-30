@@ -92,7 +92,7 @@ value 中的 `attr` 和 `static attr` 都属于 `AttrCats.Static`；
 ## 子类型字典排序
 
 `@decodes_rank(k: integer, decode: string)` 只能修饰声明了显式父类的实体，不继承给
-子类。它为该实体在每个祖先的 `::subtypes` 字典中指定 decode，并以字典中父节点的最终
+子类；抽象实体不接受该标记。它为该实体在每个祖先的 `::subtypes` 字典中指定 decode，并以提升后父节点的最终
 ordering 加 k 作为自身 ordering；父节点不在该字典中时基数为 0。默认编号在覆盖前独立
 计算，覆盖不会改变其他节点的默认编号。k 可为任意整数，重复 ordering 合法。
 完整的遍历顺序、示例和实现状态见[自动子类型字典](syntax.md#自动子类型字典)。

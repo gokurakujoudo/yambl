@@ -5,6 +5,26 @@
 计算实现可不同，但返回类型、推导参数及默认关系必须相同；不能与存储字段互相重声明。
 计算字段不生成表列，不参与 ConfigGroup.when。`AttrCats.Computed` 的位值为 32。
 
+抽象计算契约声明在抽象实体或其 extend 中，不带计算体：
+
+```yambl
+abstract entity Security {
+    abstract computed attr family: string
+}
+
+entity Bond inherits Security {
+    @override
+    computed attr family: string {
+        return 'Bond'
+    }
+}
+```
+
+每个抽象声明必须至少有一个具体实现，所有具体后代都必须实现它或继承已有实现。
+实现使用 `@override`，返回类型、属性类别和元信息遵循现有兼容规则，不能用存储字段替代。
+各实现推导出的输入名称、类型、必填性与默认关系必须一致，形成统一契约；通过父类型
+调用时按实例的实际类型选择实现。计算依赖或默认关系循环报错。
+
 ```yambl
 entity Security {
     static attr price: decimal
@@ -184,7 +204,7 @@ when 只读取存储 static 字段并作等值 AND；非错误非正常值为不
 
 ## 产物、执行与边界
 
-IR 修订号 10，运行时契约 11，存储布局 9，JSONL 封装格式 3。
+IR 修订号 11，运行时契约 12，存储布局 9，JSONL 封装格式 3。
 IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
 生成包要求 Python 3.14+，运行依赖由生成项目的 `pyproject.toml` 声明。
 计算执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。

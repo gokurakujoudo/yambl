@@ -2,7 +2,7 @@
 
 const types = {
   bool: 'Boolean value.',
-  string: "String value. Use string['regex'] or string[regex: 'regex'] to describe a regular-expression constraint; an unparameterized string has no constraint. The regex dialect is not specified.",
+  string: "String value. Use string['regex'] or string[regex: 'regex'] to describe a regular-expression constraint. ${type_name} embeds a constrained string type's format. An unparameterized string has no constraint. Runtime matching is not performed and the regex dialect is not specified.",
   integer: 'Integer value.',
   float: 'Approximate floating-point value.',
   decimal: 'Decimal number. Use decimal[precision, scale] or decimal[precision: 18, scale: 4] to specify total digits and fractional digits. Unparameterized decimal has no implicit precision or scale.',

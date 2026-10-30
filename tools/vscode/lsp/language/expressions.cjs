@@ -1,6 +1,6 @@
 'use strict';
 
-const { values, generics, stringValue, resultConstants } = require('./syntax.cjs');
+const { values, generics, stringValue, resultConstants, range } = require('./syntax.cjs');
 const { isFlags, codeEntries } = require('./decodes.cjs');
 const type = (name, kind = 'value', options = {}) => ({ name, kind, args: [], key: null, params: [], exact: null, dependency: '', ...options });
 const unknown = type('?', 'unknown');
@@ -129,7 +129,34 @@ class Resolver {
     const pairs = params.map((p, i) => [p.key || (name === 'decimal' ? ['precision', 'scale'][Math.min(i, 1)] : 'regex'), p.value]);
     const valid = ['string', 'decimal'].includes(name) && (params.every(p => p.key) || params.every(p => !p.key)) && pairs.length === expected.length && new Set(pairs.map(p => p[0])).size === expected.length && pairs.every(([k, v]) => expected.includes(k) && (name === 'string' ? v.value.startsWith("'") : /^-?\d+$/.test(v.value)));
     if (!valid) this.issue(node, `invalid parameters for ${name}; do not mix positional and named parameters`);
-    return pairs.map(([k, v]) => [k, v.value.startsWith("'") ? stringValue(v.value) : BigInt(v.value).toString()]).sort((a, b) => a[0].localeCompare(b[0]));
+    return pairs.map(([k, v]) => [k, v.value.startsWith("'") ? (name === 'string' ? this.regex(v) : stringValue(v.value)) : BigInt(v.value).toString()]).sort((a, b) => a[0].localeCompare(b[0]));
+  }
+  regex(token) {
+    const raw = token.value.slice(1, -1), positions = [];
+    let source = '';
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i] === '\\' && ['\\', "'"].includes(raw[i + 1])) i++;
+      positions.push(i); source += raw[i];
+    }
+    const pattern = /(\\*)\$\{([a-zA-Z_][a-zA-Z_0-9]*)\}/g;
+    let result = '', endOfMatch = 0;
+    for (const match of source.matchAll(pattern)) {
+      result += source.slice(endOfMatch, match.index); endOfMatch = match.index + match[0].length;
+      if (match[1].length % 2) { result += match[0]; continue; }
+      const start = token.start + 1 + positions[match.index + match[1].length + 2], end = start + match[2].length;
+      const reference = { value: match[2], start, end, range: range(this.doc.text, start, end) };
+      this.doc.patternTokens.set(start, reference);
+      const target = this.doc.scope.get(reference.value);
+      this.bind(reference, target);
+      if (target?.kind !== 'type_alias') { this.issue({ token: reference }, `unknown string format type: ${reference.value}`); result += match[0]; continue; }
+      const node = { token: reference, name: reference.value, args: null, params: null, accesses: [] };
+      const resolved = this.resolve(node);
+      if (resolved.kind === 'unknown') { result += match[0]; continue; }
+      const regex = resolved.params.find(([name]) => name === 'regex');
+      if (resolved.name !== 'string' || !regex) { this.issue({ token: reference }, `string format reference requires a constrained string type: ${reference.value}`); result += match[0]; continue; }
+      result += match[1] + '(?:' + regex[1] + ')';
+    }
+    return result + source.slice(endOfMatch);
   }
   expand(node, declaration) {
     if (this.active.includes(declaration.key)) { this.issue(node, 'type dependency cycle'); return term(unknown); }

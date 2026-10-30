@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
-const { parse, format, range, position, keywords, annotations, values, generics, entities, structures, constants, resultConstants } = require('./language/syntax.cjs');
+const { parse, format, range, position, stringValue, keywords, annotations, values, generics, entities, structures, constants, resultConstants } = require('./language/syntax.cjs');
 const { validate, describe } = require('./language/validation.cjs');
 const { typeLabel, methodNames, methodHelp, nodes, defaultLabel, inputTypeHelp } = require('./language/calculation-tools.cjs');
 const typeTools = require('./language/type-tools.cjs');
@@ -119,7 +119,7 @@ function decoratorSites(doc, start, used) {
     if (next && next !== '}') return [['EntityAttr', next === 'attr' ? 'static' : next]];
     return owner === 'entity' ? [['Id'], ['EntityAttr'], ['Lookup']] : [['EntityAttr'], ['Lookup']];
   }
-  const kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type: 'Type', decorator: 'Decorator', final: 'Entity' }[next];
+  const kind = { entity: 'Entity', value: 'Value', decodes: 'Decodes', type: 'Type', decorator: 'Decorator', final: 'Entity', abstract: 'Entity' }[next];
   return kind ? [[kind]] : next ? [] : ['Entity', 'Value', 'Decodes', 'Type', 'Decorator'].map(kind => [kind]);
 }
 
@@ -150,6 +150,7 @@ const help = {
   value: 'Final structured value; fields are static, non-collection values or entity IDs.',
   Hierarchy: 'Prioritized dimension candidates; lower ordering is tried first.',
   final: 'This entity cannot be inherited or extended.',
+  abstract: 'An abstract entity cannot be instantiated. An abstract computed field declares a contract implemented by concrete descendants.',
   static: 'Time-independent attribute available for condition filtering.',
   type: 'Entity type value constrained by Entity or a specific entity and its descendants.',
   Entity: 'Abstract ultimate base of all entities; business trees keep separate field identities.',
@@ -275,7 +276,7 @@ class Service {
   }
   document(uri) { return this.documents.get(uri) || [...this.documents.values()].find(doc => uriKey(doc.uri) === uriKey(uri)); }
   tokenAt(doc, pos) {
-    return doc.tokens.find(t => t.range.start.line === pos.line && t.range.start.character <= pos.character && pos.character < t.range.end.character);
+    return [...(doc.patternTokens?.values() || []), ...doc.tokens].find(t => t.range.start.line === pos.line && t.range.start.character <= pos.character && pos.character < t.range.end.character);
   }
   completionScope(doc, start, end, decoratorName = false, onRecovered = null) {
     const replacement = decoratorName ? '@completion' : doc.text.slice(start, end).replace(/[^\r\n]/g, ' ');
@@ -352,7 +353,7 @@ class Service {
   references(target, includeDeclaration) {
     const locations = [];
     if (!target) return locations;
-    for (const doc of this.documents.values()) for (const token of doc.tokens) {
+    for (const doc of this.documents.values()) for (const token of [...doc.tokens, ...(doc.patternTokens?.values() || [])]) {
       if (doc.bindings.get(token.start) !== target) continue;
       if (!includeDeclaration && target.kind !== 'lookup_input' && uriKey(doc.uri) === uriKey(target.doc.uri) && token.start === target.name.start) continue;
       locations.push({ uri: doc.uri, range: token.range });
@@ -441,6 +442,22 @@ class Service {
     if (method === 'textDocument/completion') {
       const offset = doc.text.split('\n').slice(0, params.position.line).reduce((n, line) => n + line.length + 1, 0) + params.position.character;
       const before = doc.text.slice(0, offset);
+      const literal = /\bstring\s*\[\s*(?:regex\s*:\s*)?('(?:\\.|[^'\\])*)$/.exec(before);
+      const reference = literal && /(\\*)\$\{[a-z0-9_]*$/.exec(stringValue(literal[1] + "'"));
+      if (reference && reference[1].length % 2 === 0 && !doc.comments.some(c => c.start <= offset && offset <= c.end)) {
+        const context = typeTools.context(doc, offset);
+        const scope = doc.errors.length && context ? this.typeScope(doc, context, offset) : doc.scope;
+        const anchor = context?.root.name.start ?? literal.index;
+        const current = [...scope.values()].find(declaration => declaration.kind === 'type_alias' && declaration.doc.uri === doc.uri && declaration.token.start <= anchor && anchor < declaration.end);
+        const symbols = new Map([...this.documents.values()].flatMap(d => [...(d.scope || new Map()).values()].map(declaration => [declaration.key, declaration])));
+        for (const declaration of scope.values()) symbols.set(declaration.key, declaration);
+        const items = [...scope].filter(([, declaration]) => declaration.kind === 'type_alias' && !declaration.parameters.length && declaration.key !== current?.key).filter(([, declaration]) => {
+          let invalid = false;
+          const resolved = new Resolver(declaration.doc, (_doc, _token, _message, severity = 1) => { if (severity === 1) invalid = true; }, symbols, null, false, new Map(), current ? [current.key] : []).resolve(declaration.type);
+          return !invalid && resolved.name === 'string' && resolved.params.some(([name]) => name === 'regex');
+        }).map(([label, declaration]) => ({ label, kind: 7, detail: describe(declaration) }));
+        return { isIncomplete: false, items };
+      }
       if (doc.comments.some(c => c.start <= offset && offset <= c.end) || doc.tokens.some(t => t.value.startsWith("'") && t.start < offset && offset < t.end)) return { isIncomplete: false, items: [] };
       const hierarchyDefault = /\bhierarchy\s+[a-z][a-z0-9_]*\s*:\s*Hierarchy\s*=\s*([A-Za-z0-9_]*)$/.exec(before);
       if (hierarchyDefault) {

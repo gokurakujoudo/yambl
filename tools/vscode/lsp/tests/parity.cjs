@@ -94,6 +94,19 @@ cases.push(
   ['entity Root {} entity Use { attr invalid: code<Root::subtypes.Unknown> }'],
 );
 
+cases.push(
+  ["type segment = string['[A-Z]+'] type identifier = string[regex: '${segment}']"],
+  ["type identifier = string['${missing}']"],
+  ["type segment = string type identifier = string['${segment}']"],
+  ["type first = string['${second}'] type second = string['${first}']"],
+  ["type identifier = string['\\${missing}']"],
+  ["abstract entity Root { abstract computed attr label: string } entity Child inherits Root { @override computed attr label: string { return 'Child' } }"],
+  ['abstract entity Root { abstract computed attr label: string } entity Child inherits Root {}'],
+  ["namespace core abstract entity Root {}", "namespace derived from core import Root extend Root { abstract computed attr label: string } entity Child inherits Root { @override computed attr label: string { return 'Child' } }"],
+  ["abstract entity Root {} @decodes_rank(1, 'Group') abstract entity Group inherits Root {}"],
+  ["abstract entity Root { abstract computed attr v: integer } entity A inherits Root { @override @extra_input_param(day: date = '2026-01-01') computed attr v: integer { return 1 } } entity B inherits Root { @override @extra_input_param(day: date = '2026-02-01') computed attr v: integer { return 2 } }"],
+);
+
 for (const line of grammar.split('\n')) {
   const match = /^[A-Z]+: \/(.+)\\b\//.exec(line);
   if (!match) continue;

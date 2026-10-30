@@ -22,7 +22,7 @@ function validate(documents) {
   }
   function bind(doc, token, target) { if (target) doc.bindings.set(token.start, target); }
   for (const doc of documents) {
-    doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map(); doc.valueTypeTokens = new Map(); doc.markerTargets = new Map(); doc.accessTerms = new Map();
+    doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map(); doc.valueTypeTokens = new Map(); doc.patternTokens = new Map(); doc.markerTargets = new Map(); doc.accessTerms = new Map();
     if (doc.errors.length) continue;
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
       const name = decl.name.value; decl.key = key(doc, namespace(doc), name); decl.ownFields = new Map();
@@ -42,7 +42,7 @@ function validate(documents) {
     }
   }
   for (const doc of builtinDocuments) {
-    doc.diagnostics = []; doc.bindings = new Map(); doc.valueTypeTokens = new Map(); doc.markerTargets = new Map(); doc.accessTerms = new Map();
+    doc.diagnostics = []; doc.bindings = new Map(); doc.valueTypeTokens = new Map(); doc.patternTokens = new Map(); doc.markerTargets = new Map(); doc.accessTerms = new Map();
   }
   for (const builtin of builtinLocals.values()) {
     if (!symbols.has(builtin.key)) symbols.set(builtin.key, builtin);
@@ -95,6 +95,7 @@ function validate(documents) {
       if (blocked) issue(doc, decl.token, `cannot extend final entity: ${decl.name.value}`);
       else if (decl.kind === 'extend' && (!target || target.kind !== 'entity')) issue(doc, decl.token, `extend requires a visible user-defined entity: ${decl.name.value}`);
       if (decl.metadata.some(a => a.name === 'decodes_rank') && !decl.parent) issue(doc, decl.token, 'decodes_rank requires an explicit parent');
+      if (decl.abstract && decl.metadata.some(a => a.name === 'decodes_rank')) issue(doc, decl.token, 'abstract entity cannot have decodes_rank');
       if (decl.parent) {
         const parent = doc.scope.get(decl.parent.value); bind(doc, decl.parent, parent);
         if (builtinModels.get(decl.parent.value)?.final || parent?.final) issue(doc, decl.parent, `cannot inherit final entity: ${decl.parent.value}`);
@@ -106,6 +107,7 @@ function validate(documents) {
         const name = field.name.value; bind(doc, field.name, field);
         if (target?.kind === 'entity' && ['entity_type', 'root_entity_type'].includes(name)) issue(doc, field.token, `reserved built-in field: ${name}`);
         field.owner = target;
+        if (field.abstract && !target?.abstract) issue(doc, field.token, 'abstract computed fields require an abstract entity');
         if (!blocked && ['entity', 'value'].includes(target?.kind)) {
           if (target.ownFields.has(name)) issue(doc, field.token, `duplicate field: ${name}`);
           target.ownFields.set(name, field);
@@ -143,9 +145,16 @@ function validate(documents) {
     }
   }
   collectDimensions(analysisDocuments.filter(d => !d.errors.length), issue);
-  relationships(symbols, issue);
-  checkLookups(analysisDocuments, symbols, issue);
   deriveSubtypes(symbols, issue);
+  relationships(symbols, issue);
+  for (const declaration of symbols.values()) if (declaration.kind === 'entity') {
+    for (const field of declaration.ownFields.values()) if (field.abstract) {
+      const implementations = [...symbols.values()].filter(d => d.kind === 'entity' && d.ancestors.includes(declaration)).flatMap(d => [...d.ownFields.values()]).filter(f => f.identity === field.identity && !f.abstract && f.calculation);
+      if (!implementations.length) issue(field.doc, field.token, `abstract computed field has no implementation: ${field.name.value}`);
+    }
+    if (!declaration.abstract) for (const field of declaration.effective.values()) if (field.abstract) issue(declaration.doc, declaration.token, `concrete entity lacks implementation: ${field.name.value}`);
+  }
+  checkLookups(analysisDocuments, symbols, issue);
   checkDimensions(documents.filter(d => !d.errors.length), issue, symbols);
   checkDecorators(documents, issue, symbols);
   checkRelationships(documents, symbols, issue);
@@ -194,8 +203,8 @@ function describe(target) {
   const details = ['title', 'description'].flatMap(name => (target.metadata || []).filter(a => a.name === name && a.value).map(a => `${name}: ${stringValue(a.value.value)}`));
   if (target.kind === 'dimension') return `dimension ${target.name.value} {\n    value ${target.value.value}: ${formatType(target.type)}${target.hierarchy ? '\n    hierarchy ' + target.hierarchy.value + ': Hierarchy' + (target.default ? ' = ' + target.default.token.value : '') : ''}\n}`;
   const mode = ['snapshot', 'scd', 'config', 'static', 'computed'].includes(target.mode) ? target.mode + ' attr' : target.mode;
-  const signature = target.kind === 'type_alias' ? `type ${target.name.value}${target.parameters.length ? '<' + target.parameters.map(p => p.token.value + ': ' + formatType(p.type)).join(', ') + '>' : ''} = ${formatType(target.type)}` : target.kind ? `${target.kind} ${target.name.value}` : `${mode} ${target.name.value}: ${formatType(target.type)}`;
-  if (target.calculation) details.push('Inferred parameters:\n' + (target.inferredInputs || []).map(p => `${p.name}: ${typeLabel(p.type)}${p.default ? ' = ' + (p.default.kind === 'member' ? 'input.' + p.default.value : p.default.token.value) : p.required ? ' (required)' : ' (optional)'}${p.description ? '\n    ' + p.description : ''}`).concat(['best_effort: bool = false']).join('\n'));
+  const signature = target.kind === 'type_alias' ? `type ${target.name.value}${target.parameters.length ? '<' + target.parameters.map(p => p.token.value + ': ' + formatType(p.type)).join(', ') + '>' : ''} = ${formatType(target.type)}` : target.kind ? `${target.abstract ? 'abstract ' : ''}${target.kind} ${target.name.value}` : `${target.abstract ? 'abstract ' : ''}${mode} ${target.name.value}: ${formatType(target.type)}`;
+  if (target.calculation || target.abstract && target.mode === 'computed') details.push('Inferred parameters:\n' + (target.inferredInputs || []).map(p => `${p.name}: ${typeLabel(p.type)}${p.default ? ' = ' + (p.default.kind === 'member' ? 'input.' + p.default.value : p.default.token.value) : p.required ? ' (required)' : ' (optional)'}${p.description ? '\n    ' + p.description : ''}`).concat(['best_effort: bool = false']).join('\n'));
   return [(target.kind === 'decodes' && isFlags(target) ? '@flags\n' : '') + signature, ...details].join('\n\n');
 }
 

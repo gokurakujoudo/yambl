@@ -91,8 +91,16 @@ function checkComputations(documents, symbols, report) {
   function analyze(field) {
     if (completed.has(field)) return completed.get(field);
     const issue = (node, message) => report(field.doc, node.token, message);
-    if (active.has(field)) { issue(field.calculation.result, `computed field dependency cycle: ${field.name.value}`); return { inputs: new Map() }; }
+    if (active.has(field)) { issue(field.calculation?.result || { token: field.token }, `computed field dependency cycle: ${field.name.value}`); return { inputs: new Map() }; }
     active.add(field);
+    if (field.abstract) {
+      const implementations = [...symbols.values()].filter(d => d.kind === 'entity' && d.ancestors?.includes(field.owner)).flatMap(d => [...d.ownFields.values()]).filter(f => f.identity === field.identity && f.calculation);
+      const contracts = implementations.map(analyze);
+      const contract = contracts[0] || { inputs: new Map() };
+      active.delete(field); completed.set(field, contract);
+      field.inferredInputs = [...contract.inputs.values()].sort((a, b) => a.name.localeCompare(b.name));
+      return contract;
+    }
     const checker = new Checker(field.doc, field.owner, issue);
     declareInputs(checker, field, issue);
     const environment = new Map([['self', { type: type(field.owner.name.value, 'reference', { key: field.owner.key }) }]]);
@@ -568,7 +576,7 @@ function checkComputations(documents, symbols, report) {
       if (actual.type.name !== 'integer' && actual.type.kind !== 'unknown') checker.issue(dimension.fallback, 'fallback_days requires an integer expression');
       if (checker.inputs.size || checker.dependencies.size) checker.issue(dimension.fallback, 'fallback_days requires stored static or config dependencies without external parameters');
     }
-    for (const field of declaration.fields) if (field.calculation && field.owner?.kind === 'entity') analyze(field);
+    for (const field of declaration.fields) if ((field.calculation || field.abstract) && field.owner?.kind === 'entity') analyze(field);
     for (const lookup of declaration.lookups || []) {
       const owner = lookup.entity;
       if (!owner) continue;
@@ -607,9 +615,15 @@ function checkComputations(documents, symbols, report) {
   }
   const contracts = new Map();
   for (const [field, checker] of completed) {
+    if (field.abstract) continue;
     const contract = JSON.stringify([...checker.inputs.values()].sort((a, b) => a.name.localeCompare(b.name)).map(p => [p.name, canonical(p.type), p.required, scopedSemantic(p.default, p.defaultDoc || field.doc)]));
-    if (contracts.has(field.identity) && contracts.get(field.identity) !== contract) report(field.doc, field.calculation.result.token, `computed parameter signature mismatch: ${field.name.value}`);
-    contracts.set(field.identity, contract);
+    const prior = contracts.get(field.identity);
+    if (prior && prior.contract !== contract) {
+      const location = prior.field.token.range.start;
+      const path = prior.field.doc.uri.startsWith('file:') ? require('node:url').fileURLToPath(prior.field.doc.uri) : prior.field.doc.uri;
+      report(field.doc, field.calculation.result.token, `computed parameter signature mismatch: ${field.name.value}; conflicts with ${path}:${location.line + 1}:${location.character + 1}`);
+    }
+    contracts.set(field.identity, { contract, field });
   }
 }
 

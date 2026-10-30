@@ -8,7 +8,7 @@ const resultConstants = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtin
 
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
-  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'final', 'self', 'value', 'type', 'as', 'decorator',
+  'id', 'attr', 'snapshot', 'scd', 'config', 'static', 'abstract', 'final', 'self', 'value', 'type', 'as', 'decorator',
   'const', 'computed', 'dimension', 'lookup', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
 const annotations = ['title', 'description', 'temporal', 'dimension', 'relationship', 'reverse_relationship', 'sparse', 'dense', 'overload', 'override', 'flags', 'allow_multiple', 'targets', 'decodes_rank'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'dimension_ref', 'input_type'];
@@ -286,10 +286,10 @@ function parse(text, uri = '') {
         const close = index; declaration.end = take('}').end; piece(close, 0);
         doc.declarations.push(declaration); continue;
       }
-      const start = index; const final = is('final') ? take() : null; const token = take();
-      if (final && token.value !== 'entity') throw token;
+      const start = index; const modifier = is('final') || is('abstract') ? take() : null; const token = take();
+      if (modifier && token.value !== 'entity') throw token;
       if (!['entity', 'extend', 'decodes', 'value'].includes(token.value) || (token.value === 'extend' && metadata.length)) throw token;
-      const declaration = { kind: token.value, token: final || token, final: Boolean(final), name: name(), metadata, fields: [], entries: [], dimensions: [], lookups: [], doc };
+      const declaration = { kind: token.value, token: modifier || token, final: modifier?.value === 'final', abstract: modifier?.value === 'abstract', name: name(), metadata, fields: [], entries: [], dimensions: [], lookups: [], doc };
       if (declaration.kind === 'entity' && is('inherits')) { take(); declaration.parent = name(); }
       declaration.bodyStart = take('{').end; piece(start, 0);
       while (!is('}')) {
@@ -317,10 +317,12 @@ function parse(text, uri = '') {
           if (is('dimension') && declaration.kind !== 'value' && !metadata.length) {
             declaration.dimensions.push(dimensionDeclaration(1, declaration)); continue;
           }
-          const start = index; const token = take(); const mode = token.value;
+          const start = index; const modifier = is('abstract') ? take() : null; const token = take(); const mode = token.value;
+          if (modifier && mode !== 'computed') throw token;
           if (!['id', 'attr', 'snapshot', 'scd', 'config', 'static', 'computed'].includes(mode)) throw token;
           if (['snapshot', 'scd', 'config', 'static', 'computed'].includes(mode)) take('attr');
-          const field = { token, mode: mode === 'attr' ? 'static' : mode, name: name(), metadata, doc }; take(':'); field.type = type();
+          const field = { token: modifier || token, abstract: Boolean(modifier), mode: mode === 'attr' ? 'static' : mode, name: name(), metadata, doc }; take(':'); field.type = type();
+          if (field.abstract) { field.end = peek().start; declaration.fields.push(field); piece(start, 1); continue; }
           if (mode === 'computed') {
             take('{'); piece(start, 1); const bindings = [];
             while (is('let')) {

@@ -61,6 +61,7 @@ namespace 和声明名组成。目录不决定 namespace。见[名称解析](nam
 | --- | --- |
 | `entity Name { ... }` | 具有身份的实体类型 |
 | `entity Child inherits Parent { ... }` | 单继承实体类型 |
+| `abstract entity Name { ... }` | 抽象实体，不能直接创建实例 |
 | `final entity Name { ... }` | 禁止被继承或 extend |
 | `extend Name { ... }` | 增补已有实体的字段或 dimension，不创建新实体 |
 | `value name { ... }` | 无 ID 的结构化值类型，天然 final |
@@ -74,6 +75,10 @@ namespace 和声明名组成。目录不决定 namespace。见[名称解析](nam
 
 Entity 是所有实体的抽象最终基类，不能实例化；未显式继承的实体各自建立业务继承树。
 字段的实体类型表示实例引用，保存 ID，不需要额外的 ref。
+
+抽象实体可作为基类、引用类型、查询目标和配置目标，不能与 `final` 同时声明。
+具体后代必须实现所继承的全部抽象计算属性；抽象中间类可以暂缓实现。
+计算契约与实现规则见[计算字段](computations.md)。
 
 ## 结构化值类型
 
@@ -222,15 +227,16 @@ AttrCats 位值为 Static=2、Config=4、Snapshot=8、Scd=16、Computed=32、All
 
 ### 自动子类型字典
 
-每个具体实体都有 `EntityName::subtypes`，它是一个 Decodes 字典引用，身份为实体完整
-qualified name 加 `::subtypes`。抽象 Entity 不提供此字典。字典包含该实体的全部严格后代，
+每个用户声明的实体都有 `EntityName::subtypes`，它是一个 Decodes 字典引用，身份为实体完整
+qualified name 加 `::subtypes`。内置 Entity 不提供此字典。字典包含该实体的具体严格后代，
 不包含实体自身；叶子实体的字典为空。`code<Security::subtypes>` 是该字典的 code 类型，
 `Security::subtypes.Bond` 是其中的 code。code 和默认 decode 使用后代实体短名；同一字典
 中出现相同短名时报错。实体类型与子类型 code 不隐式转换。
 
+抽象后代节点在派生字典中由其子节点递归替代，再按同层名称排序；这不改变实际继承关系。
 每个字典独立按同层实体名称升序、深度优先遍历其严格后代，默认从 1 开始编号，
 ordering 为编号乘 100。`@decodes_rank(k, decode)` 可修饰有显式父类的实体，且不继承：
-先计算所有默认编号，再将该实体在每个字典中的 ordering 改为其父节点在该字典中的最终
+抽象实体不接受该标记。先计算所有默认编号，再将该实体在每个字典中的 ordering 改为提升后父节点在该字典中的最终
 ordering 加 k；父节点不在字典中时基数为 0。覆盖不改变其他节点的默认编号。k 可为任意
 整数，ordering 可重复，不规定次级排序。
 
