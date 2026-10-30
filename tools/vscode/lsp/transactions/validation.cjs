@@ -13,6 +13,17 @@ function isoDate(value) {
   const date = new Date(value.value + 'T00:00:00Z');
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value.value;
 }
+function isoDatetime(value) {
+  if (value.kind !== 'string') return false;
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/.exec(value.value);
+  if (!match || !isoDate({ kind: 'string', value: match[1] })) return false;
+  const [, , hour, minute, second, zone] = match;
+  if (+hour > 23 || +minute > 59 || +second > 59 || (zone !== 'Z' && (+zone.slice(1, 3) > 23 || +zone.slice(4) > 59))) return false;
+  const time = Date.parse(value.value);
+  if (!Number.isFinite(time)) return false;
+  const year = new Date(time).getUTCFullYear();
+  return year >= 1 && year <= 9999;
+}
 
 function checkValue(expected, value, symbols, dictionaries = new Map()) {
   if (expected.kind === 'unknown' || expected.dependency) return null;
@@ -36,6 +47,8 @@ function checkValue(expected, value, symbols, dictionaries = new Map()) {
     if (value.kind !== 'name' || !['true', 'false'].includes(value.value)) error = 'expected bool literal';
   } else if (expected.name === 'date') {
     if (!isoDate(value)) error = 'expected ISO date string';
+  } else if (expected.name === 'datetime') {
+    if (!isoDatetime(value)) error = 'expected ISO datetime with explicit timezone';
   } else if (expected.name === 'string') {
     if (value.kind !== 'string') error = 'expected string literal';
   } else if (expected.name === 'code') {

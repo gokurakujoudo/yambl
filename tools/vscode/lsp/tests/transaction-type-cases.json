@@ -1,5 +1,5 @@
 {
-  "model": "namespace core\ndecodes Currencies { - 1 CNY: 'CNY' - 2 USD: 'USD' }\ntype money = decimal[6, 2]\nentity Item {\n    id id: integer\n    static attr text: string\n    static attr flag: bool\n    static attr count: integer\n    static attr day: date\n    static attr amount: money\n    static attr currency: code<Currencies>\n    static attr other: Item\n}\nentity Child inherits Item { @override static attr flag: exact<true> }\n",
+  "model": "namespace core\ndecodes Currencies { - 1 CNY: 'CNY' - 2 USD: 'USD' }\ntype money = decimal[6, 2]\nentity Item {\n    id id: integer\n    static attr text: string\n    static attr flag: bool\n    static attr count: integer\n    static attr day: date\n    static attr instant: datetime\n    static attr amount: money\n    static attr currency: code<Currencies>\n    static attr other: Item\n}\nentity Child inherits Item { @override static attr flag: exact<true> }\n",
   "cases": [
     {
       "entity": "core.Item",
@@ -209,6 +209,54 @@
       "entity": "core.Child",
       "field": "flag",
       "literal": "false",
+      "valid": false
+    },
+    {
+      "entity": "core.Item",
+      "field": "instant",
+      "literal": "'2026-01-01T00:00:00Z'",
+      "valid": true
+    },
+    {
+      "entity": "core.Item",
+      "field": "instant",
+      "literal": "'2025-12-31T19:00:00.123456-05:00'",
+      "valid": true
+    },
+    {
+      "entity": "core.Item",
+      "field": "instant",
+      "literal": "'2026-01-01T00:00:00'",
+      "valid": false
+    },
+    {
+      "entity": "core.Item",
+      "field": "instant",
+      "literal": "'2026-02-30T00:00:00Z'",
+      "valid": false
+    },
+    {
+      "entity": "core.Item",
+      "field": "instant",
+      "literal": "'2026-01-01T00:00:00.1234567Z'",
+      "valid": false
+    },
+    {
+      "entity": "core.Item",
+      "field": "instant",
+      "literal": "'2026-01-01T00:00:00+24:00'",
+      "valid": false
+    },
+    {
+      "entity": "core.Item",
+      "field": "instant",
+      "literal": "'0001-01-01T00:00:00+01:00'",
+      "valid": false
+    },
+    {
+      "entity": "core.Item",
+      "field": "instant",
+      "literal": "'9999-12-31T23:59:59-01:00'",
       "valid": false
     }
   ]

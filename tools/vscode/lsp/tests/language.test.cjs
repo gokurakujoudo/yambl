@@ -92,6 +92,13 @@ test('lookup rejects calculations and unsupported stored paths', () => {
   for (const message of ['lookup key requires a self field path ending in ::value()', 'lookup does not support config fields', 'lookup key requires a supported non-collection type', 'unknown entity field: unknown']) assert.ok(messages.includes(message), message);
 });
 
+test('lookup accepts a stored datetime key', () => {
+  const doc = parse('entity Event { id id: string static attr instant: datetime lookup by_instant { instant = self.instant::value() } }');
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  assert.equal(doc.declarations[0].lookups[0].keys[0].resolvedType.name, 'datetime');
+});
+
 test('lookup keeps unbound parameters across nodes and checks renamed type conflicts', () => {
   const doc = parse(`entity Issuer { @temporal(event_date: date) scd attr name: string }
     entity Security {

@@ -204,13 +204,14 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 | namespace、import、仓库根、qualified name | 已定义 | 已实现 | 已解析 | 使用身份映射 | 使用身份映射 |
 | const、上下文字面量、带类型 let | 已定义 | 已实现 | 结构化保存并校验 | 不产生存储 | 两后端共用计算实现 |
 | /、//、严格转换、显式精度转换 | 已定义 | 已实现 | 保留操作和类型 | 不产生存储 | 标准库执行，失败返回 ERROR |
-| 计算 values、mapping、结构值和 datetime | 已定义 | 已实现 | 保留目标类型 | 不扩展物理存储类型 | frozenset、只读 mapping、frozen dataclass、UTC datetime |
+| 计算 values、mapping 和结构值 | 已定义 | 已实现 | 保留目标类型 | 不扩展物理存储类型 | frozenset、只读 mapping、frozen dataclass |
 | entity、继承、final、extend | 已定义 | 已实现 | 已实现 | 根身份与有效字段 | 实际子类型 handle |
 | 隐藏类型属性 | 已定义 | 已实现 | 标记内建来源 | 由身份及继承关系读取，无可写列 | 业务及内置实体支持 |
 | override、overload、exact | 已定义 | 已实现 | 保留实现与共同契约 | 共享逻辑存储 | 按实际实现校验 |
 | attr/static 统一、类别筛选 | 已定义 | 已实现 | static | 无维度身份宽表，有维度分组 | 惰性属性与显式方法 |
 | config 默认值 | 已定义 | 已实现 | 已实现 | 根实体长表，独立字段行与状态 | NO_ENTRY 使用默认值 |
 | string、bool、integer、decimal、date、snowflake_id | 已定义 | 已实现 | 已实现 | 已实现 | 已实现；不生成 ID |
+| datetime | 已定义 | 已实现 | 已实现 | UTC 规范文本 | 带时区的 UTC datetime |
 | decimal 参数 | 已定义 | 已实现 | 已实现 | 精确 TEXT | 精度和小数位校验 |
 | string regex | 方言待定 | 保留约束 | 已实现 | 保存字符串 | 不执行正则 |
 | float、datetime | 运行时细节待定 | 已实现 | 已实现 | 待实现 | 待实现 |

@@ -9,7 +9,7 @@ const constants = require('./constant-evaluation.cjs');
 const snake = name => /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/.test(name);
 function lookupSupported(resolved, symbols) {
   const dictionary = resolved.name === 'code' && symbols.get(resolved.args[0]?.key);
-  return resolved.kind === 'unknown' || (!resolved.dependency && (resolved.kind === 'reference' || (resolved.name === 'code' ? !dictionary || !require('./decodes.cjs').isFlags(dictionary) : !resolved.key && ['string', 'bool', 'integer', 'snowflake_id', 'decimal', 'date'].includes(resolved.name))));
+  return resolved.kind === 'unknown' || (!resolved.dependency && (resolved.kind === 'reference' || (resolved.name === 'code' ? !dictionary || !require('./decodes.cjs').isFlags(dictionary) : !resolved.key && ['string', 'bool', 'integer', 'snowflake_id', 'decimal', 'date', 'datetime'].includes(resolved.name))));
 }
 
 function checkComputations(documents, symbols, report) {
