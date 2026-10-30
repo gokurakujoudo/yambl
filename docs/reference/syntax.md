@@ -182,7 +182,8 @@ extend 添加同名字段，也不得 override；Plan 不能写入。
 | `mapping<string, decimal>` | 无序、键唯一，值不得为集合 |
 | `attrs<AttrCats.Static, Security>` | 指定类别的非集合字段描述 |
 | `alias<self.kind::value>` | 与依赖表达式同值 |
-| `exact<Currencies.USD>` | 常量类型约束，仅用于 override/overload |
+| `exact<Currencies.USD>` | 单个编译期值的类型约束 |
+| `one_of[1, 2, 3]` | 多个编译期值的类型约束 |
 
 方括号参数须全部按位置或全部按名称提供，不允许混用、重复、缺失或未知参数。
 `decimal[precision: 18, scale: 4]` 与 `decimal[18, 4]` 等价；`string[regex: 'x']`

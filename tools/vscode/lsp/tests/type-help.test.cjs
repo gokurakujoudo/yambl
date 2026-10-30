@@ -16,6 +16,20 @@ function request(source, method) {
 
 function labels(source) { return request(source, 'completion').items.map(item => item.label); }
 
+test('unfinished one_of completes visible constants and conversions', () => {
+  const source = "const LOW: integer = 1\ndecodes D { - 1 One: 'one' }\nentity E { attr choice: one_of[LOW, |";
+  const choices = labels(source);
+  assert.ok(choices.includes('LOW'));
+  assert.ok(choices.includes('D'));
+  assert.ok(choices.includes('parse_datetime'));
+  assert.ok(choices.includes('true'));
+  assert.match(request(source, 'signatureHelp').signatures[0].label, /one_of\[value/);
+  const exact = labels("const LOW: integer = 1\nentity Root {}\nentity E { attr choice: exact<|");
+  assert.ok(exact.includes('LOW'));
+  assert.ok(exact.includes('Root'));
+  assert.ok(exact.includes('parse_datetime'));
+});
+
 test('built-in value types explain their meaning and parameterization', () => {
   for (const [name, expression] of [['decimal', /decimal\[precision, scale\].*total digits.*fractional digits/i], ['string', /regex.*dialect/i], ['integer', /integer/i]]) {
     const text = `entity E { attr field: ${name.slice(0, 1)}|${name.slice(1)} }`;

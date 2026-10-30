@@ -171,7 +171,7 @@ const help = {
   mapping: 'Unordered unique string-compatible or reference keys and non-collection values.',
   attrs: 'Qualified field identities; excludes IDs and collection attributes.',
   alias: 'Same value as an instance-rooted field expression.',
-  exact: 'Singleton constraint permitted on override and overload fields.',
+  exact: 'Singleton constraint defined by a compile-time value.',
   as: 'Bind a mapping key for its value type expression.',
   ...Object.fromEntries(Object.entries(resultConstants).map(([name, meaning]) => [name, `${meaning}\n\nCalculation results support explicit recover; PARTIAL requires a payload and issue details.`])),
   title: 'Short display title.', description: 'Descriptive metadata.',

@@ -62,10 +62,29 @@ entity DollarSecurity inherits Security {
 }
 ```
 
-`exact<value>` 将字段限制为一个常量，仅允许用于 override 或 overload。
-它必须与被约束的类型兼容；继承 USD 限制后不能改为 CNY 或放宽为 code<Currencies>。
-常量可为标量、实体类型、字典引用或字典代码。字典实例名称不提供类型位置的简写：
-`attr x: Currencies` 不合法。
+`exact<expr>` 将类型限制为一个编译期值，可用于普通字段、别名和支持值类型的集合位置。
+表达式可使用字面量、字典代码、纯转换与已声明的 `const`；结构值通过有明确类型的常量提供。
+它也保留实体类型和字典引用的单例约束。在 override 或 overload 中，字典实例名称
+`Currencies` 可作为 `exact<Currencies>` 的简写；普通字段使用后者。
+
+`one_of[expr, ...]` 将类型限制为一组编译期值：
+
+```yambl
+const LOW: integer = 1 + 1
+type priority = one_of[LOW, 3, 4]
+entity Base { attr priority: priority }
+entity Preferred inherits Base { @override attr priority: one_of[LOW, 3] }
+entity Default inherits Preferred { @override attr priority: exact<LOW> }
+```
+
+候选必须是正常的非集合值，不能依赖 `self`、`input`、取数或实体实例引用。
+候选先按已有类型兼容规则推导共同基础类型，再规范化和去重；结果至少有两个不同的值，
+单值用 `exact`。同字典 code 保留字典身份，不同字典的 code 可以共同归入 string。
+无法推导共同类型时，使用有类型的常量或显式转换。候选顺序不影响类型和语义摘要。
+
+继承时有限值约束只能收窄：子类型的值必须是父类型允许值的子集。相同的 overload
+约束可以保留，不同约束按原有共同类型规则退到基础类型。存储和计算结果在各自入口
+检查值是否满足实际字段的约束；尚未支持物理存储的集合类型不会因有限值约束而开放。
 
 code、实体引用 ID、类型 qualified name 和字段 qualified name 可以单向视作 string。
 普通 string 不能反向自动转为其中任一种类型。这是兼容规则，不是值类型继承。

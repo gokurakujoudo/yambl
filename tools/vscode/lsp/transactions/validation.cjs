@@ -1,6 +1,7 @@
 'use strict';
 
-const { Resolver } = require('../language/expressions.cjs');
+const { Resolver, base, singletonKey } = require('../language/expressions.cjs');
+const { conversion } = require('../language/constant-evaluation.cjs');
 const { stringValue } = require('../language/syntax.cjs');
 const { codeEntries, isFlags } = require('../language/decodes.cjs');
 const { number } = require('./writing.cjs');
@@ -79,7 +80,12 @@ function checkValue(expected, value, symbols, dictionaries = new Map()) {
       }
     }
   }
-  if (!error && expected.exact !== null && !['type', 'collection', 'values', 'mapping'].includes(expected.name)) {
+  if (!error && (expected.allowed?.length || expected.exactValue) && !['type', 'collection', 'values', 'mapping'].includes(expected.name)) {
+    const normalized = expected.name === 'datetime' ? conversion('parse_datetime', [compared]).iso : String(compared);
+    const key = singletonKey({ ...base(expected), exact: normalized });
+    if (expected.allowed?.length && !expected.allowed.includes(key)) error = 'value violates one_of constraint';
+    else if (expected.exactValue && expected.exactValue !== key) error = 'value violates exact constraint';
+  } else if (!error && expected.exact !== null && !['type', 'collection', 'values', 'mapping'].includes(expected.name)) {
     const exact = expected.exact.startsWith("'") ? stringValue(expected.exact) : expected.exact;
     if (String(compared) !== exact) error = 'value violates exact constraint';
   }

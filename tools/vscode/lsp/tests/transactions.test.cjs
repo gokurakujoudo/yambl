@@ -164,6 +164,29 @@ test('shared runtime/editor type cases use aliases, exact constraints and refere
   }
 });
 
+test('finite constraints validate normalized plan values', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-finite-plan-'));
+  t.after(() => fs.rmSync(root, { recursive: true }));
+  fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
+  fs.writeFileSync(path.join(root, 'model.yambl'), `entity Item {
+    id id: integer
+    attr status: one_of['open', 'closed']
+    attr fixed: exact<1 + 2>
+    attr moment: one_of[parse_datetime('2026-01-01T00:00:00Z'), parse_datetime('2026-01-02T00:00:00Z')]
+  }`);
+  const service = new Service(() => {}), uri = 'untitled:finite-plan';
+  service.bindModel(uri, root);
+  for (const [field, literal, valid] of [
+    ['status', "'open'", true], ['status', "'invalid'", false],
+    ['fixed', '3', true], ['fixed', '4', false],
+    ['moment', "'2026-01-01T08:00:00+08:00'", true], ['moment', "'2026-01-03T00:00:00Z'", false],
+  ]) {
+    const text = cases[0].text.replace('group first {', `group first {\nupdate Item (id, ${field}) {\n1, ${literal}\n}`);
+    service.open.set(uri, { text, languageId: 'yaplan', version: 1 }); service.refresh();
+    assert.equal(service.document(uri).diagnostics.length === 0, valid, field + ': ' + literal);
+  }
+});
+
 test('Example static plan passes model-bound type checks', () => {
   const root = path.resolve(__dirname, 'fixtures/example'), uri = 'untitled:typed-example';
   const service = new Service(() => {});

@@ -110,7 +110,7 @@ const builtinEntities = new Map([...builtinModels].filter(([, d]) => d.kind === 
 function overrideType(field, prior, symbols) {
   const actual = new Resolver(field.doc, () => {}, symbols, field.owner, true).resolve(field.type);
   const expected = new Resolver(prior.doc, () => {}, symbols, prior.owner, true).resolve(prior.type);
-  return equal(actual, expected) || (actual.exact !== null && accepts(expected, actual, symbols));
+  return equal(actual, expected) || ((actual.exact !== null || actual.allowed?.length) && accepts(expected, actual, symbols));
 }
 function mappingCandidates(target, mode, symbols) {
   const result = new Map();

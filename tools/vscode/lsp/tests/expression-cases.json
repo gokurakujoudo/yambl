@@ -100,5 +100,59 @@
   ],
   [
     "entity A { config attr x: string } entity B inherits A { @override config attr x: exact<'USD'> = 'CNY' }"
+  ],
+  [
+    "type active = exact<true> entity A { id key: string attr enabled: active attr label: exact<'ready'> }"
+  ],
+  [
+    "const LOW: integer = 1 + 1 entity Base { attr choice: one_of[LOW, 3, 4] } entity Child inherits Base { @override attr choice: one_of[3, LOW] } entity Leaf inherits Child { @override attr choice: exact<3> }"
+  ],
+  [
+    "entity Base { attr choice: one_of[1, 2] } entity Child inherits Base { @override attr choice: one_of[2, 3] }"
+  ],
+  [
+    "entity A { config attr x: one_of[1, 2] = 3 }"
+  ],
+  [
+    "entity A { attr x: one_of[] }"
+  ],
+  [
+    "entity A { attr x: one_of[1, 1] }"
+  ],
+  [
+    "entity A { attr x: one_of[1, 'x'] }"
+  ],
+  [
+    "decodes D { - 1 Same: 'd' } decodes E { - 1 Same: 'e' } entity A { attr x: one_of[D.Same, E.Same] }"
+  ],
+  [
+    "const START: datetime = parse_datetime('2026-01-01T08:00:00+08:00') entity A { attr x: one_of[START, parse_datetime('2026-01-02T00:00:00Z')] }"
+  ],
+  [
+    "value point { attr x: integer } const P: point = {x: 1} const Q: point = {x: 2} entity A { attr x: one_of[P, Q] }"
+  ],
+  [
+    "const N: integer = 2 entity A { attr x: exact<N + 1> attr y: exact<1 > 0> }"
+  ],
+  [
+    "value point { attr x: integer } const P: point = {x: 1} entity A { attr x: exact<P> }"
+  ],
+  [
+    "const START: datetime = parse_datetime('2026-01-01T08:00:00+08:00') entity A { attr x: exact<START> }"
+  ],
+  [
+    "entity Base { attr x: one_of[1, 2] } entity Child inherits Base { @override attr x: exact<1 + 1> }"
+  ],
+  [
+    "entity A { config attr x: exact<1>=1 attr y: exact<1 >= 0> }"
+  ],
+  [
+    "@flags decodes D { - 1 One: 'one' - 2 Two: 'two' } entity A { attr x: one_of[D.One, D.All] }"
+  ],
+  [
+    "@flags decodes D { - 1 One: 'one' - 2 Two: 'two' } entity A { attr x: one_of[D.All, D.One + D.Two] }"
+  ],
+  [
+    "decodes D {} entity A { attr x: Decodes } entity B inherits A { @override attr x: D }"
   ]
 ]

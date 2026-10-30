@@ -139,6 +139,7 @@ async function main() {
   assert.ok(!grammar.tokenizeLine('self.price::at()', textmate.INITIAL).tokens.some(t => t.scopes.includes('variable.language.yambl')));
   checks++;
   expectScope('type selected<t: type<Entity>> = t', 'selected', 'support.type.yambl');
+  expectScope("attr choice: one_of['a', 'b']", 'one_of', 'support.type.yambl');
   expectScope('value quote {', 'value', 'storage.type.yambl');
   expectScope('value quote {', 'quote', 'support.type.yambl');
   expectScope('@dimension(source: string, preference: Hierarchy)', 'Hierarchy', 'entity.name.type.yambl');

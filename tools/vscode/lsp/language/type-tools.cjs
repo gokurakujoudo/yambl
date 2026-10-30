@@ -17,7 +17,8 @@ const types = {
   attrs: 'Field identities selected by attribute category and target entity; excludes IDs and collection attributes.',
   field_mapping: 'Mapping from selected entity fields to their declared value types.',
   alias: 'Same value as an instance-rooted field expression.',
-  exact: 'Singleton value constraint permitted on override and overload fields.',
+  exact: 'Singleton value constraint.',
+  one_of: 'Finite set of compile-time values.',
 };
 
 const signatures = {
@@ -31,7 +32,8 @@ const signatures = {
   attrs: { open: '<', parameters: [['category: code<AttrCats>', 'Attribute categories to select.'], ['target: entity type', 'Entity type whose fields are selected.']], label: 'attrs<category, target>' },
   field_mapping: { open: '<', parameters: [['category: code<AttrCats>', 'Attribute categories to select.'], ['target: entity type', 'Entity type whose fields are selected.']], label: 'field_mapping<category, target>' },
   alias: { open: '<', parameters: [['value: instance field value', 'An instance-rooted field expression ending in ::value.']], label: 'alias<value>' },
-  exact: { open: '<', parameters: [['value: constant', 'A constant value compatible with the inherited field.']], label: 'exact<value>' },
+  exact: { open: '<', parameters: [['value: constant', 'A compile-time constant value.']], label: 'exact<value>' },
+  one_of: { open: '[', parameters: [['value: constant', 'A compile-time non-collection value.']], label: 'one_of[value, ...]' },
 };
 
 // Keep nesting so commas inside a child generic do not change the enclosing parameter.
@@ -69,6 +71,14 @@ function signatureHelp(typeContext) {
 
 function completions(typeContext, scope, symbols, describe, Resolver) {
   const { name, segment, commas, signature } = typeContext;
+  if (name.value === 'one_of' || name.value === 'exact') {
+    if (!/^\s*[A-Za-z_0-9]*$/.test(segment)) return [];
+    return [
+      ...['true', 'false'].map(label => ({ label, kind: 21, detail: 'Constant value' })),
+      ...[...scope].filter(([, d]) => ['constant', 'decodes'].includes(d.kind) || name.value === 'exact' && d.kind === 'entity').map(([label, d]) => ({ label, kind: 21, detail: describe(d) })),
+      ...Object.keys(require('./conversions.cjs').signatures).map(label => ({ label, kind: 3, insertText: label + '(', detail: 'Pure conversion' })),
+    ];
+  }
   if (commas.length >= signature.parameters.length || !/^\s*[A-Za-z_0-9]*$/.test(segment)) return [];
   if (signature.open === '[') {
     const used = new Set([...typeContext.prefix.matchAll(/\b(precision|scale|regex)\s*:/g)].map(match => match[1]));
@@ -77,10 +87,6 @@ function completions(typeContext, scope, symbols, describe, Resolver) {
   }
   const slot = commas.length, kind = name.value;
   if (kind === 'alias') return [{ label: 'self', kind: 6, insertText: 'self.', detail: 'Instance field value ending in ::value.' }];
-  if (kind === 'exact') return [
-    ...['true', 'false'].map(label => ({ label, kind: 21, detail: 'Constant value' })),
-    ...[...scope].filter(([, d]) => ['constant', 'decodes'].includes(d.kind)).map(([label, d]) => ({ label, kind: 21, detail: describe(d) })),
-  ];
   if (['attrs', 'field_mapping'].includes(kind) && slot === 0) return [{ label: 'AttrCats', kind: 20, detail: 'Attribute category flags.' }];
   if (kind === 'code') return [...scope].filter(([, d]) => d.kind === 'decodes').map(([label, d]) => ({ label, kind: 20, detail: describe(d) }));
   const reference = ['collection', 'type', 'attrs', 'field_mapping'].includes(kind);

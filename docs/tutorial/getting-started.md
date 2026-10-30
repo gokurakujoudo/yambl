@@ -249,6 +249,24 @@ python match_product.py files.lclcfg
 输出同样包含 `商品金额：37.50`。两个配置指向各自的数据仓库；文件后端的路径必须是
 不存在的新目录。Plan 格式和回滚操作见[事务和数据](../reference/transactions.md)。
 
+## 限制字段取值
+
+如果字段只允许几个编译期值，可以声明有限值类型：
+
+```yambl
+const NORMAL: integer = 2
+type priority = one_of[1, NORMAL, 3]
+entity Task {
+    id task_id: string
+    attr priority: priority
+    attr fixed_priority: exact<NORMAL>
+}
+```
+
+插入或更新 `priority` 时只能使用 1、2 或 3；`fixed_priority` 只能使用 2。
+`one_of` 的候选顺序不影响允许值。更多规则和继承示例见
+[类型表达式](../reference/type-expressions.md)。
+
 ## 接下来
 
 从[语法总览](../reference/syntax.md)了解更多声明形式；

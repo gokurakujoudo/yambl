@@ -269,7 +269,7 @@
     },
     {
       "name": "support.type.yambl",
-      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|dimension_ref|input_type|collection|values|mapping|attrs|alias|exact|type|field_mapping)\\b"
+      "match": "\\b(?:bool|string|integer|float|decimal|date|datetime|snowflake_id|dimension_ref|input_type|collection|values|mapping|attrs|alias|exact|one_of|type|field_mapping)\\b"
     },
     {
       "name": "variable.parameter.yambl",

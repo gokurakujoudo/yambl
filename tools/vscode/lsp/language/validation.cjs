@@ -4,7 +4,7 @@ const { isFlags, codeEntries, checkDecodes, deriveSubtypes } = require('./decode
 
 const { values, generics, entities, structures, stringValue, resultConstants } = require('./syntax.cjs');
 const { relationships, builtinModels, builtinLocals, builtinDocuments } = require('./relationships.cjs');
-const { Resolver, checkAliases } = require('./expressions.cjs');
+const { Resolver, checkAliases, accepts, base } = require('./expressions.cjs');
 const { collectDimensions, checkDimensions } = require('./dimensions.cjs');
 const { checkComputations } = require('./computation.cjs');
 const { checkLookups } = require('./lookups.cjs');
@@ -128,12 +128,15 @@ function validate(documents) {
               float: /^-?\d/.test(value), decimal: /^-?\d/.test(value),
               string: value.startsWith("'"), bool: ['true', 'false'].includes(value),
             };
-            if (!valid[resolved.name] || (resolved.exact !== null && (value.startsWith("'") ? stringValue(value) : value) !== resolved.exact)) issue(doc, field.defaultToken, `unsupported or incompatible config default for ${resolved.name}`);
+            const literal = value.startsWith("'") ? stringValue(value) : value;
+            if (!valid[resolved.name] || !accepts(resolved, { ...base(resolved), exact: literal }, symbols)) issue(doc, field.defaultToken, `unsupported or incompatible config default for ${resolved.name}`);
           });
         }
       }
     }
   }
+  const computations = checkComputations(analysisDocuments, symbols, issue);
+  symbols.finite = computations.finite;
   const valueDecls = [...symbols.values()].filter(d => d.kind === 'value');
   for (const decl of valueDecls) {
     const next = d => d.fields.map(f => symbols.get(new Resolver(d.doc, () => {}, symbols, null).resolve(f.type).key)).filter(t => t?.kind === 'value');
@@ -166,7 +169,7 @@ function validate(documents) {
     if (args[1].name === 'input_type') issue(args[0], args[1].token, 'input_type is only a decorator pair constraint');
     if (args[2]?.kind === 'value' && kind === 'collection') issue(args[0], args[1].token, 'value fields cannot be collections');
   }
-  checkComputations(analysisDocuments, symbols, issue);
+  computations.run();
   const invalidField = field => field.doc.diagnostics.some(d => d.severity === 1 &&
     field.doc.tokens.some(t => t.start >= (field.metadata[0]?.token || field.token).start && t.start < field.end &&
       t.range.start.line === d.range.start.line && t.range.start.character === d.range.start.character));

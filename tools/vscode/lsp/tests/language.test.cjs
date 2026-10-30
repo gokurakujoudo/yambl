@@ -5,6 +5,41 @@ const { parse, format, range } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json')];
 
+test('one_of parses constant expressions without changing scalar parameters', () => {
+  const doc = parse("type options = one_of['a', C.VALUE, to_integer('2'), 1 + 2]");
+  assert.deepEqual(doc.errors, []);
+  assert.deepEqual(doc.declarations[0].type.candidates.map(item => item.kind), ['string', 'member', 'call', 'binary']);
+  assert.equal(parse('type options = one_of[]').errors.length, 0);
+  for (const text of ['type x = one_of[1,]', 'type x = one_of<1, 2>', 'type x = decimal[1 + 2]']) assert.ok(parse(text).errors.length, text);
+});
+
+test('exact types are valid on ordinary fields and aliases', () => {
+  const doc = parse("type active = exact<true> entity A { id key: string attr enabled: active attr label: exact<'ready'> config attr count: exact<2> = 2 attr labels: values<exact<'ready'>> }");
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics, []);
+  const invalid = parse('entity A { config attr count: exact<2> = 3 }');
+  validate([invalid]);
+  assert.ok(invalid.diagnostics.some(d => d.message.includes('incompatible config default')));
+});
+
+test('one_of checks normalized values and inherited subsets', () => {
+  const source = `const LOW: integer = 1 + 1
+entity Base { attr choice: one_of[LOW, 3, 4] }
+entity Child inherits Base { @override attr choice: one_of[3, LOW] }
+entity Leaf inherits Child { @override attr choice: exact<3> }
+entity Config { config attr mode: one_of['a', 'b'] = 'a' }`;
+  const good = parse(source); validate([good]); assert.deepEqual(good.diagnostics, []);
+  for (const replacement of ['one_of[3, 5]', 'exact<4>', 'integer']) {
+    const invalid = parse(source.replace('one_of[3, LOW]', replacement)); validate([invalid]);
+    assert.ok(invalid.diagnostics.some(d => d.message.includes('override signature mismatch')), replacement);
+  }
+  for (const expression of ["one_of[]", "one_of[1]", "one_of[1, 1]", "one_of[1, 'x']", 'one_of[NO_ENTRY, 1]']) {
+    const invalid = parse(`entity A { attr x: ${expression} }`); validate([invalid]); assert.ok(invalid.diagnostics.length, expression);
+  }
+  const badDefault = parse(source.replace("= 'a'", "= 'c'")); validate([badDefault]);
+  assert.ok(badDefault.diagnostics.some(d => d.message.includes('incompatible config default')));
+});
+
 test('lookup nodes preserve keys, expressions, comments and formatting', () => {
   const source = `entity Security {
     attr name: string

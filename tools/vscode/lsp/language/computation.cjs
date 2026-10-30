@@ -2,6 +2,7 @@
 
 const { Resolver, type, accepts, equal, base, canonical, commonType, unknown } = require('./expressions.cjs');
 const { resolveDimension } = require('./dimensions.cjs');
+const { isFlags } = require('./decodes.cjs');
 const { resultConstants } = require('./syntax.cjs');
 const numbers = ['integer', 'decimal', 'float'];
 const conversions = require('./conversions.cjs');
@@ -15,6 +16,24 @@ function lookupSupported(resolved, symbols) {
 function checkComputations(documents, symbols, report) {
   const completed = new Map(), active = new Set();
   const constantTypes = new Map(), constantActive = new Set(), constantValues = new Map();
+  const finiteTypes = new WeakMap(), finiteActive = new WeakSet();
+  function pure(doc, issue, expression, keyPosition = false) {
+    if (expression.kind === 'descriptor' && expression.value === 'subtypes' && expression.operands[0].kind === 'name' && doc.scope.get(expression.operands[0].value)?.kind === 'entity') return;
+    if (expression.kind === 'name' && !keyPosition) {
+      const symbol = doc.scope.get(expression.value);
+      if (!(expression.value in conversions.signatures) && !['constant', 'decodes'].includes(symbol?.kind)) issue(expression, `not a pure constant dependency: ${expression.value}`);
+    }
+    if (['descriptor', 'recover', 'lambda'].includes(expression.kind) || (expression.kind === 'call' && expression.operands[0].kind !== 'name')) issue(expression, 'constant expressions cannot read fields, inputs or non-normal results');
+    expression.operands.forEach((child, i) => pure(doc, issue, child, expression.kind === 'object' && expression.inferred?.type?.key && i % 2 === 0));
+    expression.arguments.forEach(a => pure(doc, issue, a.expression));
+  }
+  function resolveConstant(doc, name) {
+    const [root, code] = name.split('.'), target = doc.scope.get(root.replace(/::subtypes$/, ''));
+    if (root.endsWith('::subtypes') && target?.kind === 'entity' && code !== undefined && target.subtypes.entries.some(e => e.code.value === code)) return code;
+    if (target?.kind === 'constant') { constant(target); if (constantValues.has(target)) { const value = constantValues.get(target); if (code === undefined) return value; if (value instanceof Map && value.has(code)) return value.get(code); } }
+    if (target?.kind === 'decodes' && code !== undefined) return code;
+    throw Error(`not a pure constant dependency: ${name}`);
+  }
   function constant(declaration) {
     if (constantTypes.has(declaration)) return constantTypes.get(declaration);
     const node = declaration.initializer, issue = (node, message) => report(declaration.doc, node.token, message);
@@ -24,27 +43,11 @@ function checkComputations(documents, symbols, report) {
     const expected = new Resolver(declaration.doc, report, symbols, declaration, true).resolve(declaration.type);
     const before = declaration.doc.diagnostics.length;
     const actual = checker.infer(node, new Map(), expected).type;
-    function pure(expression, keyPosition = false) {
-      if (expression.kind === 'descriptor' && expression.value === 'subtypes' && expression.operands[0].kind === 'name' && declaration.doc.scope.get(expression.operands[0].value)?.kind === 'entity') return;
-      if (expression.kind === 'name' && !keyPosition) {
-        const symbol = declaration.doc.scope.get(expression.value);
-        if (!(expression.value in conversions.signatures) && !['constant', 'decodes'].includes(symbol?.kind)) issue(expression, `not a pure constant dependency: ${expression.value}`);
-      }
-      if (['descriptor', 'recover', 'lambda'].includes(expression.kind) || (expression.kind === 'call' && expression.operands[0].kind !== 'name')) issue(expression, 'constant expressions cannot read fields, inputs or non-normal results');
-      expression.operands.forEach((child, i) => pure(child, expression.kind === 'object' && expression.inferred?.type?.key && i % 2 === 0));
-      expression.arguments.forEach(a => pure(a.expression));
-    }
-    pure(node);
+    pure(declaration.doc, issue, node);
     if (!compatible(expected, actual)) issue(node, `incompatible constant result: expected ${expected.name}, got ${actual.name}`);
     if (declaration.doc.diagnostics.length === before) {
       try {
-        const payload = constants.evaluate(node, name => {
-          const [root, code] = name.split('.'), target = declaration.doc.scope.get(root.replace(/::subtypes$/, ''));
-          if (root.endsWith('::subtypes') && target?.kind === 'entity' && code !== undefined && target.subtypes.entries.some(e => e.code.value === code)) return code;
-          if (target?.kind === 'constant') { constant(target); if (constantValues.has(target)) { const value = constantValues.get(target); if (code === undefined) return value; if (value instanceof Map && value.has(code)) return value.get(code); } }
-          if (target?.kind === 'decodes' && code !== undefined) return code;
-          throw Error(`not a pure constant dependency: ${name}`);
-        });
+        const payload = constants.evaluate(node, name => resolveConstant(declaration.doc, name));
         if (expected.name === 'decimal' && expected.params?.length) {
           const params = Object.fromEntries(expected.params), text = payload.text(), [whole, fraction = ''] = text.replace(/^-/, '').split('.');
           if (fraction.length > Number(params.scale) || (whole === '0' ? 0 : whole.length) > Number(params.precision) - Number(params.scale)) throw Error('decimal exceeds declared precision or scale');
@@ -64,6 +67,7 @@ function checkComputations(documents, symbols, report) {
     return declaration;
   }
   function compatible(expected, actual) {
+    if (expected.allowed?.length || expected.exact !== null) return accepts(expected, actual, symbols);
     if (numbers.includes(expected.name) && numbers.includes(actual.name)) return numbers.indexOf(actual.name) <= numbers.indexOf(expected.name);
     if (expected.name === actual.name && expected.args.length && expected.args.length === actual.args.length) return expected.args.every((t, i) => compatible(t, actual.args[i]));
     return accepts(expected, actual, symbols);
@@ -560,6 +564,84 @@ function checkComputations(documents, symbols, report) {
     }
     return false;
   }
+  function finiteValue(doc, resolved, payload) {
+    if (payload instanceof Map) {
+      const declaration = symbols.get(resolved.key);
+      if (!declaration || declaration.kind !== 'value') throw Error('structured finite value requires a declared type');
+      const fields = [...payload].sort(([a], [b]) => String(a).localeCompare(String(b))).map(([name, value]) => {
+        const field = declaration.fields.find(item => item.name.value === name);
+        if (!field) throw Error('unknown structured finite value field');
+        const fieldType = new Resolver(field.doc, report, symbols, declaration, true).resolve(field.type);
+        return [name, JSON.parse(finiteValue(field.doc, fieldType, value))];
+      });
+      return JSON.stringify(['structured', resolved.key, fields]);
+    }
+    if (Array.isArray(payload) || payload === null || payload === undefined) throw Error('finite values must be non-collection values');
+    const target = resolved.name === 'code' ? resolved.args[0].key : resolved.key;
+    const value = payload instanceof constants.Ratio ? payload.text() : typeof payload === 'number' ? String(payload) : typeof payload === 'object' ? payload.iso : payload;
+    return JSON.stringify([resolved.name, target, value]);
+  }
+  function finite(doc, node) {
+    if (finiteTypes.has(node)) return finiteTypes.get(node);
+    const issue = (expression, message) => report(doc, expression.token, message);
+    if (finiteActive.has(node)) { issue(node, 'finite type dependency cycle'); return unknown; }
+    finiteActive.add(node);
+    const candidates = [];
+    for (const expression of node.candidates) {
+      const checker = new Checker(doc, null, issue), before = doc.diagnostics.length;
+      function flagsExpression(value) {
+        if (value.kind === 'member' && value.operands[0].kind === 'name') {
+          const root = value.operands[0], symbol = doc.scope.get(root.value);
+          if (symbol?.kind !== 'decodes' || !isFlags(symbol)) return null;
+          return { token: root.token, name: root.value, args: null, params: null, accesses: [{ operator: { value: '.' }, token: value.memberToken }], operations: [] };
+        }
+        if (value.kind === 'binary' && ['+', '-'].includes(value.value)) {
+          const left = flagsExpression(value.operands[0]), right = flagsExpression(value.operands[1]);
+          if (left && right) { left.operations.push({ operator: { value: value.value }, term: right }); return left; }
+        }
+        return null;
+      }
+      const flags = flagsExpression(expression);
+      if (flags) {
+        const resolver = new Resolver(doc, report, symbols, null, true);
+        const result = resolver.valueType(resolver.evaluate(flags));
+        if (node.name === 'exact') { finiteActive.delete(node); finiteTypes.set(node, result); return result; }
+        if (result.exact !== null && doc.diagnostics.length === before) candidates.push([base(result), result.exact]);
+        continue;
+      }
+      const symbol = expression.kind === 'name' ? doc.scope.get(expression.value) : null;
+      if (node.name === 'exact' && symbol && ['entity', 'decodes'].includes(symbol.kind)) {
+        const resolver = new Resolver(doc, report, symbols, null, true);
+        const source = { token: expression.token, name: expression.value, args: null, params: null, accesses: [], operations: [] };
+        const result = resolver.valueType(resolver.evaluate(source));
+        finiteActive.delete(node); finiteTypes.set(node, result); return result;
+      }
+      const resolved = checker.read(checker.infer(expression, new Map()), expression).type;
+      pure(doc, issue, expression);
+      if (['collection', 'reference'].includes(resolved.kind) || (expression.kind === 'name' && expression.value in resultConstants)) issue(expression, 'finite values must be non-collection values without entity instances');
+      if (doc.diagnostics.length !== before || resolved.kind === 'unknown') { if (node.name === 'exact') issue(expression, 'exact requires a constant value'); continue; }
+      try { candidates.push([base(resolved), constants.evaluate(expression, name => resolveConstant(doc, name))]); }
+      catch (error) { issue(expression, `finite value evaluation failed: ${error.message}`); }
+    }
+    const common = commonType(candidates.map(([resolved]) => resolved), symbols);
+    let result = unknown;
+    if (candidates.length === node.candidates.length) {
+      if (!common && candidates.length) issue(node, 'finite values require a common type; use typed constants or explicit conversions');
+      else {
+        try {
+          const values = new Set(candidates.map(([resolved, value]) => finiteValue(doc, common?.name === 'string' ? common : resolved, common?.name === 'string' && resolved.name !== 'string' ? (value instanceof constants.Ratio ? value.text() : String(value)) : value)));
+          if (node.name === 'exact' && values.size === 1) {
+            const key = [...values][0], payload = JSON.parse(key)[2];
+            result = { ...common, exact: typeof payload === 'boolean' ? String(payload) : typeof payload === 'object' ? '' : String(payload), exactValue: key };
+          } else if (values.size < 2) issue(node, 'one_of requires at least two distinct values; use exact for one');
+          else result = { ...common, allowed: [...values].sort() };
+        } catch (error) { issue(node, error.message); }
+      }
+    }
+    finiteActive.delete(node); finiteTypes.set(node, result);
+    return result;
+  }
+  function run() {
   for (const doc of documents.filter(d => !d.errors.length)) for (const declaration of doc.declarations) {
     if (declaration.kind === 'constant') constant(declaration);
     for (const dimension of declaration.kind === 'dimension' ? [declaration] : declaration.dimensions || []) if (dimension.default) {
@@ -625,6 +707,8 @@ function checkComputations(documents, symbols, report) {
     }
     contracts.set(field.identity, { contract, field });
   }
+  }
+  return { run, finite };
 }
 
 module.exports = { checkComputations, lookupSupported };

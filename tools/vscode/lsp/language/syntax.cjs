@@ -12,7 +12,7 @@ const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend',
   'const', 'computed', 'dimension', 'lookup', 'hierarchy', 'fallback_days', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'];
 const annotations = ['title', 'description', 'temporal', 'dimension', 'relationship', 'reverse_relationship', 'sparse', 'dense', 'overload', 'override', 'flags', 'allow_multiple', 'targets', 'decodes_rank'];
 const values = ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'dimension_ref', 'input_type'];
-const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact'];
+const generics = ['collection', 'values', 'mapping', 'code', 'type', 'attrs', 'alias', 'exact', 'one_of'];
 const entities = [];
 const structures = [];
 const constants = [...Object.keys(resultConstants), 'true', 'false'];
@@ -64,7 +64,7 @@ function parse(text, uri = '') {
   const qualified = () => { let value = name().value; while (is('.')) { take(); value += '.' + name().value; } return value; };
   const piece = (start, indent, calculation = false) => doc.pieces.push({ tokens: doc.tokens.slice(start, index), indent, calculation });
   const expressionNode = (kind, token, value = '', operands = [], args = [], cases = []) => ({ kind, token, value, operands, arguments: args, cases, end: doc.tokens[index - 1].end });
-  function calculation(minimum = 0) {
+  function calculation(minimum = 0, closingAngle = false) {
     if (/^-\d/.test(peek().value)) {
       const signed = peek();
       doc.tokens.splice(index, 1, { ...signed, value: '-', end: signed.start + 1, range: range(text, signed.start, signed.start + 1) },
@@ -72,12 +72,12 @@ function parse(text, uri = '') {
     }
     const token = peek(); let node;
     if (is('if')) {
-      take(); const condition = calculation(); take('then'); const yes = calculation(); take('else');
-      node = expressionNode('conditional', token, '', [condition, yes, calculation()]);
+      take(); const condition = calculation(0, closingAngle); take('then'); const yes = calculation(0, closingAngle); take('else');
+      node = expressionNode('conditional', token, '', [condition, yes, calculation(0, closingAngle)]);
     } else if (/^[A-Za-z_]/.test(token.value) && doc.tokens[index + 1]?.value === '->') {
-      take(); take('->'); node = expressionNode('lambda', token, token.value, [calculation()]);
+      take(); take('->'); node = expressionNode('lambda', token, token.value, [calculation(0, closingAngle)]);
     } else if (is('not') || is('-') || is('+')) {
-      take(); node = expressionNode('unary', token, token.value, [calculation(6)]);
+      take(); node = expressionNode('unary', token, token.value, [calculation(6, closingAngle)]);
     } else if (is('(')) {
       take(); node = calculation(); take(')');
     } else if (is('[') || is('{')) {
@@ -121,14 +121,30 @@ function parse(text, uri = '') {
         }
         take(')'); node = expressionNode(cases.length ? 'recover' : 'call', node.token, '', [node], args, cases);
       } else {
+        if (closingAngle && is('>=')) {
+          let depth = 0, closes = false;
+          for (const next of doc.tokens.slice(index + 1)) {
+            if (!depth && (['}', ',', '=', '@'].includes(next.value) || /^(?:attr|static|snapshot|scd|config|computed|abstract|id|entity|value|extend|type|const|decorator|lookup|dimension|hierarchy|decodes|final)$/.test(next.value))) break;
+            if (!depth && next.value === '>') { closes = true; break; }
+            if (['(', '[', '{'].includes(next.value)) depth++;
+            if ([')', ']', '}'].includes(next.value)) { if (!depth) break; depth--; }
+          }
+          if (!closes) {
+            const combined = peek();
+            doc.tokens.splice(index, 1,
+              { ...combined, value: '>', end: combined.start + 1, range: range(text, combined.start, combined.start + 1) },
+              { ...combined, value: '=', start: combined.start + 1, range: range(text, combined.start + 1, combined.end) });
+          }
+        }
         if (/^-\d/.test(peek().value)) {
           const signed = peek();
           doc.tokens.splice(index, 1, { ...signed, value: '-', end: signed.start + 1, range: range(text, signed.start, signed.start + 1) },
             { ...signed, value: signed.value.slice(1), start: signed.start + 1, range: range(text, signed.start + 1, signed.end) });
         }
+        if (closingAngle && is('>') && (!/^(?:[A-Za-z_]|\d|'|\(|\[|-)/.test(doc.tokens[index + 1]?.value || '') || /^(?:attr|static|snapshot|scd|config|computed|abstract|id|entity|value|extend|type|const|decorator|lookup|dimension|hierarchy|decodes|final|as)$/.test(doc.tokens[index + 1]?.value || ''))) break;
         const precedence = { '??': 0.5, or: 1, and: 2, '==': 3, '!=': 3, '<': 3, '<=': 3, '>': 3, '>=': 3, '+': 4, '-': 4, '*': 5, '/': 5, '//': 5 }[peek().value];
         if (!precedence || precedence < minimum) break;
-        const op = take(); node = expressionNode('binary', node.token, op.value, [node, calculation(precedence + (op.value === '??' ? 0 : 1))]);
+        const op = take(); node = expressionNode('binary', node.token, op.value, [node, calculation(precedence + (op.value === '??' ? 0 : 1), closingAngle)]);
       }
     }
     return node;
@@ -139,7 +155,17 @@ function parse(text, uri = '') {
     const node = { token, name: token.value.startsWith("'") ? stringValue(token.value) : token.value, args: null, params: null, accesses: [] };
     if (token.value.startsWith("'")) node.quoted = true;
     if (/^-?\d/.test(token.value) || ['true', 'false'].includes(token.value)) node.literal = true;
-    if (is('<')) {
+    if (node.name === 'one_of') {
+      take('['); node.candidates = [];
+      while (!is(']')) {
+        if (node.candidates.length) take(',');
+        node.candidates.push(calculation());
+        if (!is(',')) break;
+      }
+      take(']');
+    } else if (node.name === 'exact') {
+      take('<'); node.candidates = [calculation(0, true)]; take('>');
+    } else if (is('<')) {
       take(); node.args = [];
       do {
         if (node.args.length) take(',');

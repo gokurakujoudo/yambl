@@ -2,18 +2,35 @@
 
 const { values, generics, stringValue, resultConstants, range } = require('./syntax.cjs');
 const { isFlags, codeEntries } = require('./decodes.cjs');
-const type = (name, kind = 'value', options = {}) => ({ name, kind, args: [], key: null, params: [], exact: null, dependency: '', ...options });
+const type = (name, kind = 'value', options = {}) => ({ name, kind, args: [], key: null, params: [], exact: null, exactValue: null, dependency: '', allowed: [], ...options });
 const unknown = type('?', 'unknown');
 const entity = type('Entity', 'reference', { key: '\0\0Entity' });
 const term = (type, sort = 'type', options = {}) => ({ type, sort, path: '', ...options });
-const base = value => ({ ...value, exact: null });
+const base = value => ({ ...value, exact: null, exactValue: null, allowed: [] });
 const stringLike = value => value.kind === 'reference' || ['string', 'snowflake_id', 'code', 'type', 'attrs'].includes(value.name);
-const canonical = value => [value.name, value.kind, value.args.map(canonical), value.key, value.params, value.exact, value.dependency];
+const canonical = value => [value.name, value.kind, value.args.map(canonical), value.key, value.params, value.exact, value.exactValue, value.dependency, value.allowed || []];
 const equal = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+function singletonKey(value) {
+  if (value.exactValue !== null && value.exactValue !== undefined) return value.exactValue;
+  if (value.exact === null || value.kind === 'reference') return null;
+  let payload = value.exact;
+  if (value.name === 'bool') payload = payload === 'true';
+  else if (['integer', 'snowflake_id'].includes(value.name)) payload = BigInt(payload).toString();
+  else if (value.name === 'decimal') payload = require('./constant-evaluation.cjs').Ratio.text(payload).text();
+  else if (value.name === 'float') payload = String(Number(payload));
+  return JSON.stringify([value.name, value.name === 'code' ? value.args[0].key : value.key, payload]);
+}
 
 function accepts(expected, actual, symbols) {
   if ([expected.kind, actual.kind].includes('unknown')) return true;
-  if (expected.exact !== null) return equal(expected, actual);
+  if (expected.allowed?.length) {
+    if (!accepts(base(expected), base(actual), symbols)) return false;
+    let values = actual.allowed?.length ? actual.allowed : [singletonKey(actual)];
+    if (values.includes(null)) return false;
+    if (expected.name === 'string') values = values.map(key => { const [kind, , payload] = JSON.parse(key); return kind === 'string' ? key : JSON.stringify(['string', null, String(payload)]); });
+    return values.every(key => expected.allowed.includes(key));
+  }
+  if (expected.exact !== null) return expected.kind === 'reference' ? equal(expected, actual) : accepts(base(expected), base(actual), symbols) && singletonKey(expected) === singletonKey(actual);
   if (equal(expected, base(actual))) return true;
   if (expected.name === 'string' && !expected.params.length && stringLike(actual)) return true;
   if (expected.kind === 'reference' && actual.kind === 'reference') return equal(expected, entity) || (symbols.get(actual.key)?.ancestors || []).some(a => a.key === expected.key);
@@ -54,6 +71,7 @@ class Resolver {
   asType(value, node) {
     if (value.sort === 'type') return value.type;
     if (value.sort === 'value' && value.type.name === 'type') return value.type.exact === null ? { ...value.type.args[0], dependency: value.path } : value.type.args[0];
+    if (this.allowExact && value.sort === 'value' && value.type.name === 'Decodes' && value.type.exact !== null) return value.type;
     this.issue(node, 'type position requires a type or an entity type value'); return unknown;
   }
   valueType(value) {
@@ -64,6 +82,10 @@ class Resolver {
   evaluate(node, allowBinding = false) {
     if (node.binding && !allowBinding) this.issue(node, 'as binding is only allowed on a mapping key');
     const { name, args, params } = node;
+    if ((name === 'one_of' || name === 'exact') && node.candidates) {
+      this.doc.valueTypeTokens.set(node.token.start, node.token);
+      return term(this.symbols.finite ? this.symbols.finite(this.doc, node) : unknown);
+    }
     if (!node.quoted && Object.hasOwn(resultConstants, name)) {
       this.issue(node, `result constant ${name} cannot be used in model expressions`);
       return term(unknown);
@@ -222,7 +244,6 @@ class Resolver {
         if (value.sort !== 'value' || !value.path.endsWith('::value') || value.type.kind === 'unknown') this.issue(node, 'alias requires an instance field value');
         return term({ ...resolved, dependency: value.path });
       }
-      if (!this.allowExact) this.issue(node, 'exact requires override or overload');
       if (resolved.exact === null) this.issue(node, 'exact requires a constant value');
       return term(resolved);
     }
@@ -292,4 +313,4 @@ function checkAliases(documents, issue, symbols) {
   }
 }
 
-module.exports = { Resolver, type, term, entity, unknown, base, canonical, equal, accepts, commonType, checkAliases };
+module.exports = { Resolver, type, term, entity, unknown, base, canonical, equal, accepts, commonType, checkAliases, singletonKey };

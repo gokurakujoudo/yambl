@@ -5,7 +5,7 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 
 ## 修订与独立性
 
-当前 `format_revision` 为整数 `11`。格式尚未固化，不承诺修订间兼容；结构变化时递增
+当前 `format_revision` 为整数 `12`。格式尚未固化，不承诺修订间兼容；结构变化时递增
 修订号。读取器拒绝不支持的修订号，要求重新编译，不自动迁移。
 
 文件完整保存本次采用的内置声明、原语目录和七个无载荷结果常量及携带载荷的 PARTIAL的含义。独立校验仅依赖
@@ -66,6 +66,10 @@ JSON 是编译产物，模型修改仍在 YAMBL 源码中完成。SQLite DDL、�
 字段保存 `name`、逻辑 `identity`、声明 `implementation`、`category`、原始解析表达式
 `expression`、别名展开表达式 `expanded`、有效 `type`、`default`、`decorators`、
 `extension`、`calculation`、`source`、`builtin` 和 `abstract`。`category` 为 `id/static/config/snapshot/scd/computed`。
+
+类型的 `exact` 保存单值约束，`allowed_values` 保存按规范键排序的多值约束；两者互斥。
+值保留种类、字典或结构类型身份以及精确文本，结构值递归保存字段。表达式还保留源顺序和
+引用身份，以便独立检查；有限集合的源顺序不参与语义摘要。
 
 具体 computed 字段的 `calculation` 非空，保存独立表达式 AST、let/return、
 解析后的字段访问、依赖实现、推导参数及默认关系；参数 sites 使用相对来源位置。
