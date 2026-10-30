@@ -101,7 +101,7 @@ test('VS Code adapters retain snippets, named insertions and live signature help
     current = original; example.version++;
     const descriptorOffset = original.indexOf('self.holdings::') + 'self.holdings::'.length;
     const descriptorItems = await completion.provider.provideCompletionItems(example, at(descriptorOffset));
-    assert.deepEqual(descriptorItems.map(i => i.label), ['value', 'best_available']);
+    assert.deepEqual(descriptorItems.map(i => i.label), ['value', 'best_available', 'records']);
     assert.equal(descriptorItems[0].insertText.value, 'value($0)');
     for (const needle of ['holdings::value(', 'market_value::value(']) {
       const offset = original.indexOf(needle) + needle.length;
