@@ -70,6 +70,7 @@ function nodes(field) {
   if (field.calculation) visit(field.calculation.result);
   if (field.initializer) visit(field.initializer);
   for (const key of field.keys || []) visit(key.expression);
+  for (const statement of field.statements || []) visit(statement.expression);
   return result;
 }
 

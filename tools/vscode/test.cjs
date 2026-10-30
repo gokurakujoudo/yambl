@@ -118,6 +118,9 @@ async function main() {
   expectScope('decorator @tag(text: string)', '@tag', 'entity.name.function.yambl');
   expectScope('@allow_multiple', '@allow_multiple', 'entity.name.function.yambl');
   expectScope('@unique_by(self.name)', '@unique_by', 'entity.name.function.yambl');
+  expectScope('constraint positive { assert true }', 'constraint', 'keyword.declaration.yambl');
+  expectScope('constraint positive { assert true }', 'positive', 'entity.name.function.yambl');
+  expectScope('constraint positive { assert true }', 'assert', 'keyword.control.yambl');
   expectScope('decorator @tag(*source?: string)', '*', 'keyword.operator.yambl');
   expectScope('decorator @tag(*source?: string)', '?', 'keyword.operator.yambl');
   expectScope('decorator @tag(*source?: string)', 'source', 'variable.other.property.yambl');
@@ -159,7 +162,7 @@ async function main() {
   const vocabulary = require('./lsp/language/syntax.cjs');
   for (const keyword of vocabulary.keywords) {
     const scope = ['entity', 'type'].includes(keyword) ? 'storage.type.yambl'
-      : ['namespace', 'from', 'import', 'let', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'].includes(keyword) ? 'keyword.control.yambl' : 'keyword.declaration.yambl';
+      : ['namespace', 'from', 'import', 'let', 'assert', 'return', 'if', 'then', 'else', 'case', 'and', 'or', 'not'].includes(keyword) ? 'keyword.control.yambl' : 'keyword.declaration.yambl';
     const line = keyword === 'namespace' ? 'namespace core' : keyword === 'type' ? 'type example = string' : `${keyword} Thing`;
     expectScope(line, keyword, scope);
   }

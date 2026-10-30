@@ -24,7 +24,7 @@ function bodyContext(doc, offset) {
   for (const token of doc.tokens) {
     if (token.start >= offset) break;
     if (token.value === '{') {
-      stack.push(segment.findLast(t => ['entity', 'extend', 'value', 'decodes', 'lookup', 'dimension', 'hierarchy', 'computed'].includes(t.value))?.value || 'block');
+      stack.push(segment.findLast(t => ['entity', 'extend', 'value', 'decodes', 'lookup', 'constraint', 'dimension', 'hierarchy', 'computed'].includes(t.value))?.value || 'block');
       segment = [];
     } else if (token.value === '}') { stack.pop(); segment = []; }
     else segment.push(token);
@@ -342,7 +342,7 @@ class Service {
     if (lookupMember && !/^\s*(?:[.:]|\()/.test(remainder)) prefix += '::value()';
     const suffix = ')'.repeat(Math.max(0, balance)) + remainder;
     let recovered = parse(prefix + suffix, doc.uri);
-    if (descriptor && !lookupDescriptor && !/^[a-z_0-9]*\s*\(/.test(doc.text.slice(offset)) && recovered.declarations.some(d => [...d.fields.filter(f => f.calculation), ...(d.lookups || [])].some(f => f.token.start <= offset && offset <= f.end))) recovered = parse(prefix + '()' + suffix, doc.uri);
+    if (descriptor && !lookupDescriptor && !/^[a-z_0-9]*\s*\(/.test(doc.text.slice(offset)) && recovered.declarations.some(d => [...d.fields.filter(f => f.calculation), ...(d.lookups || []), ...(d.constraints || [])].some(f => f.token.start <= offset && offset <= f.end))) recovered = parse(prefix + '()' + suffix, doc.uri);
     Object.assign(recovered, { prefix: doc.prefix, repository: doc.repository, builtin: doc.builtin });
     if (recovered.errors.length) return doc;
     const root = rootFor(doc.uri);
@@ -376,7 +376,7 @@ class Service {
     if (params.position && doc.blocks.some(b => { const r = range(doc.text, b.start, b.end); return params.position.line >= r.start.line && params.position.line <= r.end.line; })) return null;
     const token = params.position && this.tokenAt(doc, params.position);
     const target = token && doc.bindings.get(token.start);
-    const expressionNodes = doc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes), ...(d.lookups || []).flatMap(nodes)]);
+    const expressionNodes = doc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes), ...(d.lookups || []).flatMap(nodes), ...(d.constraints || []).flatMap(nodes)]);
     if (method === 'textDocument/definition') {
       const targets = token && doc.markerTargets.get(token.start);
       if (targets) return targets.map(field => ({ uri: field.doc.uri, range: field.name.range }));
@@ -441,7 +441,7 @@ class Service {
         }
       }
       const calculationDoc = this.calculationDocument(doc, offset);
-      const call = calculationDoc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes), ...(d.lookups || []).flatMap(nodes)]).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
+      const call = calculationDoc.declarations.flatMap(d => [...nodes(d), ...d.fields.flatMap(nodes), ...(d.lookups || []).flatMap(nodes), ...(d.constraints || []).flatMap(nodes)]).filter(n => ['call', 'recover'].includes(n.kind) && n.operands[0].end < offset && offset < n.end).sort((a, b) => b.operands[0].end - a.operands[0].end)[0];
       if (!call) return null;
       const name = call.operands[0].value;
       const parameters = (call.parameters || []).map(p => ({ label: `${p.name}: ${typeLabel(p.type)}`, documentation: p.default ? 'Default: ' + defaultLabel(p.default) : p.required ? 'Unbound inputs are inferred into the caller.' : 'Optional selection parameter.' }));
@@ -493,7 +493,7 @@ class Service {
         return { isIncomplete: false, items: typeTools.completions(typeContext, scope, symbols, describe, Resolver) };
       }
       const calculationDoc = this.calculationDocument(doc, offset);
-      const computation = calculationDoc.declarations.flatMap(d => d.fields).find(f => f.calculation && f.token.start <= offset && offset <= f.end);
+      const computation = calculationDoc.declarations.flatMap(d => [...d.fields.filter(f => f.calculation), ...(d.constraints || [])]).find(f => f.token.start <= offset && offset <= f.end);
       const lookup = calculationDoc.declarations.flatMap(d => d.lookups || []).find(l => l.token.start <= offset && offset <= l.end);
       const constantContext = calculationDoc.declarations.find(d => d.kind === 'constant' && d.token.start <= offset && offset <= d.end);
       const builtinCall = /\b([a-z][a-z_0-9]*)\(([^()]*)$/.exec(before);
@@ -691,11 +691,13 @@ class Service {
         return { isIncomplete: false, items: [...(owner?.effective || [])].map(([label, f]) => ({ label, kind: 5, detail: describe(f) })) };
       }
       if (member) return { isIncomplete: false, items: [] };
-      const items = [...keywords.filter(word => word !== 'lookup'), ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: constants.includes(label) ? 21 : 14, detail: help[label] || 'YAMBL built-in' }));
+      const items = [...keywords.filter(word => !['lookup', 'constraint', 'assert'].includes(word)), ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: constants.includes(label) ? 21 : 14, detail: help[label] || 'YAMBL built-in' }));
       if (['entity', 'extend'].includes(bodyContext(doc, offset))) items.push({ label: 'lookup', kind: 15, detail: 'Named entity lookup rule', insertText: 'lookup ${1:name} {\n    ${2:key} = self.${3:field}::value()\n}', insertTextFormat: 2 });
+      if (['entity', 'extend'].includes(bodyContext(doc, offset))) items.push({ label: 'constraint', kind: 15, detail: 'Entity constraint', insertText: 'constraint ${1:name} {\n    assert ${2:true}\n}', insertTextFormat: 2 });
+      if (bodyContext(doc, offset) === 'constraint') items.push({ label: 'assert', kind: 14, detail: 'Check a boolean constraint expression' });
       if (computation || constantContext) {
         for (const [label, parameters] of Object.entries(require('./language/conversions.cjs').signatures)) items.push({ label, kind: 3, detail: `${label}(${parameters.map(p => p.join(': ')).join(', ')})`, insertText: label + '($0)', insertTextFormat: 2 });
-        if (computation) items.push({ label: 'input', kind: 6, detail: 'External input: input.name; omitted input fallback: input.name ?? expression', insertText: 'input.${1:name}', insertTextFormat: 2 });
+        if (computation && computation.kind !== 'constraint') items.push({ label: 'input', kind: 6, detail: 'External input: input.name; omitted input fallback: input.name ?? expression', insertText: 'input.${1:name}', insertTextFormat: 2 });
         const context = (computation ? nodes(computation) : []).filter(n => n.environment && n.token.start <= offset && offset <= n.end).sort((a, b) => (a.end - a.token.start) - (b.end - b.token.start))[0];
         for (const [label, value] of context?.environment || []) items.push({ label, kind: 6, detail: typeLabel(value.type) });
       }
@@ -712,7 +714,7 @@ class Service {
       const lookupSymbol = (lookup, prefix = '') => ({ name: prefix + lookup.name.value, kind: 6,
         range: range(doc.text, lookup.token.start, lookup.end), selectionRange: lookup.name.range,
         children: lookup.keys.map(key => ({ name: key.name.value, kind: 8, range: range(doc.text, key.token.start, key.end), selectionRange: key.name.range })) });
-      const members = (decl, prefix = '') => [...decl.fields.map(f => ({ start: f.token.start, symbol: fieldSymbol(f, prefix) })), ...(decl.lookups || []).map(l => ({ start: l.token.start, symbol: lookupSymbol(l, prefix) }))].sort((a, b) => a.start - b.start).map(item => item.symbol);
+      const members = (decl, prefix = '') => [...decl.fields.map(f => ({ start: f.token.start, symbol: fieldSymbol(f, prefix) })), ...(decl.lookups || []).map(l => ({ start: l.token.start, symbol: lookupSymbol(l, prefix) })), ...(decl.constraints || []).map(c => ({ start: c.token.start, symbol: { name: prefix + c.name.value, kind: 6, range: range(doc.text, c.token.start, c.end), selectionRange: c.name.range } }))].sort((a, b) => a.start - b.start).map(item => item.symbol);
       return doc.declarations.flatMap(decl => decl.kind === 'extend' ? members(decl, decl.name.value + '.') : [{
         name: decl.name.value, kind: decl.kind === 'entity' ? 5 : 10,
         range: range(doc.text, decl.metadata[0]?.token.start ?? decl.token.start, decl.end), selectionRange: decl.name.range,

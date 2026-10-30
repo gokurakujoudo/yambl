@@ -339,6 +339,23 @@ test('best available exposes value and typed selected dimensions', () => {
   assert.ok(bad.diagnostics.some(item => item.severity === 1));
 });
 
+test('constraints preserve statement order and offer record members', () => {
+  const service = new Service(() => {}), uri = 'untitled:constraints';
+  const text = "entity A { snapshot attr price: integer constraint valid { let records = self.price::records() assert records.all(r -> r.value > 0) let x = 2 assert x > 0 } }";
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  const doc = service.document(uri);
+  assert.deepEqual(doc.diagnostics.filter(item => item.severity === 1), []);
+  const offset = text.indexOf('r.value') + 'r.'.length;
+  const completion = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: offset } });
+  assert.deepEqual(completion.items.map(item => item.label), ['as_of_date', 'value']);
+  const invalid = parse('entity A { constraint c { assert later > 0 let later = 1 assert 2 } } entity B inherits A { constraint c {} }');
+  validate([invalid]);
+  const errors = invalid.diagnostics.map(item => item.message);
+  assert.ok(errors.some(item => item.includes('unknown calculation name: later')));
+  assert.ok(errors.some(item => item.includes('constraint assert requires bool')));
+  assert.ok(errors.some(item => item.includes('duplicate inherited constraint')));
+});
+
 test('calculated descriptors, arguments, inferred hover and field navigation', () => {
   const service = new Service(() => {}), uri = 'untitled:computations';
   service.open.set(uri, { text: source, version: 1 }); service.refresh();

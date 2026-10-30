@@ -62,7 +62,7 @@
       "match": "#.*$"
     },
     {
-      "match": "\\b(lookup)\\s+([a-z][a-z0-9_]*)\\b",
+      "match": "\\b(lookup|constraint)\\s+([a-z][a-z0-9_]*)\\b",
       "captures": {
         "1": { "name": "keyword.declaration.yambl" },
         "2": { "name": "entity.name.function.yambl" }
@@ -257,11 +257,11 @@
     },
     {
       "name": "keyword.declaration.yambl",
-      "match": "\\b(?:const|decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|computed|dimension|lookup|hierarchy|fallback_days|abstract|final|self|input|as|attr)\\b"
+      "match": "\\b(?:const|decorator|value|entity|extend|inherits|namespace|decodes|id|snapshot|scd|config|static|computed|dimension|lookup|constraint|hierarchy|fallback_days|abstract|final|self|input|as|attr)\\b"
     },
     {
       "name": "keyword.control.yambl",
-      "match": "\\b(?:from|import|let|return|if|then|else|case|and|or|not)\\b"
+      "match": "\\b(?:from|import|let|assert|return|if|then|else|case|and|or|not)\\b"
     },
     {
       "name": "support.type.yambl",

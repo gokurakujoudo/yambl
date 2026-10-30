@@ -25,7 +25,7 @@ function validate(documents) {
     doc.diagnostics = [...doc.errors]; doc.bindings = new Map(); doc.scope = new Map(); doc.valueTypeTokens = new Map(); doc.patternTokens = new Map(); doc.markerTargets = new Map(); doc.accessTerms = new Map();
     if (doc.errors.length) continue;
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
-      const name = decl.name.value; decl.key = key(doc, namespace(doc), name); decl.ownFields = new Map();
+      const name = decl.name.value; decl.key = key(doc, namespace(doc), name); decl.ownFields = new Map(); decl.ownConstraints = new Map();
       if (decl.kind === 'constant' ? !/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(name) : ['value', 'type_alias', 'decorator', 'dimension'].includes(decl.kind) ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, decl.kind === 'constant' ? 'constant names must use UPPER_SNAKE_CASE' : ['value', 'type_alias', 'decorator', 'dimension'].includes(decl.kind) ? (decl.kind === 'decorator' ? 'decorator names must use snake_case' : decl.kind === 'dimension' ? 'dimension names must use snake_case' : 'value names must use snake_case') : 'declaration names must use PascalCase');
       const modelDefinition = namespace(doc) === 'builtins' && builtinModels.has(name);
       if ((!modelDefinition && reserved.includes(name)) || symbols.has(decl.key)) issue(doc, decl.token, `duplicate or reserved declaration: ${name}`);
@@ -103,6 +103,16 @@ function validate(documents) {
         else if (!parent || parent.kind !== 'entity') issue(doc, decl.parent, `inherits requires a visible entity type: ${decl.parent.value}`);
         else decl.base = parent;
       }
+      for (const constraint of decl.constraints || []) {
+        constraint.entity = target;
+        bind(doc, constraint.name, constraint);
+        if (!snake(constraint.name.value)) issue(doc, constraint.token, 'constraint names must use snake_case');
+        if (!blocked && target?.kind === 'entity') {
+          if (!target.ownConstraints) target.ownConstraints = new Map();
+          if (target.ownConstraints.has(constraint.name.value)) issue(doc, constraint.token, `duplicate constraint: ${constraint.name.value}`);
+          else target.ownConstraints.set(constraint.name.value, constraint);
+        }
+      }
       for (const field of decl.fields) {
         const name = field.name.value; bind(doc, field.name, field);
         if (target?.kind === 'entity' && ['entity_type', 'root_entity_type'].includes(name)) issue(doc, field.token, `reserved built-in field: ${name}`);
@@ -150,6 +160,9 @@ function validate(documents) {
   collectDimensions(analysisDocuments.filter(d => !d.errors.length), issue);
   deriveSubtypes(symbols, issue);
   relationships(symbols, issue);
+  for (const declaration of symbols.values()) if (declaration.kind === 'entity') for (const [name, constraint] of declaration.ownConstraints || []) {
+    if (declaration.ancestors.some(parent => parent.ownConstraints?.has(name))) issue(constraint.doc, constraint.token, `duplicate inherited constraint: ${name}`);
+  }
   for (const declaration of symbols.values()) if (declaration.kind === 'entity') {
     for (const field of declaration.ownFields.values()) if (field.abstract) {
       const implementations = [...symbols.values()].filter(d => d.kind === 'entity' && d.ancestors.includes(declaration)).flatMap(d => [...d.ownFields.values()]).filter(f => f.identity === field.identity && !f.abstract && f.calculation);

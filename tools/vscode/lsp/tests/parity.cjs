@@ -8,6 +8,9 @@ const { parse, format } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json'), ...require('./computation-cases.json')];
 cases.push(
+  ['entity A { attr n: integer constraint valid { let x = self.n::value() assert x > 0 let y = 2 assert y > x } }'],
+  ['entity A { constraint valid { assert later > 0 let later = 1 assert 2 } } entity B inherits A { constraint valid {} }'],
+  ['entity A { snapshot attr n: integer constraint c { assert self.n::value() > 0 } }'],
   ["decodes Sources { - 1 Feed: 'Feed' } entity E { dimension feed { value source: code<Sources> hierarchy order: Hierarchy } @dimension(feed) attr price: integer computed attr chosen: code<Sources> { return self.price::best_available().dimensions.source } }"],
   ["entity E { attr price: integer computed attr amount: integer { return self.price::best_available() * 2 } }"],
   ["entity E { attr price: integer computed attr amount: integer { return self.price::best_available().dimensions.missing } }"],

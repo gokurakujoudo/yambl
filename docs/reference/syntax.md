@@ -329,6 +329,9 @@ value 必填；hierarchy、fallback_days 可省略。fallback_days 只用于 sna
 
 ## 具名匹配规则
 
+`constraint` 是 entity 或 extend 中的具名约束，按源码顺序执行 `let` 和 `assert`；
+语义与事务校验见[实体约束](computations.md#实体约束)。
+
 `lookup` 是实体上的具名匹配规则，可以写在 entity 或 extend 中。规则内每行左侧是
 外部输入键名，右侧是从候选实体读取值的表达式；多键需要同时精确匹配。
 

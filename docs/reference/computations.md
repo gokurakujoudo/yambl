@@ -143,6 +143,32 @@ NO_ENTRY 视为不存在，EMPTY 与 NOT_APPLICABLE 跳过；无候选返回 NO_
 跳过返回 NO_DATA。选中值之前的 ERROR 阻止选择；选中正常值后不解码更低优先级载荷。
 结构、摘要或整体查询错误仍返回 ERROR。
 
+## 实体约束
+
+`constraint` 可写在 entity 或 extend 中。名称使用 snake_case；同一实体及继承链中不能
+重复。约束按定义处的词法作用域解析，继承后 `self` 指向实际实例，计算属性按实际子类型
+分派。约束不接受 decorator、外部输入或 `return`；空约束通过。
+
+```yambl
+entity Account {
+    id account_id: string
+    @temporal(day: date) snapshot attr balance: integer
+    constraint positive_balances {
+        let history = self.balance::records()
+        assert history.all(r -> r.value > 0)
+    }
+}
+```
+
+约束中的 `let` 与 `assert` 按源码顺序执行；`assert` 表达式须为 bool。每条断言只有正常
+`true` 通过；`false` 或未恢复的非正常结果产生诊断，其他断言继续检查。`all` 遇第一个
+失败即停止，空记录序列为 true。需要处理 EMPTY 等状态时，使用计算表达式的 `recover`。
+
+显式数据校验检查所有适用实例；apply 和 rollback 检查最终候选数据，通过后才发布。
+因此修改引用目标或配置也可能使其他实例的约束失败。校验报告保留约束身份、实际实体和 ID、
+源码位置、原始断言及可获得的记录坐标；生成包不依赖模型源文件。Python 写入遇到候选
+约束失败时抛出 `EntityValidationError`，其 `issues` 是同一组结构化诊断；CLI 输出 JSON。
+
 ## 参数推导与绑定
 
 未绑定依赖按参数名合并，类型、约束及默认关系须兼容。不同名称保持独立。
@@ -232,7 +258,7 @@ when 只读取存储 static 字段并作等值 AND；非错误非正常值为不
 
 ## 产物、执行与边界
 
-IR 修订号 15，运行时契约 17，存储布局 9，JSONL 封装格式 3。
+IR 修订号 16，运行时契约 18，存储布局 9，JSONL 封装格式 3。
 IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
 生成包要求 Python 3.14+，运行依赖由生成项目的 `pyproject.toml` 声明。
 计算执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。

@@ -692,6 +692,25 @@ function checkComputations(documents, symbols, report) {
       if (checker.inputs.size || checker.dependencies.size) checker.issue(dimension.fallback, 'fallback_days requires stored static or config dependencies without external parameters');
     }
     for (const field of declaration.fields) if ((field.calculation || field.abstract) && field.owner?.kind === 'entity') analyze(field);
+    for (const constraint of declaration.constraints || []) {
+      const owner = constraint.entity;
+      if (!owner || owner.kind !== 'entity') continue;
+      const checker = new Checker(doc, owner, (node, message) => report(doc, node.token, message));
+      const environment = new Map([['self', { type: type(owner.name.value, 'reference', { key: owner.key }) }]]);
+      for (const statement of constraint.statements) {
+        const expected = statement.annotation ? new Resolver(doc, report, symbols, owner, true).resolve(statement.annotation) : null;
+        const value = checker.read(checker.infer(statement.expression, environment, expected), statement.expression);
+        if (statement.kind === 'let') {
+          if (!snake(statement.name) || environment.has(statement.name) || statement.name === 'input') checker.issue(statement.expression, `duplicate or invalid local binding: ${statement.name}`);
+          if (expected && !compatible(expected, value.type)) checker.issue(statement.expression, `incompatible local binding: expected ${expected.name}, got ${value.type.name}`);
+          const resolvedType = expected || value.type;
+          const binding = { kind: 'calculation_binding', name: statement.token, doc, resolvedType };
+          doc.bindings.set(statement.token.start, binding);
+          environment.set(statement.name, { type: resolvedType, declaration: binding });
+        } else if (value.type.name !== 'bool' && value.type.kind !== 'unknown') checker.issue(statement.expression, 'constraint assert requires bool');
+      }
+      if (checker.inputs.size) report(doc, constraint.token, 'constraint cannot have external inputs: ' + [...checker.inputs.keys()].sort().join(', '));
+    }
     for (const lookup of declaration.lookups || []) {
       const owner = lookup.entity;
       if (!owner) continue;
