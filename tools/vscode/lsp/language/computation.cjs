@@ -266,9 +266,9 @@ function checkComputations(documents, symbols, report) {
           return { type: new Resolver(this.doc, report, symbols, this.owner).evaluate(syntax).type };
         }
         const parent = this.read(this.infer(receiver, environment), receiver, true);
-        if (parent.type.name === 'record') {
+        if (['record', 'selection', 'dimensions'].includes(parent.type.name)) {
           const index = parent.type.params.findIndex(([name]) => name === node.value);
-          if (index < 0) { this.issue(node, `unknown record member: ${node.value}`); return { type: unknown }; }
+          if (index < 0) { this.issue(node, `unknown ${parent.type.name} member: ${node.value}`); return { type: unknown }; }
           return { type: parent.type.args[index] };
         }
         if (parent.type.kind === 'value') {
@@ -438,6 +438,15 @@ function checkComputations(documents, symbols, report) {
             if (binding) this.bindInput(conditional, binding, environment);
             else this.addInput(conditional, node);
           }
+        }
+        if (method === 'best_available') {
+          const members = [];
+          for (const call of value.field.metadata.filter(item => item.name === 'dimension')) {
+            const dimension = call.dimension || resolveDimension(value.field.owner, call.arguments[0]?.type.name);
+            if (dimension) members.push([dimension.value.value, new Resolver(dimension.doc, report, symbols, dimension.owner).resolve(dimension.type)]);
+          }
+          const dimensions = type('dimensions', 'value', { args: members.map(([, resolved]) => resolved), params: members.map(([name]) => [name, '']) });
+          return { type: type('selection', 'value', { args: [value.type, dimensions], params: [['value', ''], ['dimensions', '']] }) };
         }
         return { type: value.type };
       }

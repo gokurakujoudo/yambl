@@ -34,7 +34,7 @@ entity Holding {
     static attr quantity: decimal
     static attr security: Security
     computed attr market_value: decimal {
-        return self.quantity::value() * self.security.price::best_available()
+        return self.quantity::value() * self.security.price::best_available().value
     }
 }
 ```
@@ -94,8 +94,16 @@ Hierarchy 名称使用 PascalCase，按 namespace/import 查找；条目可混�
 
 `::value` 对 snapshot 只读取指定日期，对 SCD 读取当天有效期间；static 无日期，
 config 读取有效配置。它不自动使用 Hierarchy 或日期回退。计算字段的参数和省略默认关系
-继续从依赖推导；两类字段未显式绑定的参数均按名称传递。`::best_available` 的选择契约
-保持不变，不能直接用于计算字段。
+继续从依赖推导；两类字段未显式绑定的参数均按名称传递。`::best_available` 不能直接用于
+计算字段。成功时它返回一个选择结果，通过 `.value` 读取值，通过
+`.dimensions.<维度名>` 读取实际选中记录的维度；显式传入的维度也包含在结果中。无维度时
+`dimensions` 为空。结果不隐式转换成字段值，旧算式须显式加 `.value`。非正常结果仍直接
+传播，日期回退和 Hierarchy 的选择次序不变。
+
+生成的 Python 实体提供 `read_<field>_best_available(...)`，参数遵循同一选择规则。
+成功结果的值为字段专属、不可变的 Selection，其 `value` 是字段值，`dimensions` 是不可变的
+维度对象；因此分别通过 `result.value.value` 和 `result.value.dimensions.<维度名>` 访问。
+失败时直接返回非正常结果。已有的精确读取和属性接口保持原样。
 
 字段描述不能直接作为计算值。`let x = self.quantity`、`return self.quantity`、
 `self.quantity * 2` 均报错，须使用 `::value(...)`、`::best_available(...)` 或
@@ -224,7 +232,7 @@ when 只读取存储 static 字段并作等值 AND；非错误非正常值为不
 
 ## 产物、执行与边界
 
-IR 修订号 14，运行时契约 16，存储布局 9，JSONL 封装格式 3。
+IR 修订号 15，运行时契约 17，存储布局 9，JSONL 封装格式 3。
 IR 保存独立表达式 AST、解析字段身份、参数默认图及相对源码来源，不保存可执行源码字符串。
 生成包要求 Python 3.14+，运行依赖由生成项目的 `pyproject.toml` 声明。
 计算执行生成阶段确定的函数，不重新解释 YAMBL，不使用 eval。

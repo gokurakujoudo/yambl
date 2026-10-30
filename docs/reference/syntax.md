@@ -365,7 +365,8 @@ entity Position {
 
 实体字段在计算值上下文中必须显式调用 `::value(...)`，存储与计算字段使用同一入口。
 存储字段按给定日期和全部维度精确读取；计算字段按推导参数求值。只有存储字段支持
-`::best_available(...)` 的 Hierarchy 选择和日期回退。
+`::best_available(...)` 的 Hierarchy 选择和日期回退；成功结果通过 `.value` 读取值，
+通过 `.dimensions` 读取实际选中的维度。
 
 `let x = self.quantity` 不合法，应写 `let x = self.quantity::value()`。
 这也适用于 return、运算、lambda 和参数。`self.security.price::value()` 的中间引用
@@ -436,7 +437,7 @@ integer 保持整数精度，与 decimal 混算得到 decimal；decimal 加减�
 | 有实例的字段描述 | `self.field::value` | 实例字段值，可参与依赖类型 |
 | 有所属实体的字段描述 | `Attr::entity` | 实际声明实体 |
 | 存储字段 | `field::value(...)` | 按明确日期与维度定位 |
-| 存储字段 | `field::best_available(...)` | 按 dimension 和回退规则选择 |
+| 存储字段 | `field::best_available(...)` | 按 dimension 和回退规则选择，返回值及维度 |
 | 计算字段 | `field::value(...)` | 显式绑定子计算参数 |
 
 集合不会隐式展开。类型描述与运行时值的成员集合不同；没有实例的 mapping 字段描述

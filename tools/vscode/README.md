@@ -14,7 +14,7 @@ VS Code 自带的 Node 运行时，不需要另外安装 Python、Node、npm 依
 .\tools\vscode\install.ps1
 ```
 
-脚本使用 .NET 生成 `build/vscode/yambl-0.1.38.vsix`，然后通过 `code` 命令
+脚本使用 .NET 生成 `build/vscode/yambl-0.1.39.vsix`，然后通过 `code` 命令
 安装。也可以只打包，再通过 VS Code 的 “Install from VSIX” 安装到其他机器：
 
 ```powershell
@@ -33,7 +33,7 @@ YAMBL 模型文件支持：
   签名提示说明参数，并补全命名参数；泛型参数位置提供类型约束说明和可见名称补全。
 - `one_of` 和 `exact` 的编译期值表达式支持常量、字典成员及纯转换的补全和诊断。
 - `@unique_by` 提供字段描述补全、跳转和变参签名提示，并检查字段类别及重复项。
-- `::` 后按接收字段提示 `value(...)`，存储字段还提示 `best_available(...)`；支持未完成的调用、参数补全与签名提示。
+- `::` 后按接收字段提示 `value(...)`，存储字段还提示 `best_available(...)` 和 `records()`；支持调用参数与签名提示，并补全选择结果的值和维度。
 - 存储字段的 `records()` 支持记录坐标补全；序列的 `all(...)` 支持 lambda 类型检查和签名提示。
 - 计算中的末端字段使用 `::value(...)` 取值。
 - `@sparse` / `@dense` 提供 cat 参数补全、签名悬停和定义跳转；补全排除集合、
@@ -164,7 +164,7 @@ Method hovers show the receiver, result type and operation contract. Completion 
 `holdings.` offers sequence methods; completion on `h.` and reference paths offers
 resolved fields. Field uses participate in definition navigation and reference search.
 
-`::value(...)`, `::best_available(...)` and `::value(...)` provide named parameter
+`::value(...)` and `::best_available(...)` provide named parameter
 completion and signature help. The editor inserts `name=` and preserves snippets.
 `input.` lists inferred and explicitly declared inputs, their types and defaults.
 `@extra_input_param` supplies optional input declarations and descriptions; `??`

@@ -18,7 +18,7 @@ const methods = {
   group_by: ['group_by(key: T -> K) -> Grouped<K, T>', 'Group by typed key equality. Do not deduplicate contributions.'],
   sum_by: ['sum_by(value: T -> Number) -> Number | mapping<K, Number>', 'Sum numeric contributions; grouped input returns a mapping. Empty input produces zero or an empty mapping. Integer and decimal arithmetic is exact.'],
   recover: ['recover(case STATUS[, STATUS] -> value, ...)', 'Evaluate only the matched branch. Normal results and unmatched states remain unchanged. case PARTIAL as p exposes p.value and p.issues; accepting p.value explicitly clears Partial.'],
-  best_available: ['field::best_available(named_parameters...) -> ReadResult<T>', 'Explicit dimension value overrides Hierarchy. Choose the latest date within the per-instance config fallback window, then source priority. SCD never crosses gaps.'],
+  best_available: ['field::best_available(named_parameters...) -> ReadResult<Selection<T>>', 'Read .value and .dimensions from the selected record. Explicit dimension value overrides Hierarchy. Choose the latest date within the per-instance config fallback window, then source priority. SCD never crosses gaps.'],
   value: ['field::value(named_parameters...) -> ReadResult<T>', 'Read a stored coordinate or evaluate a computed field. Snapshot reads match the exact date; SCD reads match the active interval. Unbound parameters merge by name; explicit bindings affect only this dependency.'],
   records: ['field::records() -> Seq<Record>', 'Read the physically stored coordinates and their native value results without applying configuration defaults.'],
 };

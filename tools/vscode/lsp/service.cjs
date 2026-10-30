@@ -548,7 +548,7 @@ class Service {
         const expression = nodes(computation || constantContext || lookup).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
         const receiver = expression?.operands[0]?.inferred?.type;
         if (receiver && receiver.kind !== 'unknown') {
-          if (receiver.name === 'record') return { isIncomplete: false, items: receiver.params.map(([label], index) => ({ label, kind: 5, detail: typeLabel(receiver.args[index]) })) };
+          if (['record', 'selection', 'dimensions'].includes(receiver.name)) return { isIncomplete: false, items: receiver.params.map(([label], index) => ({ label, kind: 5, detail: typeLabel(receiver.args[index]) })) };
           const symbols = new Map([...this.documents.values(), calculationDoc].flatMap(d => [...d.scope.values()].map(s => [s.key, s])));
           const owner = symbols.get(receiver.key);
           const fields = new Map(owner?.kind === 'value' ? owner.fields.map(f => [f.name.value, f]) : owner?.effective || []);

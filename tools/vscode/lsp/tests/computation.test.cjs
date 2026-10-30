@@ -41,7 +41,7 @@ hierarchy Preference { - 1 Sources.Wind - 2 'Manual' }
 dimension shared { value source: string hierarchy preference: Hierarchy = Sources::hierarchy() }
 entity E {
   @dimension(shared) snapshot attr price: integer
-  computed attr selected: integer { return self.price::best_available(preference=Sources::hierarchy()) }
+  computed attr selected: integer { return self.price::best_available(preference=Sources::hierarchy()).value }
 }
 `, 'model.yambl');
   validate([doc]); assert.deepEqual(doc.diagnostics, []);
@@ -99,18 +99,18 @@ entity E {
   @dimension(d) static attr label: string
   @dimension(d2) static attr market: string
   @dimension(d) @temporal(day: date) snapshot attr observed: string
-  computed attr automatic: string { return self.label::best_available() }
-  computed attr explicit_hierarchy: string { return self.label::best_available(h=Preferred) }
-  computed attr explicit_source: string { return self.label::best_available(source='A') }
-  computed attr alias: string { return self.label::best_available(h=input.choice) }
+  computed attr automatic: string { return self.label::best_available().value }
+  computed attr explicit_hierarchy: string { return self.label::best_available(h=Preferred).value }
+  computed attr explicit_source: string { return self.label::best_available(source='A').value }
+  computed attr alias: string { return self.label::best_available(h=input.choice).value }
   @extra_input_param(choice: Hierarchy = 'Preferred')
-  computed attr alias_declared: string { return self.label::best_available(h=input.choice) }
-  computed attr fallback: string { return self.label::best_available(h=input.choice ?? Preferred) }
+  computed attr alias_declared: string { return self.label::best_available(h=input.choice).value }
+  computed attr fallback: string { return self.label::best_available(h=input.choice ?? Preferred).value }
   @extra_input_param(h: Hierarchy = 'Preferred')
-  computed attr declared: string { return self.label::best_available() }
-  computed attr renamed: string { return self.observed::best_available(day=input.query) }
+  computed attr declared: string { return self.label::best_available().value }
+  computed attr renamed: string { return self.observed::best_available(day=input.query).value }
   computed attr nested: string { return self.renamed::value(query=input.nested_day) }
-  computed attr source_date: string { return self.market::best_available() }
+  computed attr source_date: string { return self.market::best_available().value }
 }`, 'temporal-hierarchy.yambl');
   validate([doc]);
   assert.deepEqual(doc.diagnostics, []);
@@ -130,7 +130,7 @@ entity E {
 
 test('hierarchy defaults compare their declaration identities across scopes', () => {
   const one = parse("namespace one hierarchy H { - 1 'A' } dimension d_one { value source: string hierarchy h: Hierarchy = H }", 'one.yambl');
-  const use = parse('namespace use from one import d_one from two import d_two entity E { @dimension(d_one) attr x:string @dimension(d_two) attr y:string computed attr z:bool { return self.x::best_available() == self.y::best_available() } }', 'use.yambl');
+  const use = parse('namespace use from one import d_one from two import d_two entity E { @dimension(d_one) attr x:string @dimension(d_two) attr y:string computed attr z:bool { return self.x::best_available().value == self.y::best_available().value } }', 'use.yambl');
   for (const [text, conflict] of [
     ["namespace two hierarchy H { - 1 'B' } dimension d_two { value source: string hierarchy h: Hierarchy = H }", true],
     ["namespace two from one import H dimension d_two { value source: string hierarchy h: Hierarchy = H }", false],
@@ -293,7 +293,7 @@ const source = `entity E {
     dimension prices { value source: string hierarchy hierarchy: Hierarchy = 'Local' fallback_days = self.days::value() }
     config attr days: integer = 2
     @dimension(prices) snapshot attr price: decimal
-    computed attr value: decimal { return self.price::best_available() }
+    computed attr value: decimal { return self.price::best_available().value }
     computed attr total: decimal { return self.value::value(as_of_date=input.price_date ?? input.as_of_date) }
 }`;
 
@@ -324,6 +324,19 @@ test('records infer custom time and dimension members for completion', () => {
   const result = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: offset } });
   assert.deepEqual(result.items.map(item => item.label), ['day', 'source', 'value']);
   assert.deepEqual(service.document(uri).declarations.find(item => item.name.value === 'A').fields.find(field => field.name.value === 'valid').inferredInputs, []);
+});
+
+test('best available exposes value and typed selected dimensions', () => {
+  const service = new Service(() => {}), uri = 'untitled:selection';
+  const text = "decodes Sources { - 1 Wind: 'Wind' } dimension feed { value source: code<Sources> hierarchy h: Hierarchy } entity A { @dimension(feed) attr price: integer computed attr chosen: code<Sources> { let selected = self.price::best_available() return selected.dimensions.source } }";
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  const labels = marker => service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: text.indexOf(marker) + marker.length } }).items.map(item => item.label);
+  assert.deepEqual(labels('return selected.'), ['value', 'dimensions']);
+  assert.deepEqual(labels('return selected.dimensions.'), ['source']);
+  assert.deepEqual(service.document(uri).diagnostics.filter(item => item.severity === 1), []);
+  const bad = parse('entity A { attr price: integer computed attr result: integer { return self.price::best_available() * 2 } }');
+  validate([bad]);
+  assert.ok(bad.diagnostics.some(item => item.severity === 1));
 });
 
 test('calculated descriptors, arguments, inferred hover and field navigation', () => {
