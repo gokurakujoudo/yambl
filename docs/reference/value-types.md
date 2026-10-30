@@ -121,6 +121,11 @@ attr market: code<'TradingMarkets'>
 `code<Currencies>` 的合理取值。字典实例本身可作为 `Decodes` 引用类型的值：
 `attr dictionary: Decodes` 可以取值 `Currencies`。
 
+内置普通字典 [TimeZones](../../lang/builtins/time_zones.yambl) 可直接用于
+`code<TimeZones>`，例如 `TimeZones.AsiaShanghai`。其 code 使用 PascalCase（UTC
+保持大写），decode 是 IANA 名称；ordering 是固定展示顺序，不是 UTC 偏移的计算公式。
+地区时区可能存在夏令时或历史规则变化，字典本身不执行时区转换。
+
 `Currencies` 是实例名称，不能直接用作字段类型。`Decodes` 禁止继承，
 `attr currency: Currencies` 不合法。
 

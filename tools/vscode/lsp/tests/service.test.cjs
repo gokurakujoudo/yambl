@@ -7,6 +7,26 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { Service, rootFor, sources, inside, uriKey } = require('../service.cjs');
 
+test('TimeZones members complete, hover and navigate from the builtins', () => {
+  const service = new Service(() => {}), uri = 'untitled:time-zones';
+  const text = 'type selected<a: code<TimeZones>> = string entity Event { attr zone: selected<TimeZones.AsiaShanghai> }';
+  service.open.set(uri, { text, version: 1 }); service.refresh();
+  assert.deepEqual(service.document(uri).diagnostics, []);
+  const request = (method, character) => service.feature('textDocument/' + method, { textDocument: { uri }, position: { line: 0, character } });
+  const offset = text.indexOf('AsiaShanghai');
+  assert.match(request('hover', offset).contents.value, /Asia\/Shanghai/);
+  assert.match(request('definition', offset).uri, /time_zones\.yambl$/);
+  const semantic = service.feature('textDocument/semanticTokens/full', { textDocument: { uri } }).data;
+  let character = 0; const styled = [];
+  for (let i = 0; i < semantic.length; i += 5) { character += semantic[i + 1]; styled.push(text.slice(character, character + semantic[i + 2])); }
+  assert.ok(styled.includes('TimeZones'));
+  const unfinished = text.replace('AsiaShanghai', '');
+  service.open.set(uri, { text: unfinished, version: 2 }); service.refresh();
+  const labels = request('completion', unfinished.indexOf('TimeZones.>') + 'TimeZones.'.length).items.map(item => item.label);
+  assert.equal(labels.length, 39);
+  assert.ok(labels.includes('AsiaShanghai'));
+});
+
 test('flags codes complete, hover and navigate through unions and generated None', () => {
   const service = new Service(() => {}), uri = 'untitled:flags';
   const text = "@flags decodes Rights { - 0b01 Read: 'Read' - 2 Write: 'Write' } type chosen<a: code<Rights>> = string entity A { attr x: chosen<Rights.Read + Rights.Write + Rights.None - Rights.All> }";
@@ -272,7 +292,7 @@ test('built-in model repository checks its own declarations exactly once', () =>
   const uri = pathToFileURL(path.join(modelRoot, 'models/hierarchy.yambl')).href;
   const service = new Service(() => {});
   service.open.set(uri, { version: 1, text: fs.readFileSync(new URL(uri), 'utf8') }); service.refresh();
-  assert.equal(service.documents.size, 7);
+  assert.equal(service.documents.size, 8);
   assert.ok([...service.documents.values()].every(doc => doc.diagnostics.length === 0));
 });
 
@@ -322,7 +342,7 @@ test('builtins authoring works outside the extension resource directory', t => {
   const service = new Service(() => {});
   const text = fs.readFileSync(new URL(uri), 'utf8');
   service.open.set(uri, { version: 1, text }); service.refresh();
-  assert.equal(service.documents.size, 7);
+  assert.equal(service.documents.size, 8);
   assert.ok([...service.documents.values()].every(d => !d.diagnostics.length));
   const doc = service.document(uri), field = doc.declarations[0].fields[1];
   const params = { textDocument: { uri }, position: field.type.args[0].token.range.start };
