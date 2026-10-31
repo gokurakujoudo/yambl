@@ -322,6 +322,7 @@ entity Security {
 Primary 为 10、Secondary 为 12 时，`selected_price` 返回 10，`selected_source` 返回
 `Primary`。选择结果的 `.value` 是价格，`.dimensions.source` 是实际选中的来源。
 配置回退天数后才会跨日期查找，并优先选择较近日期；详见[计算与选择](../reference/computations.md)。
+如果计算需要读取字典或 Hierarchy 的条目，可参考[内置表](../reference/storage.md#内置表)中的引用和读取示例。
 
 ## 进阶：沿关系反向查找
 
