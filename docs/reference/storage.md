@@ -128,6 +128,21 @@ Decodes 条目主键为 `(decodes_id, code)`；Hierarchy 条目主键为 `(hiera
 再用 `.all(e -> e.ordering > 0)` 检查条目的排序值。
 实体字段 `group: ConfigGroup` 也可通过 `self.group::value().when::value()` 读取条件映射；
 `then_set` 同理。映射键为完整逻辑字段身份，返回值为只读映射，不改变配置优先级规则。
+生成读取器也可直接选择内置字段。例如，已打开的 `reader` 可按 ID 获取内置字典的 handle，
+再用完整字段身份读取条目：
+
+```python
+from example_model import Success
+
+dictionary = reader.get_decodes('builtins.AttrCats')
+if isinstance(dictionary, Success):
+    selected = reader.read_best(dictionary.value, 'builtins.Decodes.entries', {})
+    if isinstance(selected, Success):
+        print(selected.value.value)
+```
+
+这里的 `example_model` 是上面生成的包名。第三个参数是选择输入，`{}` 表示没有额外输入；
+内置字段没有维度，选择结果的 `dimensions` 为空。
 自动子类型字典也使用 Decodes 存储，身份为实体 qualified name 加 `::subtypes`；字典和
 条目只读。其条目按[子类型字典规则](syntax.md#自动子类型字典)派生，生成的 Python code
 类型名须合法且确定。初始化和双后端只读保护已完成候选验证；综合验收与完整门禁仍待完成。
@@ -136,11 +151,12 @@ ConfigGroup 的 target_entity_type 是可空类型 qualified name，配有独立
 子表每项保存 `config_group_id`、`field`（逻辑字段 qualified name）和 `value`。value 是
 紧凑 JSON 对象：`type` 为 IR 中展开后的 Type 对象，`value` 为对应 JSON 载荷。
 整数及 Decimal 载荷使用精确字符串，引用保存 ID；集合可用 JSON 数组表达。
-SQL 校验 JSON 对象及 type/value 包装结构，主键保证同组同字段不重复；内部类型结构、
-字段候选范围和载荷兼容性尚无写入校验器。这里不定义七个非正常结果的 JSON 编码。
+SQL 校验 JSON 对象及 type/value 包装结构，主键保证同组同字段不重复；Plan、候选和
+显式数据校验还会检查字段范围、类别和载荷类型。这里不定义七个非正常结果的 JSON 编码。
 
 内置表由批量运行时用于 Hierarchy 选择和 ConfigGroup 条件覆盖。ConfigGroup 包含必填 priority；
-内置实体可按 ID 获取 handle，并读取两个隐藏类型属性；其他内置字段暂不生成通用读取方法。
+内置实体可按 ID 获取 handle，并读取两个隐藏类型属性；内置 static 字段不生成逐字段方法，
+可通过 `reader.read`、`reader.read_best` 或计算表达式读取。
 
 ## 时间和结果
 
