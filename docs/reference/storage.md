@@ -126,6 +126,8 @@ Decodes 条目主键为 `(decodes_id, code)`；Hierarchy 条目主键为 `(hiera
 例如，实体字段 `dictionary: Decodes` 可用
 `self.dictionary::value().entries::best_available().value` 取得其字典条目集合，
 再用 `.all(e -> e.ordering > 0)` 检查条目的排序值。
+实体字段 `group: ConfigGroup` 也可通过 `self.group::value().when::value()` 读取条件映射；
+`then_set` 同理。映射键为完整逻辑字段身份，返回值为只读映射，不改变配置优先级规则。
 自动子类型字典也使用 Decodes 存储，身份为实体 qualified name 加 `::subtypes`；字典和
 条目只读。其条目按[子类型字典规则](syntax.md#自动子类型字典)派生，生成的 Python code
 类型名须合法且确定。初始化和双后端只读保护已完成候选验证；综合验收与完整门禁仍待完成。
