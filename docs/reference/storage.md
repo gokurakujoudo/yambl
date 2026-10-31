@@ -214,7 +214,7 @@ EMPTY 和 NOT_APPLICABLE 不触发模型默认值。有效 ConfigGroup、Hierarc
 | datetime | 已定义 | 已实现 | 已实现 | UTC 规范文本 | 带时区的 UTC datetime |
 | decimal 参数 | 已定义 | 已实现 | 已实现 | 精确 TEXT | 精度和小数位校验 |
 | string regex | 方言待定 | 保留约束 | 已实现 | 保存字符串 | 不执行正则 |
-| float、datetime | 运行时细节待定 | 已实现 | 已实现 | 待实现 | 待实现 |
+| float | 已定义 | 已实现 | 已实现 | 待实现 | 计算可用，存储待实现 |
 | 静态可展开泛型别名 | 已定义 | 已实现 | 保留并展开 | 使用展开类型 | 使用展开类型 |
 | `type<T>` 类型值和字段描述值 | 已定义 | 已实现 | 已实现 | ConfigGroup 类型值 TEXT；一般业务字段待实现 | 待实现 |
 | Decodes 实例引用 | 已定义 | 已实现 | 已实现 | 保存字典 ID | 强类型引用、显式解析 |

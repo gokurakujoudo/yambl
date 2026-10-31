@@ -6,6 +6,14 @@ const { Service } = require('../service.cjs');
 const { parse } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 
+test('unique_by reports unsupported targets', () => {
+  for (const source of ['entity A { @unique_by(self.x) attr x: string }', '@unique_by(self.x) value point { attr x: string }']) {
+    const doc = parse(source, 'invalid-target.yambl');
+    validate([doc]);
+    assert.ok(doc.diagnostics.some(d => d.message.includes('decorator unique_by does not allow this target')));
+  }
+});
+
 test('relationship annotations check cardinality, coordinates and target fields', () => {
   const valid = parse(`dimension source { value source: string }
 entity Issuer {

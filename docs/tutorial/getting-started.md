@@ -54,6 +54,7 @@ decodes ProductStates {
     - 200 Inactive: 'Inactive'
 }
 
+@unique_by(self.name)
 entity Product {
     id product_id: string
     static attr name: string
@@ -68,13 +69,19 @@ entity Product {
     computed attr total: decimal {
         return self.unit_price::value() * self.quantity::value()
     }
+
+    constraint non_negative_quantity {
+        assert self.quantity::value() >= 0
+    }
 }
 ```
 
 实体完整名称是 `example.inventory.Product`。`product_id` 是身份；`product_state` 只能使用
 `ProductStates` 字典中的代码。`decimal[18, 2]` 描述十进制精度和小数位数。
 计算属性 `total` 不存储额外的列，读取时从当前商品的单价和数量计算；
-`::value()` 是读取字段值的操作。这里定义的是数据结构，尚未创建商品数据。
+`::value()` 是读取字段值的操作。`@unique_by(self.name)` 要求已有名称在商品实体及其子类型中
+唯一；`constraint` 要求每个商品的数量为非负数。数据检查和事务最终候选都会执行这些规则，
+失败时报告冲突或断言位置，事务不会提交。这里定义的是数据结构，尚未创建商品数据。
 
 需要只作为继承基类的实体时，可使用 `abstract entity`；抽象计算属性由具体子类
 实现。字符串格式也可以通过 `${类型名}` 组合已有约束。规则和示例见
@@ -107,7 +114,9 @@ yambl generate -o path ./model.yambl-ir.json -o output ./generated -o package ex
 ```
 
 第一条命令输出独立 JSON 中间模型。第二条命令在新的或空的 `generated` 目录中生成
-Python 包、SQLite 结构、文件后端模板及接口参考。它检查目标后端是否支持模型使用的
+Python 包、SQLite 结构、文件后端模板及接口参考。`generated/python-schema.md` 列出
+由这个模型生成的类、读取方法及参数；后面的 `ExampleData`、`get_product` 和 `read_total`
+都来自生成包。生成器检查目标后端是否支持模型使用的
 类型；检查通过不代表所有语言类型都能存储。修改模型后应重新编译和生成，生成器不会
 迁移已有数据。
 
@@ -157,7 +166,8 @@ python -m example_model apply -o config repository.lclcfg -o source initial.yapl
 python -m example_model check-data -o config repository.lclcfg
 ```
 
-商品 `P1` 的单价是 12.50，数量是 3。应用成功后输出的事务文件路径可用于回滚；
+商品 `P1` 的单价是 12.50，数量是 3。应用成功时 JSON 中的 `status` 为 `committed`，
+数据检查成功时 `valid` 为 `true`。应用输出中的事务文件路径可用于回滚；
 再次应用同一 Plan 会因 ID 已存在而失败。
 
 ## 7. 读取计算结果
@@ -249,7 +259,7 @@ python match_product.py files.lclcfg
 输出同样包含 `商品金额：37.50`。两个配置指向各自的数据仓库；文件后端的路径必须是
 不存在的新目录。Plan 格式和回滚操作见[事务和数据](../reference/transactions.md)。
 
-## 限制字段取值
+## 进阶：限制字段取值
 
 如果字段只允许几个编译期值，可以声明有限值类型：
 
@@ -266,6 +276,82 @@ entity Task {
 插入或更新 `priority` 时只能使用 1、2 或 3；`fixed_priority` 只能使用 2。
 `one_of` 的候选顺序不影响允许值。更多规则和继承示例见
 [类型表达式](../reference/type-expressions.md)。
+
+## 进阶：选择价格并检查历史记录
+
+下面的独立模型演示带来源维度的快照。可以把它保存为另一个模型仓库中的
+`prices.yambl`，并像前面的商品模型一样运行 `check`、`compile` 和 `generate`。
+
+```yambl
+hierarchy PreferredSources {
+    - 10 'Primary'
+    - 20 'Secondary'
+}
+
+dimension prices {
+    value source: string
+    hierarchy preference: Hierarchy = PreferredSources
+}
+
+entity Security {
+    id security_id: string
+    static attr recorded_at: datetime
+    static attr time_zone: code<TimeZones>
+    @dimension(prices)
+    @temporal(day: date)
+    snapshot attr price: decimal
+
+    constraint positive_prices {
+        assert self.price::records().all(r -> r.value > 0)
+    }
+
+    computed attr selected_price: decimal {
+        return self.price::best_available(day=input.day).value
+    }
+
+    computed attr selected_source: string {
+        return self.price::best_available(day=input.day).dimensions.source
+    }
+}
+```
+
+`recorded_at` 保存带时区的日期时间，读取时规范为 UTC；`time_zone` 可以使用内置字典中的
+`TimeZones.AsiaShanghai`。每条价格记录有独立的日期和来源。`records()` 读取已有物理记录，
+`all` 要求每条记录的值大于零；没有记录时该断言为真。这个模型没有声明回退天数，
+因此只选择请求日期的记录；同一天按 `PreferredSources` 的 ordering 选择来源。例如当天
+Primary 为 10、Secondary 为 12 时，`selected_price` 返回 10，`selected_source` 返回
+`Primary`。选择结果的 `.value` 是价格，`.dimensions.source` 是实际选中的来源。
+配置回退天数后才会跨日期查找，并优先选择较近日期；详见[计算与选择](../reference/computations.md)。
+
+## 进阶：沿关系反向查找
+
+下面的独立模型把订单连接到结算，再连接到账户。账户上的 `order` 是只读反向属性，
+不需要另存一份关系：
+
+```yambl
+entity Order {
+    id order_id: string
+    @relationship(one, maybe)
+    static attr settlement: Settlement
+}
+
+entity Settlement {
+    id settlement_id: string
+    @relationship(one, maybe)
+    static attr account: Account
+}
+
+entity Account {
+    id account_id: string
+    @reverse_relationship(Order.settlement.account)
+    static attr order: Order
+}
+```
+
+读取账户的 `order` 时，读取器先反查指向该账户的结算，再反查指向该结算的订单。
+链中任一跳没有匹配时返回 `NO_ENTRY`；某一跳有多个来源时返回 `ERROR`。
+每一跳都须是符合声明的单体一对一正向关系。时态、维度和更长路径的约束见
+[实体关系与反向引用](../reference/relationships.md)。
 
 ## 接下来
 
