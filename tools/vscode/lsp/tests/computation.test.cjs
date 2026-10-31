@@ -9,6 +9,16 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { position } = require('../language/syntax.cjs');
 
+test('a named hierarchy narrows an inherited reference', () => {
+  const doc = parse(`hierarchy H { - 1 'x' }
+entity A { id id: string attr h: Hierarchy }
+entity B inherits A { @override attr h: exact<H> }
+`, 'hierarchy-singleton.yambl');
+  validate([doc]);
+  assert.deepEqual(doc.errors, []);
+  assert.deepEqual(doc.diagnostics, []);
+});
+
 test('shared dimensions and hierarchies resolve across namespaces with local precedence', () => {
   const shared = parse(`namespace common
 decodes Sources { - 1 Wind: 'Wind' }

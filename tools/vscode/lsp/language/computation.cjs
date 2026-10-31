@@ -643,7 +643,7 @@ function checkComputations(documents, symbols, report) {
         continue;
       }
       const symbol = expression.kind === 'name' ? doc.scope.get(expression.value) : null;
-      if (node.name === 'exact' && symbol && ['entity', 'decodes'].includes(symbol.kind)) {
+      if (node.name === 'exact' && symbol && ['entity', 'decodes', 'hierarchy'].includes(symbol.kind)) {
         const resolver = new Resolver(doc, report, symbols, null, true);
         const source = { token: expression.token, name: expression.value, args: null, params: null, accesses: [], operations: [] };
         const result = resolver.valueType(resolver.evaluate(source));

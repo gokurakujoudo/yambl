@@ -8,6 +8,7 @@ const { parse, format } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json'), ...require('./computation-cases.json')];
 cases.push(
+  ["hierarchy H { - 1 'x' } entity A { id id: string attr h: Hierarchy } entity B inherits A { @override attr h: exact<H> }"],
   ['entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(one, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.c) attr a:A }'],
   ['entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(many, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.c) attr a:A }'],
   ['entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(one, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.missing) attr a:A }'],

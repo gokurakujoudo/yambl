@@ -165,7 +165,7 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     fs.writeFileSync(computedUri.fsPath, computedText);
     const computedDoc = await vscode.workspace.openTextDocument(computedUri);
     await vscode.window.showTextDocument(computedDoc);
-    for (const [needle, labels] of [['self.price::', ['value', 'best_available']], ['self.amount::', ['value']]]) {
+    for (const [needle, labels] of [['self.price::', ['value', 'best_available', 'records']], ['self.amount::', ['value']]]) {
       const completed = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', computedUri, computedDoc.positionAt(computedText.indexOf(needle) + needle.length), ':');
       assert.deepEqual(completed.items.map(item => item.label).sort(), [...labels].sort());
     }
