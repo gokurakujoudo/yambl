@@ -64,7 +64,8 @@ entity DollarSecurity inherits Security {
 
 `exact<expr>` 将类型限制为一个编译期值，可用于普通字段、别名和支持值类型的集合位置。
 表达式可使用字面量、字典代码、纯转换与已声明的 `const`；结构值通过有明确类型的常量提供。
-它也保留实体类型和字典引用的单例约束。在 override 或 overload 中，字典实例名称
+它也保留实体类型、字典引用和具名 Hierarchy 引用的单例约束，例如 `exact<PreferredSources>`。
+在 override 或 overload 中，字典实例名称
 `Currencies` 可作为 `exact<Currencies>` 的简写；普通字段使用后者。
 
 `one_of[expr, ...]` 将类型限制为一组编译期值：
