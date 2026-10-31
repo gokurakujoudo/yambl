@@ -17,6 +17,94 @@ function editor(source) {
 }
 const labels = result => result.items.map(item => item.label);
 
+test('fixed lookup bindings report static and compile-time evaluation failures', () => {
+  const { parse } = require('../language/syntax.cjs');
+  const { validate } = require('../language/validation.cjs');
+  const cases = [
+    ['1 // 0', 'incompatible binding for parameter: day'],
+    ['parse_date()', 'missing builtin argument: text'],
+    ["parse_date('2024-01-01', '2024-01-02')", 'invalid, duplicate or out-of-order builtin argument: '],
+    ['parse_date(to_string(1 // 0))', 'lookup binding evaluation failed: Fraction(1, 0)'],
+    ["parse_date('bad')", 'lookup binding evaluation failed: parse_date requires YYYY-MM-DD'],
+  ];
+  for (const [binding, expected] of cases) {
+    const doc = parse(`entity E { dimension source { value index: string } @dimension(source) @temporal(day: date) scd attr name: string lookup fixed { name = self.name::value(day=${binding}, index='valid') } }`, 'fixed.yambl');
+    validate([doc]);
+    assert.deepEqual(doc.diagnostics.map(item => item.message), [expected], binding);
+  }
+});
+
+test('fixed lookup string comparisons use Unicode code point order', () => {
+  const { parse } = require('../language/syntax.cjs');
+  const { validate } = require('../language/validation.cjs');
+  const astral = String.fromCodePoint(0x1f600), bmp = String.fromCodePoint(0xe000);
+  for (const [operator, expected] of [['>', []], ['<', ['lookup binding evaluation failed: Fraction(1, 0)']]]) {
+    const source = `entity E { dimension d { value origin: string } @dimension(d) attr name: string lookup fixed { name = self.name::value(origin=if '${astral}' ${operator} '${bmp}' then 'ok' else to_string(1 // 0)) } }`;
+    const doc = parse(source, 'unicode.yambl'); validate([doc]);
+    assert.deepEqual(doc.diagnostics.map(item => item.message), expected, operator);
+  }
+});
+
+test('fixed lookup compares structured constants by their nested fields', () => {
+  const { parse } = require('../language/syntax.cjs');
+  const { validate } = require('../language/validation.cjs');
+  for (const [text, operator, expected] of [
+    ['x', '==', []], ['y', '==', ['lookup binding evaluation failed: Fraction(1, 0)']],
+    ['x', '!=', ['lookup binding evaluation failed: Fraction(1, 0)']], ['y', '!=', []],
+  ]) {
+    const source = `value inner { attr amount: decimal attr day: date } value outer { attr inner: inner attr text: string }
+      const A: outer = {inner: {amount: 1.0, day: '2026-01-01'}, text: 'x'}
+      const B: outer = {inner: {amount: 1.00, day: '2026-01-01'}, text: '${text}'}
+      entity E { dimension d { value origin: string } @dimension(d) attr name: string lookup fixed { name = self.name::value(origin=if A ${operator} B then 'ok' else to_string(1 // 0)) } }`;
+    const doc = parse(source, 'structured.yambl'); validate([doc]);
+    assert.deepEqual(doc.diagnostics.map(item => item.message), expected, `${text} ${operator}`);
+  }
+});
+
+test('structured constant equality compares reference IDs and normalized datetimes', () => {
+  const { parse } = require('../language/syntax.cjs');
+  const { validate } = require('../language/validation.cjs');
+  for (const [target, expected] of [['R1', []], ['R2', ['lookup binding evaluation failed: Fraction(1, 0)']]]) {
+    const source = `entity Ref { id id: string } value data_record { attr target: Ref attr stamp: datetime }
+      const A: data_record = {target: 'R1', stamp: '2026-01-01T08:00:00+08:00'}
+      const B: data_record = {target: '${target}', stamp: '2026-01-01T00:00:00Z'}
+      entity E { dimension d { value origin: string } @dimension(d) attr name: string lookup fixed { name = self.name::value(origin=if A == B then 'ok' else to_string(1 // 0)) } }`;
+    const doc = parse(source, 'references.yambl'); validate([doc]);
+    assert.deepEqual(doc.diagnostics.map(item => item.message), expected, target);
+  }
+});
+
+test('lookup skips statically invalid constants while retaining other dependency errors', () => {
+  const { parse } = require('../language/syntax.cjs');
+  const { validate } = require('../language/validation.cjs');
+  const cases = [
+    ["entity Security { id security_id: integer } value holding { attr security: Security } const A: holding = {security: 'abc'} entity E { dimension d { value origin: string } @dimension(d) attr name: string lookup fixed { name = self.name::value(origin=if A == A then 'ok' else 'no') } }", ['incompatible reference literal ID type']],
+    ["const BAD: date = parse_date('bad') entity E { @temporal(day:date) scd attr x:string lookup a { x=self.x::value(day=BAD) } }", ['constant evaluation failed: parse_date requires YYYY-MM-DD', 'lookup binding evaluation failed: cannot evaluate lookup binding: BAD']],
+    ["entity E { dimension d { value origin:string } @dimension(d) attr x:string lookup a { x=self.x::value(origin=MISSING) } }", ['lookup binding requires a pure expression of inputs, literals, constants or dictionary members']],
+  ];
+  for (const [source, expected] of cases) {
+    const doc = parse(source, 'invalid-constant.yambl'); validate([doc]);
+    assert.deepEqual(doc.diagnostics.map(item => item.message), expected);
+  }
+});
+
+test('lookup avoids uncertain decimal and float evaluation, including an error it cannot yet diagnose', () => {
+  const { parse } = require('../language/syntax.cjs');
+  const { validate } = require('../language/validation.cjs');
+  const cases = [
+    "if to_string(1.00) == '1.00' then 'ok' else to_string(1 // 0)",
+    "if to_string(1.00) == '1.00' then to_string(1 // 0) else 'ok'",
+    "if 1 / 2 == 0.5 then 'ok' else to_string(1 // 0)",
+    'to_string(1 / 0)',
+    "if TEXT == '1.00' then 'ok' else to_string(1 // 0)",
+  ];
+  for (const binding of cases) {
+    const doc = parse(`const TEXT: string = to_string(1.00) entity E { dimension d { value origin: string } @dimension(d) attr name: string lookup fixed { name = self.name::value(origin=${binding}) } }`, 'uncertain.yambl');
+    validate([doc]);
+    assert.deepEqual(doc.diagnostics.map(item => item.message), [], binding);
+  }
+});
+
 test('lookup accepts optional inputs and pure fallback bindings', () => {
   const { parse } = require('../language/syntax.cjs');
   const { validate } = require('../language/validation.cjs');
@@ -64,7 +152,7 @@ test('lookup inputs follow conversion signatures and declared fallback defaults'
 
 test('embedded builtin lookups are analyzed and are not duplicated when authoring builtins', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lookup-builtins-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.cpSync(path.join(__dirname, '../language'), path.join(root, 'language'), { recursive: true });
   fs.cpSync(path.resolve(__dirname, '../../../../lang'), path.join(root, 'lang'), { recursive: true });
   const model = path.join(root, 'lang/models/hierarchy.yambl');
@@ -102,7 +190,7 @@ test('embedded builtin lookups are analyzed and are not duplicated when authorin
 
 test('invalid embedded builtin lookup receives its field diagnostic', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lookup-builtin-error-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.cpSync(path.join(__dirname, '../language'), path.join(root, 'language'), { recursive: true });
   fs.cpSync(path.resolve(__dirname, '../../../../lang'), path.join(root, 'lang'), { recursive: true });
   const model = path.join(root, 'lang/models/hierarchy.yambl');
@@ -118,7 +206,7 @@ test('invalid embedded builtin lookup receives its field diagnostic', t => {
 
 test('embedded builtin lookup infers temporal and dimension inputs', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lookup-builtin-input-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.cpSync(path.join(__dirname, '../language'), path.join(root, 'language'), { recursive: true });
   fs.cpSync(path.resolve(__dirname, '../../../../lang'), path.join(root, 'lang'), { recursive: true });
   const model = path.join(root, 'lang/models/hierarchy.yambl');
@@ -141,7 +229,7 @@ test('embedded builtin lookup infers temporal and dimension inputs', t => {
 
 test('embedded builtin lookup resolves local constants without exporting them', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lookup-builtin-constant-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.cpSync(path.join(__dirname, '../language'), path.join(root, 'language'), { recursive: true });
   fs.cpSync(path.resolve(__dirname, '../../../../lang'), path.join(root, 'lang'), { recursive: true });
   const model = path.join(root, 'lang/models/hierarchy.yambl');
@@ -172,7 +260,7 @@ test('embedded builtin lookup resolves local constants without exporting them', 
 
 test('embedded builtin extensions retain entity identity and lookup fields across refreshes', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-builtin-lookup-extend-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.cpSync(path.join(__dirname, '../language'), path.join(root, 'language'), { recursive: true });
   fs.cpSync(path.resolve(__dirname, '../../../../lang'), path.join(root, 'lang'), { recursive: true });
   const model = path.join(root, 'lang/models/hierarchy.yambl');
@@ -389,7 +477,7 @@ test('an unfinished lookup at end of file preserves earlier declarations', () =>
 
 test('lookup paths, parameters and references navigate across files and inheritance', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lookup-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   const files = {
     'yambl-root.lclcfg': "prefix: ''",
     'shared.yambl': "namespace shared decodes Sources { - 1 Primary: 'Primary' } const DAY: date = parse_date('2026-10-28') const OTHER: date = parse_date('2026-10-29')",

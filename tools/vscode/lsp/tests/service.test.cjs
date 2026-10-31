@@ -63,7 +63,7 @@ test('flags codes complete, hover and navigate through unions and generated None
 });
 
 test('relationship markers navigate across files and react to unsaved edits', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-markers-')); t.after(() => fs.rmSync(root, { recursive: true }));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-markers-')); t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''");
   const sources = {
     'base.yambl': 'namespace core entity Base { config attr days: integer = 20 }',
@@ -116,7 +116,7 @@ test('invalid field declarations do not offer marker navigation', () => {
 });
 
 test('repository discovery, unsaved dependencies, definitions, hover, symbols and close', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lsp-')); t.after(() => fs.rmSync(root, { recursive: true }));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-lsp-')); t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   const write = (name, text) => { const file = path.join(root, name); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); return pathToFileURL(file).href; };
   write('yambl-root.lclcfg', 'prefix: "demo"');
   const base = write('core/base.yambl', "namespace core @title('Base title') entity Base { id item_id: string }");
@@ -188,7 +188,7 @@ test('attribute hover includes metadata, modifiers and complete generic/paramete
 });
 
 test('Decodes references follow symbol identity and quoted names retain string styling', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-references-')); t.after(() => fs.rmSync(root, { recursive: true }));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-references-')); t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   const write = (name, text) => { const file = path.join(root, name); fs.writeFileSync(file, text); return pathToFileURL(file).href; };
   write('yambl-root.lclcfg', "prefix: ''");
   const dictionary = write('decodes.yambl', 'namespace dict decodes Currencies {}');
@@ -233,7 +233,7 @@ test('untitled buffers and syntax failures do not produce unsafe formatting edit
   assert.equal(service.feature('textDocument/hover', { textDocument: { uri: 'missing' }, position: { line: 0, character: 0 } }), null);
 });
 test('separate repository roots do not merge equally named entities', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-roots-')); t.after(() => fs.rmSync(root, { recursive: true }));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-roots-')); t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   const service = new Service(() => {});
   for (const folder of ['one', 'two']) {
     const dir = path.join(root, folder); fs.mkdirSync(dir); fs.writeFileSync(path.join(dir, 'yambl-root.lclcfg'), "prefix: ''");
@@ -246,19 +246,19 @@ test('separate repository roots do not merge equally named entities', t => {
 
 
 test('prefixes, unsaved root configuration and nested repository errors', t => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-prefix-')); t.after(() => fs.rmSync(root, { recursive: true }));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-prefix-')); t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   const write = (name, text) => { const filename = path.join(root, name); fs.mkdirSync(path.dirname(filename), { recursive: true }); fs.writeFileSync(filename, text); return pathToFileURL(filename).href; };
   const config = write('yambl-root.lclcfg', "prefix: 'demo'");
-  const value = write('values/a.yambl', 'namespace types value record { attr x: string }');
-  const text = 'namespace core from types import record entity A { attr x: record attr h: Hierarchy }';
+  const value = write('values/a.yambl', 'namespace types value item_record { attr x: string }');
+  const text = 'namespace core from types import item_record entity A { attr x: item_record attr h: Hierarchy }';
   const uri = write('core/a.yambl', text);
   const published = [], service = new Service((method, params) => published.push(params));
   service.open.set(uri, { version: 1, text }); service.refresh();
   assert.equal(service.document(uri).prefix, 'demo');
   assert.deepEqual(service.document(uri).diagnostics, []);
-  const params = { textDocument: { uri }, position: { line: 0, character: text.lastIndexOf('record') } };
+  const params = { textDocument: { uri }, position: { line: 0, character: text.lastIndexOf('item_record') } };
   assert.equal(service.feature('textDocument/definition', params).uri, value);
-  assert.ok(service.feature('textDocument/hover', params).contents.value.includes('value record'));
+  assert.ok(service.feature('textDocument/hover', params).contents.value.includes('value item_record'));
   const semantic = service.feature('textDocument/semanticTokens/full', params).data;
   assert.ok(semantic.length > 0);
   service.open.set(config, { version: 2, text: "prefix: 'changed'" }); service.refresh();
@@ -336,7 +336,7 @@ entity Selection {
 test('builtins authoring works outside the extension resource directory', t => {
   const { modelRoot } = require('../language/relationships.cjs');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-builtins-checkout-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.cpSync(modelRoot, root, { recursive: true });
   const uri = pathToFileURL(path.join(root, 'models/hierarchy.yambl')).href;
   const service = new Service(() => {});

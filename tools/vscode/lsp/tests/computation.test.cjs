@@ -6,8 +6,101 @@ const { validate } = require('../language/validation.cjs');
 const { Service } = require('../service.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const { position } = require('../language/syntax.cjs');
+
+test('invalid mapping in a structured finite value reports a collection error', () => {
+  const doc = parse("value point { attr x: mapping<string, integer> } const P: point = {x: {'a': 1}} entity A { attr f: exact<P> }", 'model.yambl');
+  validate([doc]);
+  assert.deepEqual(doc.diagnostics.map(d => d.message), [
+    'value fields cannot be collections',
+    'finite values must be non-collection values',
+  ]);
+});
+
+test('inheritance cycles do not hang validation or completion', () => {
+  const script = `
+    const { parse, position } = require('./language/syntax.cjs');
+    const { validate } = require('./language/validation.cjs');
+    const { Service } = require('./service.cjs');
+    const text = 'entity A inherits B { computed attr x: integer { return self.missing::value() } } entity B inherits A {}';
+    const doc = parse(text, 'cycle.yambl'); validate([doc]);
+    if (!doc.diagnostics.some(d => d.message.includes('inheritance cycle'))) process.exit(2);
+    const service = new Service(() => {}), uri = 'untitled:cycle';
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const offset = text.indexOf('self.missing') + 'self.'.length;
+    service.feature('textDocument/completion', { textDocument: { uri }, position: position(text, offset) });
+    const second = 'entity A inherits B { id id: string attr f: string computed attr x: string { return self.f::value() } } entity B inherits A {}';
+    service.open.set(uri, { text: second, version: 2 }); service.refresh();
+    const secondOffset = second.indexOf('self.f') + 'self.'.length;
+    const result = service.feature('textDocument/completion', { textDocument: { uri }, position: position(second, secondOffset) });
+    if (!result.items.some(item => item.label === 'f')) process.exit(3);
+  `;
+  const result = spawnSync(process.execPath, ['-e', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 5000, windowsHide: true });
+  assert.equal(result.status, 0, result.error?.message || result.stderr);
+});
+
+test('internal calculation names are reserved for model declarations and fields', () => {
+  for (const name of ['record', 'selection', 'dimensions', 'partial', 'sequence', 'grouped', 'issues', 'non_normal']) {
+    for (const source of [
+      `value ${name} { attr value: integer }`,
+      `type ${name} = integer`,
+      `dimension ${name} { value source: string }`,
+      `decorator @${name}()`,
+      `entity A { id id: string attr ${name}: integer }`,
+      `entity A { id id: string } extend A { attr ${name}: integer }`,
+      `value point { attr ${name}: integer }`,
+      `entity A { dimension ${name} { value source: string } }`,
+      `entity A { id id: string lookup ${name} { key = self.id::value() } }`,
+      `entity A { constraint ${name} { assert true } }`,
+    ]) {
+      const doc = parse(source, 'model.yambl');
+      validate([doc]);
+      assert.deepEqual(doc.errors, [], source);
+      assert.ok(doc.diagnostics.some(d => d.message === `reserved calculation name: ${name}`), source);
+    }
+  }
+  const allowed = parse(`namespace sequence
+@targets(DecoratorTargets.All) decorator @note(record: string)
+dimension feed { value sequence: string hierarchy record: Hierarchy }
+entity A {
+  id id: string
+  lookup by_id { issues = self.id::value() }
+  @extra_input_param(record: integer) computed attr result: integer { let sequence = input.record ?? 1 return sequence }
+}`, 'allowed.yambl');
+  validate([allowed]);
+  assert.deepEqual(allowed.errors, []);
+  assert.deepEqual(allowed.diagnostics, []);
+});
+
+test('completion uses ordinary declared value members', () => {
+  const service = new Service(() => {}), uri = 'untitled:declared-calculation-names';
+  for (const name of ['point', 'item']) {
+    const text = `value ${name} { attr value: integer } entity A { computed attr x: integer { let p: ${name} = {value: 1} return p.value } }`;
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const offset = text.lastIndexOf('p.value') + 'p.'.length;
+    const result = service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: offset } });
+    const labels = result.items.map(item => item.label);
+    assert.ok(labels.includes('value'), name);
+    assert.ok(!labels.includes('issues') && !labels.includes('map') && !labels.includes('sum_by'), name);
+  }
+});
+
+test('type completion excludes reserved declarations and keeps valid aliases', () => {
+  const service = new Service(() => {}), uri = 'untitled:reserved-value-completion';
+  const completions = text => {
+    service.open.set(uri, { text, version: 1 }); service.refresh();
+    const offset = text.lastIndexOf('values<') + 'values<'.length;
+    return service.feature('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: offset } }).items.map(item => item.label);
+  };
+  const invalid = completions('value sequence { attr n: integer } value point { attr n: integer } entity A { attr xs: values<point> }');
+  assert.ok(invalid.includes('point'));
+  assert.ok(!invalid.includes('sequence'));
+  const alias = completions('type sequence = integer type number = integer entity A { attr xs: values<number> }');
+  assert.ok(!alias.includes('sequence'));
+  assert.ok(alias.includes('number'));
+});
 
 test('a named hierarchy narrows an inherited reference', () => {
   const doc = parse(`hierarchy H { - 1 'x' }
@@ -410,7 +503,7 @@ test('typed calculation members, methods, signatures and reverse references shar
 entity HoldingEntry { static attr security: Security }
 entity Fund {
     snapshot attr holdings: collection<HoldingEntry>
-    computed attr grouped: mapping<string, integer> {
+    computed attr totals: mapping<string, integer> {
         let holdings = self.holdings::value()
         return holdings.group_by(h ->
             h.security.industry::value()

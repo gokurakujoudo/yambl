@@ -167,7 +167,7 @@ function dictionaryOperation(op, symbols, dictionaries, issue) {
 }
 
 function validate(doc) {
-  if (!doc.ast || doc.syntaxErrors || !doc.entities) return;
+  if (doc.syntaxErrors) return;
   const issue = (token, message) => doc.diagnostics.push({ range: token.range, severity: 1, source: 'yambl', message });
   const dictionaries = new Map();
   const check = (type, value, allowState = false, dictionaryView = dictionaries) => {

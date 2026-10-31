@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
-const { parse, format, range, position, stringValue, keywords, annotations, values, generics, entities, structures, constants, resultConstants } = require('./language/syntax.cjs');
+const { parse, format, range, position, stringValue, keywords, annotations, values, generics, entities, structures, constants, resultConstants, reservedCalculationNames } = require('./language/syntax.cjs');
 const { validate, describe, formatType } = require('./language/validation.cjs');
 const { typeLabel, methodNames, methodHelp, nodes, defaultLabel, inputTypeHelp } = require('./language/calculation-tools.cjs');
 const typeTools = require('./language/type-tools.cjs');
@@ -217,11 +217,11 @@ class Service {
           const config = path.join(root, rootName);
           prefix = readPrefix(config, buffers.get(uriKey(pathToFileURL(config).href))?.text);
           if (builtin && prefix) throw configError(config, 0, 'built-in prefix must be empty');
-        }
-        if (root) for (const file of sources(root)) {
-          const fileUri = pathToFileURL(file).href;
-          const buffer = buffers.get(uriKey(fileUri));
-          texts.set(uriKey(fileUri), buffer || { uri: fileUri, text: new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(file)) });
+          for (const file of sources(root)) {
+            const fileUri = pathToFileURL(file).href;
+            const buffer = buffers.get(uriKey(fileUri));
+            texts.set(uriKey(fileUri), buffer || { uri: fileUri, text: new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(file)) });
+          }
         }
       } catch (error) { readError = error; }
       for (const [openUri, item] of this.open) {
@@ -564,16 +564,16 @@ class Service {
         const expression = nodes(computation || constantContext || lookup).find(n => n.kind === 'member' && n.memberToken?.start === member.index + 1);
         const receiver = expression?.operands[0]?.inferred?.type;
         if (receiver && receiver.kind !== 'unknown') {
-          if (['record', 'selection', 'dimensions'].includes(receiver.name)) return { isIncomplete: false, items: receiver.params.map(([label], index) => ({ label, kind: 5, detail: typeLabel(receiver.args[index]) })) };
+          if (!receiver.key && ['record', 'selection', 'dimensions'].includes(receiver.name)) return { isIncomplete: false, items: receiver.params.map(([label], index) => ({ label, kind: 5, detail: typeLabel(receiver.args[index]) })) };
           const symbols = new Map([...this.documents.values(), calculationDoc].flatMap(d => [...d.scope.values()].map(s => [s.key, s])));
           const owner = symbols.get(receiver.key);
           const fields = new Map(owner?.kind === 'value' ? owner.fields.map(f => [f.name.value, f]) : owner?.effective || []);
           // Descendant-only fields are legal reads and may yield NOT_DEFINED.
           if (receiver.kind === 'reference' && owner) {
-            let root = owner; while (root.base) root = root.base;
+            const root = owner.ancestors?.at(-1) || owner;
             for (const candidate of symbols.values()) if (candidate.kind === 'entity') {
               if (lookup && candidate !== owner && !candidate.ancestors?.includes(owner)) continue;
-              let ancestor = candidate; while (ancestor.base) ancestor = ancestor.base;
+              const ancestor = candidate.ancestors?.at(-1) || candidate;
               if (ancestor === root) for (const [name, field] of candidate.effective || []) if (!fields.has(name)) fields.set(name, field);
             }
           }
@@ -584,7 +584,7 @@ class Service {
             if (!lookupSupported(resolved, symbols)) return [];
             return [{ label, kind: 5, detail: `${resolved.kind === 'reference' ? 'Entity reference; path can continue' : 'Value'} · ${describe(field)}` }];
           });
-          if (receiver.name === 'partial') items.push(...['value', 'issues'].map(label => ({ label, kind: 5, detail: label === 'value' ? typeLabel(receiver.args[0]) : 'Immutable issue details' })));
+          if (!receiver.key && receiver.name === 'partial') items.push(...['value', 'issues'].map(label => ({ label, kind: 5, detail: label === 'value' ? typeLabel(receiver.args[0]) : 'Immutable issue details' })));
           if (computation) items.push(...methodNames(receiver).map(label => ({ label, kind: 2, detail: methodHelp(label), insertText: label + '($0)', insertTextFormat: 2 })));
           return { isIncomplete: false, items };
         }
@@ -708,16 +708,22 @@ class Service {
       }
       if (member) return { isIncomplete: false, items: [] };
       const items = [...keywords.filter(word => !['lookup', 'constraint', 'assert'].includes(word)), ...annotations, ...values, ...generics, ...entities, ...structures, 'Entity', ...constants].map(label => ({ label, kind: constants.includes(label) ? 21 : 14, detail: help[label] || 'YAMBL built-in' }));
-      if (['entity', 'extend'].includes(bodyContext(doc, offset))) items.push({ label: 'lookup', kind: 15, detail: 'Named entity lookup rule', insertText: 'lookup ${1:name} {\n    ${2:key} = self.${3:field}::value()\n}', insertTextFormat: 2 });
-      if (['entity', 'extend'].includes(bodyContext(doc, offset))) items.push({ label: 'constraint', kind: 15, detail: 'Entity constraint', insertText: 'constraint ${1:name} {\n    assert ${2:true}\n}', insertTextFormat: 2 });
-      if (bodyContext(doc, offset) === 'constraint') items.push({ label: 'assert', kind: 14, detail: 'Check a boolean constraint expression' });
+      const body = bodyContext(doc, offset);
+      if (['entity', 'extend'].includes(body)) {
+        items.push({ label: 'lookup', kind: 15, detail: 'Named entity lookup rule', insertText: 'lookup ${1:name} {\n    ${2:key} = self.${3:field}::value()\n}', insertTextFormat: 2 });
+        items.push({ label: 'constraint', kind: 15, detail: 'Entity constraint', insertText: 'constraint ${1:name} {\n    assert ${2:true}\n}', insertTextFormat: 2 });
+      }
+      if (body === 'constraint') items.push({ label: 'assert', kind: 14, detail: 'Check a boolean constraint expression' });
       if (computation || constantContext) {
         for (const [label, parameters] of Object.entries(require('./language/conversions.cjs').signatures)) items.push({ label, kind: 3, detail: `${label}(${parameters.map(p => p.join(': ')).join(', ')})`, insertText: label + '($0)', insertTextFormat: 2 });
         if (computation && computation.kind !== 'constraint') items.push({ label: 'input', kind: 6, detail: 'External input: input.name; omitted input fallback: input.name ?? expression', insertText: 'input.${1:name}', insertTextFormat: 2 });
         const context = (computation ? nodes(computation) : []).filter(n => n.environment && n.token.start <= offset && offset <= n.end).sort((a, b) => (a.end - a.token.start) - (b.end - b.token.start))[0];
         for (const [label, value] of context?.environment || []) items.push({ label, kind: 6, detail: typeLabel(value.type) });
       }
-      for (const [label, decl] of doc.scope) items.push({ label, kind: decl.kind === 'entity' ? 7 : 20, detail: describe(decl) });
+      for (const [label, decl] of doc.scope) {
+        if (reservedCalculationNames.includes(decl.name.value)) continue;
+        items.push({ label, kind: decl.kind === 'entity' ? 7 : 20, detail: describe(decl) });
+      }
       return { isIncomplete: false, items };
     }
     if (method === 'textDocument/formatting') {

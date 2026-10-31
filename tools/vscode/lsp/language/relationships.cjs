@@ -28,7 +28,6 @@ function relationships(symbols, issue) {
       seen.add(base); decl.ancestors.push(base); base = base.base;
     }
     decl.effective = new Map();
-    if (!decl.ownFields) decl.ownFields = new Map(decl.fields.map(f => [f.name.value, f]));
     for (const ancestor of [...decl.ancestors].reverse()) for (const [name, field] of ancestor.ownFields) decl.effective.set(name, field);
     for (const [name, field] of decl.ownFields) decl.effective.set(name, field);
   }

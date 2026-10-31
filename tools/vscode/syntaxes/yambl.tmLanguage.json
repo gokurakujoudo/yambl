@@ -9,6 +9,41 @@
       "end": "^[ \\t]*---[ \\t]*$"
     },
     {
+      "match": "\\b(value)\\s+(sequence|grouped|record|selection|dimensions|partial|issues|non_normal)\\b(?=\\s*\\{)",
+      "captures": {
+        "1": { "name": "storage.type.yambl" },
+        "2": { "name": "invalid.illegal.reserved-calculation-type.yambl" }
+      }
+    },
+    {
+      "match": "\\b(type)\\s+(sequence|grouped|record|selection|dimensions|partial|issues|non_normal)\\b(?=\\s*(?:<|=))",
+      "captures": {
+        "1": { "name": "storage.type.yambl" },
+        "2": { "name": "invalid.illegal.reserved-calculation-type.yambl" }
+      }
+    },
+    {
+      "match": "\\b(dimension|lookup|constraint)\\s+(sequence|grouped|record|selection|dimensions|partial|issues|non_normal)\\b(?=\\s*\\{)",
+      "captures": {
+        "1": { "name": "keyword.declaration.yambl" },
+        "2": { "name": "invalid.illegal.reserved-calculation-type.yambl" }
+      }
+    },
+    {
+      "match": "\\b(decorator)\\s+(@)(sequence|grouped|record|selection|dimensions|partial|issues|non_normal)\\b(?=\\s*\\()",
+      "captures": {
+        "1": { "name": "keyword.declaration.yambl" },
+        "3": { "name": "invalid.illegal.reserved-calculation-type.yambl" }
+      }
+    },
+    {
+      "match": "\\b(id|attr)\\s+(sequence|grouped|record|selection|dimensions|partial|issues|non_normal)\\b(?=\\s*:)",
+      "captures": {
+        "1": { "name": "keyword.declaration.yambl" },
+        "2": { "name": "invalid.illegal.reserved-calculation-type.yambl" }
+      }
+    },
+    {
       "match": "\\b(value|type)\\s+([a-z][a-z0-9_]*)\\b(?!\\s*:)",
       "captures": {
         "1": {

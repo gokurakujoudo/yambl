@@ -5,7 +5,7 @@ function typeLabel(type) {
   if (!type) return '?';
   const args = type.args?.length ? '<' + type.args.map(typeLabel).join(', ') + '>' : '';
   const params = type.params?.length ? '[' + type.params.map(([key, value]) => `${key}: ${value}`).join(', ') + ']' : '';
-  const name = { sequence: 'Seq', grouped: 'Grouped', partial: 'Partial' }[type.name] || type.name;
+  const name = (!type.key && { sequence: 'Seq', grouped: 'Grouped', partial: 'Partial' }[type.name]) || type.name;
   const dictionary = type.name === 'code' && type.key ? '<' + type.key.split('\0').slice(-2).filter(Boolean).join('.') + '>' : '';
   return name + args + dictionary + params;
 }
@@ -29,9 +29,9 @@ for (const [name, parameters] of Object.entries(conversions.signatures)) {
 }
 
 function methodNames(type) {
-  return ['collection', 'values', 'sequence'].includes(type?.name)
+  return type?.kind === 'collection' && ['collection', 'values', 'sequence'].includes(type.name)
     ? ['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'all', 'recover']
-    : type?.name === 'grouped' ? ['sum_by', 'recover'] : ['recover'];
+    : type?.kind === 'collection' && type.name === 'grouped' ? ['sum_by', 'recover'] : ['recover'];
 }
 
 function methodHelp(name, node) {

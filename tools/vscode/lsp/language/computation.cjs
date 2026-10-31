@@ -15,7 +15,7 @@ function lookupSupported(resolved, symbols) {
 
 function checkComputations(documents, symbols, report) {
   const completed = new Map(), active = new Set();
-  const constantTypes = new Map(), constantActive = new Set(), constantValues = new Map();
+  const constantTypes = new Map(), constantActive = new Set(), constantValues = new Map(), invalidConstants = new Set();
   const finiteTypes = new WeakMap(), finiteActive = new WeakSet();
   function pure(doc, issue, expression, keyPosition = false) {
     if (expression.kind === 'descriptor' && expression.value === 'subtypes' && expression.operands[0].kind === 'name' && doc.scope.get(expression.operands[0].value)?.kind === 'entity') return;
@@ -36,8 +36,9 @@ function checkComputations(documents, symbols, report) {
   }
   function constant(declaration) {
     if (constantTypes.has(declaration)) return constantTypes.get(declaration);
-    const node = declaration.initializer, issue = (node, message) => report(declaration.doc, node.token, message);
-    if (constantActive.has(declaration)) { issue(node, `constant dependency cycle: ${declaration.name.value}`); return unknown; }
+    let staticInvalid = false;
+    const node = declaration.initializer, issue = (node, message) => { staticInvalid = true; report(declaration.doc, node.token, message); };
+    if (constantActive.has(declaration)) { invalidConstants.add(declaration); issue(node, `constant dependency cycle: ${declaration.name.value}`); return unknown; }
     constantActive.add(declaration);
     const checker = new Checker(declaration.doc, declaration, issue);
     const expected = new Resolver(declaration.doc, report, symbols, declaration, true).resolve(declaration.type);
@@ -45,7 +46,7 @@ function checkComputations(documents, symbols, report) {
     const actual = checker.infer(node, new Map(), expected).type;
     pure(declaration.doc, issue, node);
     if (!compatible(expected, actual)) issue(node, `incompatible constant result: expected ${expected.name}, got ${actual.name}`);
-    if (declaration.doc.diagnostics.length === before) {
+    if (!staticInvalid && declaration.doc.diagnostics.length === before) {
       try {
         const payload = constants.evaluate(node, name => resolveConstant(declaration.doc, name));
         if (expected.name === 'decimal' && expected.params?.length) {
@@ -54,7 +55,7 @@ function checkComputations(documents, symbols, report) {
         }
         constantValues.set(declaration, payload);
       } catch (error) { issue(node, `constant evaluation failed: ${error.message}`); }
-    }
+    } else invalidConstants.add(declaration);
     constantActive.delete(declaration); constantTypes.set(declaration, expected);
     return expected;
   }
@@ -168,7 +169,7 @@ function checkComputations(documents, symbols, report) {
         const pending = [...edges.get(name)], seen = new Set();
         while (pending.length) {
           const dependency = pending.pop();
-          if (dependency === name) { if (parameter.default) this.issue(parameter.default, `calculation parameter default cycle: ${name}`); break; }
+          if (dependency === name) { this.issue(parameter.default, `calculation parameter default cycle: ${name}`); break; }
           if (!seen.has(dependency)) { seen.add(dependency); pending.push(...(edges.get(dependency) || [])); }
         }
       }
@@ -266,7 +267,7 @@ function checkComputations(documents, symbols, report) {
           return { type: new Resolver(this.doc, report, symbols, this.owner).evaluate(syntax).type };
         }
         const parent = this.read(this.infer(receiver, environment), receiver, true);
-        if (['record', 'selection', 'dimensions'].includes(parent.type.name)) {
+        if (!parent.type.key && ['record', 'selection', 'dimensions'].includes(parent.type.name)) {
           const index = parent.type.params.findIndex(([name]) => name === node.value);
           if (index < 0) { this.issue(node, `unknown ${parent.type.name} member: ${node.value}`); return { type: unknown }; }
           return { type: parent.type.args[index] };
@@ -275,15 +276,14 @@ function checkComputations(documents, symbols, report) {
           const owner = symbols.get(parent.type.key), field = owner?.kind === 'value' && owner.fields.find(f => f.name.value === node.value);
           if (field) { this.doc.bindings.set(node.memberToken.start, field); return { type: new Resolver(field.doc, report, symbols, owner, true).resolve(field.type) }; }
         }
-        if (parent.type.name === 'partial' && ['value', 'issues'].includes(node.value)) return { type: node.value === 'value' ? parent.type.args[0] : type('issues', 'collection') };
+        if (!parent.type.key && parent.type.name === 'partial' && ['value', 'issues'].includes(node.value)) return { type: node.value === 'value' ? parent.type.args[0] : type('issues', 'collection') };
         if (parent.type.kind !== 'reference') { this.issue(node, 'member access requires a scalar entity reference'); return { type: unknown }; }
         const entity = symbols.get(parent.type.key);
         let field = entity?.effective?.get(node.value);
         if (!field && entity) {
-          let root = entity; while (root.base) root = root.base;
+          const root = entity.ancestors?.at(-1) || entity;
           for (const candidate of symbols.values()) {
-            let ancestor = candidate; const seen = new Set();
-            while (ancestor?.base && !seen.has(ancestor)) { seen.add(ancestor); ancestor = ancestor.base; }
+            const ancestor = candidate.ancestors?.at(-1) || candidate;
             if (ancestor === root && candidate.effective?.has(node.value)) { field = candidate.effective.get(node.value); break; }
           }
         }
@@ -326,7 +326,7 @@ function checkComputations(documents, symbols, report) {
     }
     literal(node, environment, expected) {
       if (node.kind === 'sequence') {
-        if (expected && !['collection', 'values', 'sequence'].includes(expected.name)) { this.issue(node, 'sequence literal requires collection or values context'); return { type: unknown }; }
+        if (expected && (expected.kind !== 'collection' || !['collection', 'values', 'sequence'].includes(expected.name))) { this.issue(node, 'sequence literal requires collection or values context'); return { type: unknown }; }
         let element = expected?.args[0];
         for (const operand of node.operands) {
           const actual = this.read(this.infer(operand, environment, element), operand).type;
@@ -474,7 +474,7 @@ function checkComputations(documents, symbols, report) {
       }
       if (!['map', 'filter', 'flat_map', 'group_by', 'sum_by', 'all'].includes(method)) { this.issue(node, `unknown calculation method: ${method}`); return { type: unknown }; }
       if (node.arguments.length !== 1 || node.arguments[0].name || node.arguments[0].expression.kind !== 'lambda') { this.issue(node, `${method} requires one lambda argument`); return { type: unknown }; }
-      if (!['collection', 'values', 'sequence', 'grouped'].includes(value.type.name) || !value.type.args.length) { this.issue(node, `${method} requires a sequence`); return { type: unknown }; }
+      if (value.type.kind !== 'collection' || !['collection', 'values', 'sequence', 'grouped'].includes(value.type.name) || !value.type.args.length) { this.issue(node, `${method} requires a sequence`); return { type: unknown }; }
       const grouped = value.type.name === 'grouped';
       if (grouped && method !== 'sum_by') this.issue(node, 'grouped values support sum_by');
       const fn = node.arguments[0].expression;
@@ -486,7 +486,7 @@ function checkComputations(documents, symbols, report) {
         return method === 'all' ? { type: type('bool') } : value;
       }
       if (method === 'flat_map') {
-        if (!['sequence', 'collection', 'values'].includes(returned.name) || !returned.args.length) { this.issue(fn, 'flat_map requires a sequence result'); return { type: unknown }; }
+        if (returned.kind !== 'collection' || !['sequence', 'collection', 'values'].includes(returned.name) || !returned.args.length) { this.issue(fn, 'flat_map requires a sequence result'); return { type: unknown }; }
         return { type: type('sequence', 'collection', { args: returned.args }) };
       }
       if (method === 'group_by') {
@@ -504,7 +504,7 @@ function checkComputations(documents, symbols, report) {
     inferNode(node, environment, expected) {
       let result = super.inferNode(node, environment, expected);
       if (node.kind === 'member' && result.field) {
-        const receiver = symbols.get(node.operands[0].inferred?.type.key);
+        const receiver = symbols.get(node.operands[0].inferred.type.key);
         if (receiver && !receiver.effective?.has(node.value) && !result.field.owner.ancestors?.includes(receiver)) {
           const descendant = [...symbols.values()].find(entity => entity.kind === 'entity' && entity.ancestors?.includes(receiver) && entity.effective?.has(node.value));
           if (descendant) {
@@ -540,6 +540,39 @@ function checkComputations(documents, symbols, report) {
       return super.parameters(value, operation, node);
     }
     bindInput(parameter, expression, environment) {
+      const before = this.doc.diagnostics.length;
+      const pure = this.checkBinding(parameter, expression, environment);
+      if (pure === false || this.doc.diagnostics.length !== before) return;
+      const hasInput = node => (node.kind === 'member' && node.operands[0].value === 'input') || node.operands.some(hasInput) || node.arguments.some(argument => hasInput(argument.expression));
+      if (hasInput(expression)) return;
+      const uncertain = (node, doc, visited) => {
+        if (node.inferred?.type.name === 'float') return true;
+        if (node.kind === 'call' && node.operands[0].value === 'to_string' && ['decimal', 'float', 'unknown'].includes(node.arguments[0].expression.inferred?.type.name || 'unknown')) return true;
+        if (node.kind === 'name') {
+          const constant = doc.scope.get(node.value);
+          if (constant?.kind === 'constant' && !visited.has(constant)) {
+            if (invalidConstants.has(constant)) return true;
+            visited.add(constant);
+            if (uncertain(constant.initializer, constant.doc, visited)) return true;
+          }
+        }
+        return node.operands.some(child => uncertain(child, doc, visited)) || node.arguments.some(argument => uncertain(argument.expression, doc, visited));
+      };
+      if (uncertain(expression, this.doc, new Set())) return;
+      try {
+        constants.evaluate(expression, name => {
+          try { return resolveConstant(this.doc, name); }
+          catch (error) {
+            if (error.constructor === Error && error.message === `not a pure constant dependency: ${name}`) throw new constants.EvaluationError(`cannot evaluate lookup binding: ${name}`);
+            throw error;
+          }
+        });
+      } catch (error) {
+        if (!(error instanceof constants.EvaluationError)) throw error;
+        this.issue(expression, `lookup binding evaluation failed: ${error.message}`);
+      }
+    }
+    checkBinding(parameter, expression, environment) {
       const pure = node => {
         if (['string', 'integer', 'decimal', 'bool'].includes(node.kind)) return true;
         if (node.kind === 'name') return this.doc.scope.get(node.value)?.kind === 'constant';
@@ -552,11 +585,11 @@ function checkComputations(documents, symbols, report) {
         if (node.kind === 'call' && node.operands[0].kind === 'name' && node.operands[0].value in conversions.signatures) return node.arguments.every(a => pure(a.expression));
         return false;
       };
-      if (!pure(expression)) { this.issue(expression, 'lookup binding requires a pure expression of inputs, literals, constants or dictionary members'); return; }
+      if (!pure(expression)) { this.issue(expression, 'lookup binding requires a pure expression of inputs, literals, constants or dictionary members'); return false; }
       if (expression.kind === 'member' && expression.operands[0].value === 'input') return super.bindInput(parameter, expression, environment);
       if (expression.kind === 'binary' && expression.value === '??') return super.bindInput(parameter, expression, environment);
       const inferInputs = (node, expected) => {
-        if (node.kind === 'member' && node.operands[0].kind === 'name' && node.operands[0].value === 'input') {
+        if (node.kind === 'member' && node.operands[0].value === 'input') {
           if (!this.inputs.has(node.value)) this.addInput({ ...parameter, name: node.value, type: expected }, node);
           return;
         }
@@ -569,7 +602,7 @@ function checkComputations(documents, symbols, report) {
           node.operands.forEach(child => inferInputs(child, type('bool')));
           return;
         }
-        if (node.kind === 'call' && node.operands[0].kind === 'name') {
+        if (node.kind === 'call') {
           const signature = conversions.signatures[node.operands[0].value];
           node.arguments.forEach((argument, index) => {
             const name = argument.name || signature[index]?.[0];
@@ -599,7 +632,8 @@ function checkComputations(documents, symbols, report) {
   function finiteValue(doc, resolved, payload) {
     if (payload instanceof Map) {
       const declaration = symbols.get(resolved.key);
-      if (!declaration || declaration.kind !== 'value') throw Error('structured finite value requires a declared type');
+      if (!declaration || declaration.kind !== 'value') throw Error(resolved.kind === 'collection'
+        ? 'finite values must be non-collection values' : 'structured finite value requires a declared type');
       const fields = [...payload].sort(([a], [b]) => String(a).localeCompare(String(b))).map(([name, value]) => {
         const field = declaration.fields.find(item => item.name.value === name);
         if (!field) throw Error('unknown structured finite value field');
@@ -651,7 +685,7 @@ function checkComputations(documents, symbols, report) {
       }
       const resolved = checker.read(checker.infer(expression, new Map()), expression).type;
       pure(doc, issue, expression);
-      if (['collection', 'reference'].includes(resolved.kind) || (expression.kind === 'name' && expression.value in resultConstants)) issue(expression, 'finite values must be non-collection values without entity instances');
+      if (['collection', 'reference'].includes(resolved.kind)) issue(expression, 'finite values must be non-collection values without entity instances');
       if (doc.diagnostics.length !== before || resolved.kind === 'unknown') { if (node.name === 'exact') issue(expression, 'exact requires a constant value'); continue; }
       try { candidates.push([base(resolved), constants.evaluate(expression, name => resolveConstant(doc, name))]); }
       catch (error) { issue(expression, `finite value evaluation failed: ${error.message}`); }

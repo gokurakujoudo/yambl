@@ -5,6 +5,7 @@ const path = require('node:path');
 const packagedRoot = path.join(__dirname, '../lang');
 const modelRoot = fs.existsSync(packagedRoot) ? packagedRoot : path.join(__dirname, '../../../../lang');
 const resultConstants = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtins/result-constants.json'), 'utf8'));
+const reservedCalculationNames = JSON.parse(fs.readFileSync(path.join(modelRoot, 'builtins/reserved-calculation-names.json'), 'utf8'));
 
 // Offsets and columns use JavaScript's UTF-16 units, as required by LSP's default encoding.
 const keywords = ['namespace', 'from', 'import', 'entity', 'inherits', 'extend', 'decodes',
@@ -76,7 +77,7 @@ function parse(text, uri = '') {
       node = expressionNode('conditional', token, '', [condition, yes, calculation(0, closingAngle)]);
     } else if (/^[A-Za-z_]/.test(token.value) && doc.tokens[index + 1]?.value === '->') {
       take(); take('->'); node = expressionNode('lambda', token, token.value, [calculation(0, closingAngle)]);
-    } else if (is('not') || is('-') || is('+')) {
+    } else if (is('not') || is('-')) {
       take(); node = expressionNode('unary', token, token.value, [calculation(6, closingAngle)]);
     } else if (is('(')) {
       take(); node = calculation(); take(')');
@@ -457,4 +458,4 @@ function format(doc) {
   return lines.join('\n').trimEnd() + '\n';
 }
 
-module.exports = { parse, format, position, range, stringValue, keywords, annotations, values, generics, entities, structures, constants, resultConstants, modelRoot };
+module.exports = { parse, format, position, range, stringValue, keywords, annotations, values, generics, entities, structures, constants, resultConstants, reservedCalculationNames, modelRoot };

@@ -35,6 +35,12 @@ YAMBL 描述类型、字段、元信息及计算依赖。本文按语言结构�
 | 仓库定义的字典 code | PascalCase | Static、WindIndustryLevel1 |
 | 编译期常量 | UPPER_SNAKE_CASE | OTHER_INDUSTRY |
 
+`sequence`、`grouped`、`record`、`selection`、`dimensions`、`partial`、`issues` 和
+`non_normal` 是内部计算类型名称，不能用作模型声明名，也不能用作实体、extend、value
+的字段名。模型声明包括类型别名、命名 dimension、lookup 和 constraint。例如
+`value sequence { ... }` 和 `attr issues: string` 均产生静态错误。局部变量、计算参数、命名空间和 decorator 参数
+不受这条限制；dimension 的 value/hierarchy 参数和 lookup 键也可以使用这些名称。
+
 以下文件从同一仓库的 `decodes` 命名空间导入已声明的 `Currencies`：
 
 ```yambl
@@ -83,14 +89,19 @@ Entity 是所有实体的抽象最终基类，不能实例化；未显式继承�
 ## 结构化值类型
 
 ```yambl
-value amount {
+value quoted_amount {
     static attr quantity: decimal
-    static attr currency: code<'Currencies'>
+    static attr currency: string
 }
+
+const EXAMPLE: quoted_amount = {quantity: 2.5, currency: 'CNY'}
 ```
 
-value 只有非集合的 static 字段或实体引用，没有 ID、继承、extend 或默认值，禁止
-直接或间接值嵌套循环。同类型按所有字段判等，引用字段按 ID 比较，不自动定义大小顺序。
+花括号中的字段名和值构成结构字面量，须提供声明的全部字段；其他字面量规则见下一节。
+value 的字段均为 static，可用非集合值类型或实体引用，`attr` 是 `static attr` 的简写。
+value 没有 ID、继承、extend 或默认值，禁止直接或间接值嵌套循环。同类型按所有字段
+判等，引用字段按 ID 比较，不自动定义大小顺序。
+当前编译器支持在常量表达式中读取结构常量的单层字段；多层成员访问尚不能编译期求值。
 
 ## 字面量与上下文类型
 

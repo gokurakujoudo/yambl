@@ -210,7 +210,7 @@ function join(tokens) {
 }
 
 function format(doc) {
-  if (doc.syntaxErrors || !doc.ast) return null;
+  if (doc.syntaxErrors) return null;
   const parser = doc.parser, output = []; let pending = [], depth = 0, base = 0, previousLine = 0;
   function flush(comment) {
     if (pending.length || comment !== undefined) {

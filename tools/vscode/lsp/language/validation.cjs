@@ -2,7 +2,7 @@
 const { checkDecorators } = require('./decorators.cjs');
 const { isFlags, codeEntries, checkDecodes, deriveSubtypes } = require('./decodes.cjs');
 
-const { values, generics, entities, structures, stringValue, resultConstants } = require('./syntax.cjs');
+const { values, generics, entities, structures, stringValue, resultConstants, reservedCalculationNames } = require('./syntax.cjs');
 const { relationships, builtinModels, builtinLocals, builtinDocuments } = require('./relationships.cjs');
 const { Resolver, checkAliases, accepts, base } = require('./expressions.cjs');
 const { collectDimensions, checkDimensions } = require('./dimensions.cjs');
@@ -26,6 +26,7 @@ function validate(documents) {
     if (doc.errors.length) continue;
     for (const decl of doc.declarations.filter(d => d.kind !== 'extend')) {
       const name = decl.name.value; decl.key = key(doc, namespace(doc), name); decl.ownFields = new Map(); decl.ownConstraints = new Map();
+      if (reservedCalculationNames.includes(name)) issue(doc, decl.token, `reserved calculation name: ${name}`);
       if (decl.kind === 'constant' ? !/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(name) : ['value', 'type_alias', 'decorator', 'dimension'].includes(decl.kind) ? !snake(name) : !/^[A-Z][A-Za-z0-9]*$/.test(name)) issue(doc, decl.token, decl.kind === 'constant' ? 'constant names must use UPPER_SNAKE_CASE' : ['value', 'type_alias', 'decorator', 'dimension'].includes(decl.kind) ? (decl.kind === 'decorator' ? 'decorator names must use snake_case' : decl.kind === 'dimension' ? 'dimension names must use snake_case' : 'value names must use snake_case') : 'declaration names must use PascalCase');
       const modelDefinition = namespace(doc) === 'builtins' && builtinModels.has(name);
       if ((!modelDefinition && reserved.includes(name)) || symbols.has(decl.key)) issue(doc, decl.token, `duplicate or reserved declaration: ${name}`);
@@ -65,6 +66,9 @@ function validate(documents) {
   }
   for (const doc of analysisDocuments.filter(d => !d.errors.length)) {
     for (const decl of doc.declarations) {
+      for (const named of [...(decl.dimensions || []), ...(decl.lookups || []), ...(decl.constraints || [])]) {
+        if (reservedCalculationNames.includes(named.name.value)) issue(doc, named.name, `reserved calculation name: ${named.name.value}`);
+      }
       if (decl.kind === 'decodes') {
         checkDecodes(decl, issue);
         for (const entry of codeEntries(decl).filter(e => !e.generated)) bind(doc, entry.name, entry);
@@ -115,6 +119,7 @@ function validate(documents) {
       }
       for (const field of decl.fields) {
         const name = field.name.value; bind(doc, field.name, field);
+        if (reservedCalculationNames.includes(name)) issue(doc, field.token, `reserved calculation name: ${name}`);
         if (target?.kind === 'entity' && ['entity_type', 'root_entity_type'].includes(name)) issue(doc, field.token, `reserved built-in field: ${name}`);
         field.owner = target;
         if (field.abstract && !target?.abstract) issue(doc, field.token, 'abstract computed fields require an abstract entity');

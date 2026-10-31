@@ -115,8 +115,10 @@ dense 为主键 id 的宽表，每个字段有独立载荷和状态列，行为�
 
 当前内置物理布局针对 `Decodes`、`Hierarchy` 和 `ConfigGroup`。它们的已有受支持字段可用于
 lookup；其他内嵌内置实体自身声明 lookup 时，生成阶段报错，不生成缺失的存储。三个实体
-仅支持仓库中已定义的字段；新增字段、修改为不支持的类型或使用维度和非 static 类别时，
-生成阶段报错。不带 lookup 的其他内嵌内置声明不会仅因上述 lookup 限制而被拒绝。
+仅支持仓库中已定义的字段，三个实体须分别直接声明 string ID `decodes_id`、
+`hierarchy_id` 和 `config_group_id`；新增字段、修改为不支持的类型或使用维度和非 static
+类别时，生成阶段报错。不带 lookup 的其他内嵌内置声明不会仅因
+上述 lookup 限制而被拒绝。
 
 Decodes 条目主键为 `(decodes_id, code)`；Hierarchy 条目主键为 `(hierarchy_id, ordering)`。
 条目字段来自 IR 内携带的 value 定义，整数 ordering 使用精确 TEXT。DDL 初始化所有已声明

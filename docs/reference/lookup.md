@@ -49,8 +49,26 @@ computed、任意计算和 `::best_available()` 不属于此接口。
 缺少必需输入、类型不符或求值失败返回 `ERROR`。
 SCD 使用左闭右开区间，缺口不回退；所有维度都需要确定，不自动选择 Hierarchy。
 
-上面的 `by_client_id` 有一个输入键 `client_id: string`，准备参数为
-`as_of_date: date` 和可选的 `client_date: date`。例如以下写法不符合 lookup 的路径约束：
+不依赖输入的固定绑定在编译期求值，求值失败会使编译器检查报错。编辑器暂不对包含浮点
+计算或十进制转字符串的固定绑定提前求值，例如 `to_string(1 / 0)` 的求值错误可能不会
+在编辑器中显示；请以编译器的 `check` 结果为准。
+
+上面的 `by_client_id` 有一个输入键 `client_id: string`。`@extra_input_param` 将
+`client_date` 声明为可省略的日期输入，后面的字符串是说明；`input.as_of_date` 则从
+`day` 的日期类型推导为必填准备参数。提供 `client_date` 时用它读取 SCD；省略时
+`??` 使用 `as_of_date`，它不处理字段的非正常结果。以下 `reader` 是已打开的生成包读取会话；
+两个参数都在准备时传入：
+
+```python
+from datetime import date
+
+reader.prepare_security_by_client_id(as_of_date=date(2026, 10, 28))
+reader.prepare_security_by_client_id(
+    as_of_date=date(2026, 10, 28), client_date=date(2026, 10, 1)
+)
+```
+
+以下写法不符合 lookup 的路径约束：
 
 ```yambl
 lookup invalid {
@@ -97,6 +115,8 @@ for result in batch.value:
 匹配器。`matcher.stats` 包含扫描实体数、建键实体数、跳过实体数、不同键数和歧义键数。
 匹配器不依赖打开的 reader；关闭 reader 后仍可使用。写入或回滚不会改变已准备的
 匹配器，要查看新数据应通过新会话重新准备。
+
+从创建仓库到准备匹配器的完整示例见[入门教程](../tutorial/getting-started.md#8-批量匹配商品)。
 
 准备阶段读取相关表并在内存建立索引，成本随相关数据量、路径和候选数量增长；
 后续批次只校验输入并查询内存索引，不读取数据库或文件。匹配器保存键与候选 ID，

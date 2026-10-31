@@ -8,6 +8,22 @@ const { parse, format } = require('../language/syntax.cjs');
 const { validate } = require('../language/validation.cjs');
 const cases = [...require('./cases.json'), ...require('./expression-cases.json'), ...require('./flags-cases.json'), ...require('./decorator-cases.json'), ...require('./computation-cases.json')];
 cases.push(
+  ["value point { attr x: mapping<string, integer> } const P: point = {x: {'a': 1}} entity A { attr f: exact<P> }"],
+  ['value inner { attr n: integer } value outer { attr i: inner } const A: outer = {i: {n: 1}} const B: integer = A.i.n'],
+  ['const PLUS: integer = +1'],
+  ['const PLUS: integer = 1 + +2'],
+  ['entity exact {}'],
+  ['entity one_of {}'],
+  ['value one_of {}'],
+  ['entity A inherits B { computed attr x: integer { return self.missing::value() } } entity B inherits A {}'],
+  ['entity A inherits B { id id: string attr f: string computed attr x: string { return self.f::value() } } entity B inherits A {}'],
+  ["type x = string[bad: 'a'] type y = string['${x}']"],
+  ["type x = string[regex: 123] type y = string['${x}']"],
+  ...['@temporal', '@temporal()', '@temporal(bad=1)'].map(annotation => [`entity A { ${annotation} snapshot attr x: integer computed attr y: integer { return self.x::records().sum_by(r -> r.value) } }`]),
+  ['value sequence { attr n: integer } const X: sequence = [1]'],
+  ['value partial { attr value: integer } entity A { computed attr x: integer { let p: partial = {value: 1} return p.value } }'],
+  ['value record { attr n: integer } entity A { computed attr x: integer { let p: record = {n: 1} return p.n } }'],
+  ['value non_normal { attr n: integer } const P: non_normal = {n: 1} const Q: non_normal = {n: 2} entity A { attr n: one_of[P, Q] }'],
   ["hierarchy H { - 1 'x' } entity A { id id: string attr h: Hierarchy } entity B inherits A { @override attr h: exact<H> }"],
   ['entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(one, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.c) attr a:A }'],
   ['entity A { id id:string @relationship(one, maybe) attr b:B } entity B { id id:string @relationship(many, maybe) attr c:C } entity C { id id:string @reverse_relationship(A.b.c) attr a:A }'],
@@ -19,6 +35,26 @@ cases.push(
   ["entity E { attr price: integer computed attr amount: integer { return self.price::best_available() * 2 } }"],
   ["entity E { attr price: integer computed attr amount: integer { return self.price::best_available().dimensions.missing } }"],
 );
+for (const name of ['sequence', 'grouped', 'record', 'selection', 'dimensions', 'partial', 'issues', 'non_normal']) {
+  for (const source of [
+    `value ${name} { attr value: integer }`,
+    `type ${name} = integer`,
+    `dimension ${name} { value source: string }`,
+    `@targets(DecoratorTargets.All) decorator @${name}()`,
+    `entity A { attr ${name}: string }`,
+    `entity A {} extend A { attr ${name}: string }`,
+    `value point { attr ${name}: integer }`,
+    `entity A { dimension ${name} { value source: string } }`,
+    `entity A { id id: string lookup ${name} { key = self.id::value() } }`,
+    `entity A { constraint ${name} { assert true } }`,
+  ]) cases.push([source]);
+}
+cases.push([`namespace sequence
+@targets(DecoratorTargets.All) decorator @note(record: string)
+dimension feed { value sequence: string hierarchy record: Hierarchy }
+entity A { id id: string lookup by_id { issues = self.id::value() }
+  @extra_input_param(record: integer) computed attr result: integer { let sequence = input.record ?? 1 return sequence }
+}`]);
 cases.push(...require('./literal-cases.json'));
 cases.push(...require('./lookup-cases.json'));
 const lookupSemanticStart = cases.length;

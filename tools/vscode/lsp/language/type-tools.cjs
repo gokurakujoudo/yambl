@@ -1,5 +1,7 @@
 'use strict';
 
+const { reservedCalculationNames } = require('./syntax.cjs');
+
 const types = {
   bool: 'Boolean value.',
   string: "String value. Use string['regex'] or string[regex: 'regex'] to describe a regular-expression constraint. ${type_name} embeds a constrained string type's format. An unparameterized string has no constraint. Runtime matching is not performed and the regex dialect is not specified.",
@@ -54,7 +56,7 @@ function context(doc, offset) {
   }
   const current = stack.at(-1);
   if (!current?.signature) return null;
-  const root = stack.find(frame => frame.signature) || current;
+  const root = stack.find(frame => frame.signature);
   const lastComma = current.commas.at(-1);
   const segment = doc.text.slice(lastComma?.end ?? current.token.end, offset);
   const prefix = doc.text.slice(current.token.end, offset);
@@ -96,6 +98,7 @@ function completions(typeContext, scope, symbols, describe, Resolver) {
   const names = reference ? ['Entity'] : key ? ['string', 'snowflake_id', 'code', 'type', 'attrs'] : value ? ['bool', 'string', 'integer', 'float', 'decimal', 'date', 'datetime', 'snowflake_id', 'code', 'type', 'attrs'] : [];
   for (const label of names) result.push({ label, kind: 7, detail: types[label], documentation: types[label] });
   for (const [label, declaration] of scope) {
+    if (reservedCalculationNames.includes(declaration.name.value)) continue;
     let resolved = declaration.kind === 'entity' ? { kind: 'reference' } : declaration.kind === 'value' ? { kind: 'value' } : null;
     if (declaration.kind === 'type_alias' && !declaration.parameters.length) resolved = new Resolver(declaration.doc, () => {}, symbols, null).resolve(declaration.type);
     if (reference && resolved?.kind !== 'reference' || key && resolved?.kind !== 'reference' && !['string', 'snowflake_id', 'code', 'type', 'attrs'].includes(resolved?.name) || value && !['reference', 'value', 'string'].includes(resolved?.kind) || kind === 'values' && resolved?.kind === 'reference') continue;

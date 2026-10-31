@@ -78,14 +78,11 @@ entity Product {
 
 实体完整名称是 `example.inventory.Product`。`product_id` 是身份；`product_state` 只能使用
 `ProductStates` 字典中的代码。`decimal[18, 2]` 描述十进制精度和小数位数。
+
 计算属性 `total` 不存储额外的列，读取时从当前商品的单价和数量计算；
 `::value()` 是读取字段值的操作。`@unique_by(self.name)` 要求已有名称在商品实体及其子类型中
 唯一；`constraint` 要求每个商品的数量为非负数。数据检查和事务最终候选都会执行这些规则，
 失败时报告冲突或断言位置，事务不会提交。这里定义的是数据结构，尚未创建商品数据。
-
-需要只作为继承基类的实体时，可使用 `abstract entity`；抽象计算属性由具体子类
-实现。字符串格式也可以通过 `${类型名}` 组合已有约束。规则和示例见
-[计算字段](../reference/computations.md)与[内置值类型](../reference/value-types.md#string)。
 
 ## 3. 检查和格式化
 
@@ -259,6 +256,28 @@ python match_product.py files.lclcfg
 输出同样包含 `商品金额：37.50`。两个配置指向各自的数据仓库；文件后端的路径必须是
 不存在的新目录。Plan 格式和回滚操作见[事务和数据](../reference/transactions.md)。
 
+以下进阶示例相互独立，不依赖商品数据。要检查其中任一示例，可创建新的模型目录，
+按第 2 节放置相同的 `yambl-root.lclcfg`，将该示例保存为目录内的 `.yambl` 文件，
+再按第 3 节对新目录运行 `yambl check`。价格示例还可按第 4 节编译和生成；应使用新的输出目录。
+
+## 进阶：声明结构化值
+
+结构化值把多个字段作为一个值使用。例如，以下独立示例声明金额和币种，并定义一个常量：
+
+```yambl
+value money {
+    static attr amount: decimal
+    static attr currency: string
+}
+
+const SAMPLE_PRICE: money = {amount: 37.50, currency: 'CNY'}
+const PRICE_AMOUNT: decimal = SAMPLE_PRICE.amount
+```
+
+花括号按字段名赋值，须提供 `money` 声明的全部字段；`SAMPLE_PRICE.amount` 读取其中的
+金额。结构化值的字段和使用限制见[结构化值类型](../reference/syntax.md#结构化值类型)，
+命名规则见[名称与文件作用域](../reference/syntax.md#名称与文件作用域)。
+
 ## 进阶：限制字段取值
 
 如果字段只允许几个编译期值，可以声明有限值类型：
@@ -279,8 +298,7 @@ entity Task {
 
 ## 进阶：选择价格并检查历史记录
 
-下面的独立模型演示带来源维度的快照。可以把它保存为另一个模型仓库中的
-`prices.yambl`，并像前面的商品模型一样运行 `check`、`compile` 和 `generate`。
+下面的独立模型演示带来源维度的快照，可保存为新模型目录中的 `prices.yambl`。
 
 ```yambl
 hierarchy PreferredSources {
@@ -319,8 +337,10 @@ entity Security {
 `TimeZones.AsiaShanghai`。每条价格记录有独立的日期和来源。`records()` 读取已有物理记录，
 `all` 要求每条记录的值大于零；没有记录时该断言为真。这个模型没有声明回退天数，
 因此只选择请求日期的记录；同一天按 `PreferredSources` 的 ordering 选择来源。例如当天
-Primary 为 10、Secondary 为 12 时，`selected_price` 返回 10，`selected_source` 返回
-`Primary`。选择结果的 `.value` 是价格，`.dimensions.source` 是实际选中的来源。
+Primary 价格为 11、Secondary 价格为 12 时，`selected_price` 返回 11，`selected_source`
+返回 `Primary`。这里 10 和 20 是来源的排序号，不是价格。`input.day` 从 `price` 的时间参数
+推导，读取这两个计算属性时需要传入日期。选择结果的 `.value` 是价格，
+`.dimensions.source` 是实际选中的来源。
 配置回退天数后才会跨日期查找，并优先选择较近日期；详见[计算与选择](../reference/computations.md)。
 如果计算需要读取字典或 Hierarchy 的条目，可参考[内置表](../reference/storage.md#内置表)中的引用和读取示例。
 

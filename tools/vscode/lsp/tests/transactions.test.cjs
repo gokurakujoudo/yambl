@@ -68,7 +68,7 @@ test('transaction documents coexist with models and synchronize untitled languag
 
 test('explicit model bindings navigate inherited and extended fields and track unsaved edits', t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-model-'));
-  t.after(() => fs.rmSync(directory, { recursive: true }));
+  t.after(() => fs.rmSync(directory, { recursive: true, maxRetries: 3 }));
   const roots = ['first', 'second'].map(name => {
     const root = path.join(directory, name); fs.mkdirSync(root);
     fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: 'demo'\n");
@@ -110,7 +110,7 @@ test('explicit model bindings navigate inherited and extended fields and track u
 
 test('bound completion filters operation columns and offers dimension and temporal coordinates', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-completion-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
   fs.writeFileSync(path.join(root, 'model.yambl'), `namespace core
 type amount = decimal
@@ -150,7 +150,7 @@ entity A {
 
 test('shared runtime/editor type cases use aliases, exact constraints and reference IDs', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-types-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
   fs.writeFileSync(path.join(root, 'model.yambl'), typeCases.model);
   const service = new Service(() => {}), uri = 'untitled:type-plan';
@@ -166,7 +166,7 @@ test('shared runtime/editor type cases use aliases, exact constraints and refere
 
 test('finite constraints validate normalized plan values', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-finite-plan-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
   fs.writeFileSync(path.join(root, 'model.yambl'), `entity Item {
     id id: integer
@@ -197,7 +197,7 @@ test('Example static plan passes model-bound type checks', () => {
 
 test('bound plans permit ID-based inserted entities and reject repeated field writes', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-plan-independence-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
   fs.writeFileSync(path.join(root, 'model.yambl'), 'namespace core entity A { id id: integer static attr name: string static attr count: integer }');
   const service = new Service(() => {}), uri = 'untitled:independent-plan';
@@ -221,7 +221,7 @@ test('bound plans permit ID-based inserted entities and reject repeated field wr
 
 test('operation and scope diagnostics validate final syntax without looking up instances', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-scopes-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
   fs.writeFileSync(path.join(root, 'model.yambl'), typeCases.model + `
 extend Item {
@@ -275,7 +275,7 @@ extend Item {
 
 test('ConfigGroup maps check field categories, payload types and known target trees', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-config-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
   fs.writeFileSync(path.join(root, 'model.yambl'), typeCases.model + 'extend Item { config attr limit: integer } entity Other { id id: string config attr limit: integer }');
   const service = new Service(() => {}), uri = 'untitled:config-plan';
@@ -299,7 +299,7 @@ test('ConfigGroup maps check field categories, payload types and known target tr
 test('sealed transaction images validate their types and navigate field coordinates', t => {
   const fixture = require('./transaction-image-cases.json');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-transaction-images-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
   fs.writeFileSync(path.join(root, 'model.yambl'), fixture.model);
   const service = new Service(() => {}), uri = 'untitled:images';
@@ -327,7 +327,7 @@ test('sealed transaction images validate their types and navigate field coordina
 
 test('Plan dictionary changes protect model entries and track known members in order', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yambl-plan-dictionaries-'));
-  t.after(() => fs.rmSync(root, { recursive: true }));
+  t.after(() => fs.rmSync(root, { recursive: true, maxRetries: 3 }));
   fs.writeFileSync(path.join(root, 'yambl-root.lclcfg'), "prefix: ''\n");
   fs.writeFileSync(path.join(root, 'model.yambl'), `namespace core
     decodes Colors { - 100 Red: 'Red' - 200 Blue: 'Blue' }

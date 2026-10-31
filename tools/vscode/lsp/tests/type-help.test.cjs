@@ -16,6 +16,16 @@ function request(source, method) {
 
 function labels(source) { return request(source, 'completion').items.map(item => item.label); }
 
+test('invalid string parameters remain diagnosable when referenced', () => {
+  for (const parameter of ["bad: 'a'", 'regex: 123']) {
+    const doc = parse(`type x = string[${parameter}] type y = string['\${x}']`);
+    validate([doc]);
+    const messages = doc.diagnostics.map(item => item.message);
+    assert.ok(messages.some(message => message.includes('invalid parameters for string')));
+    assert.ok(messages.some(message => message.includes('requires a constrained string type: x')));
+  }
+});
+
 test('unfinished one_of completes visible constants and conversions', () => {
   const source = "const LOW: integer = 1\ndecodes D { - 1 One: 'one' }\nentity E { attr choice: one_of[LOW, |";
   const choices = labels(source);

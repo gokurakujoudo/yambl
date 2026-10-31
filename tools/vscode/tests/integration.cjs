@@ -179,6 +179,21 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
     const messages = vscode.languages.getDiagnostics(removedUri).map(d => d.message);
     assert.ok(messages.includes('::at(...) was removed; use ::value(...) instead'));
     assert.ok(messages.includes('field retrieval requires ::value(...) or ::best_available(...)'));
+    const reservedUri = vscode.Uri.file(path.join(root, 'reserved-value.yambl'));
+    fs.writeFileSync(reservedUri.fsPath, 'value sequence { attr issues: integer }\n');
+    const reservedDoc = await vscode.workspace.openTextDocument(reservedUri);
+    await vscode.window.showTextDocument(reservedDoc);
+    await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', reservedUri);
+    for (const name of ['sequence', 'issues']) {
+      for (let i = 0; i < 30 && !vscode.languages.getDiagnostics(reservedUri).some(d => d.message === `reserved calculation name: ${name}`); i++) await new Promise(resolve => setTimeout(resolve, 100));
+      assert.ok(vscode.languages.getDiagnostics(reservedUri).some(d => d.message === `reserved calculation name: ${name}`));
+    }
+    const lookupUri = vscode.Uri.file(path.join(root, 'invalid-lookup.yambl'));
+    fs.writeFileSync(lookupUri.fsPath, "entity InvalidLookup { @temporal(day: date) scd attr name: string lookup fixed { name = self.name::value(day=parse_date(to_string(1 // 0))) } }\n");
+    await vscode.workspace.openTextDocument(lookupUri);
+    await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', lookupUri);
+    for (let i = 0; i < 30 && !vscode.languages.getDiagnostics(lookupUri).some(d => d.message === 'lookup binding evaluation failed: Fraction(1, 0)'); i++) await new Promise(resolve => setTimeout(resolve, 100));
+    assert.ok(vscode.languages.getDiagnostics(lookupUri).some(d => d.message === 'lookup binding evaluation failed: Fraction(1, 0)'));
     const fixtures = JSON.parse(fs.readFileSync(path.join(root, 'transaction-cases.json'), 'utf8'));
     for (const [language, entry] of [
       ['yambl', { text: 'entity Example{ id key:string }', formatted: 'entity Example {\n    id key: string\n}\n' }],
@@ -193,7 +208,7 @@ final entity Selection { attr chosen: type<Base> attr rules: field_mapping<AttrC
       await vscode.commands.executeCommand('editor.action.formatDocument');
       assert.equal(document.getText(), entry.formatted, language + ' idempotent formatting');
     }
-    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['unified value calls', 'double-colon completion', 'explicit read and at migration diagnostics', 'activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'Format Document for all three languages with LF', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None', 'decorator signatures and named parameter navigation/completion'] }));
+    fs.writeFileSync(output, JSON.stringify({ ok: true, features: ['unified value calls', 'double-colon completion', 'explicit read and at migration diagnostics', 'reserved model and field names', 'activation', 'completion', 'definition', 'complete attribute hover', 'formatting', 'Format Document for all three languages with LF', 'symbols', 'dynamic Decodes diagnostics', 'semantic styling', 'declaration references peek', 'unsaved changes', 'overload multiple locations', 'nearest override navigation', 'arbitrary self field navigation and completion', 'invalid unsaved marker suppression', 'flags union and generated None', 'decorator signatures and named parameter navigation/completion'] }));
   } catch (error) {
     fs.writeFileSync(output, JSON.stringify({ ok: false, error: error.stack })); throw error;
   }

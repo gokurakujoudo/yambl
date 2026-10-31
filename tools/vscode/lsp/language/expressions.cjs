@@ -150,7 +150,7 @@ class Resolver {
     const expected = name === 'string' ? ['regex'] : ['precision', 'scale'];
     const pairs = params.map((p, i) => [p.key || (name === 'decimal' ? ['precision', 'scale'][Math.min(i, 1)] : 'regex'), p.value]);
     const valid = ['string', 'decimal'].includes(name) && (params.every(p => p.key) || params.every(p => !p.key)) && pairs.length === expected.length && new Set(pairs.map(p => p[0])).size === expected.length && pairs.every(([k, v]) => expected.includes(k) && (name === 'string' ? v.value.startsWith("'") : /^-?\d+$/.test(v.value)));
-    if (!valid) this.issue(node, `invalid parameters for ${name}; do not mix positional and named parameters`);
+    if (!valid) { this.issue(node, `invalid parameters for ${name}; do not mix positional and named parameters`); return []; }
     return pairs.map(([k, v]) => [k, v.value.startsWith("'") ? (name === 'string' ? this.regex(v) : stringValue(v.value)) : BigInt(v.value).toString()]).sort((a, b) => a[0].localeCompare(b[0]));
   }
   regex(token) {

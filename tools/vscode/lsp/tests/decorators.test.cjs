@@ -342,5 +342,5 @@ test('target-filtered completion retains imports in unfinished bodies and reacts
     assert.ok(!complete(prefix + 'entity A { @|').includes('observed'));
     const forward = 'namespace app entity A { @| snapshot attr x: string } @targets(DecoratorTargets.EntityAttr, categories=AttrCats.Snapshot) decorator @future()';
     assert.ok(complete(forward).includes('future'));
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  } finally { fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 }); }
 });

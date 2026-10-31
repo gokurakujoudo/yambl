@@ -245,6 +245,25 @@ async function main() {
   expectScope('Currencies.CNY', '.', 'punctuation.accessor.yambl');
   expectScope('Currencies.CNY', 'CNY', 'constant.other.yambl');
   expectScope('attr dictionary: Decodes', 'Decodes', 'entity.name.type.yambl');
+  const reservedCalculationNames = JSON.parse(fs.readFileSync(path.join(__dirname, '../../lang/builtins/reserved-calculation-names.json'), 'utf8'));
+  for (const name of reservedCalculationNames) {
+    expectScope(`value ${name} {`, name, 'invalid.illegal.reserved-calculation-type.yambl');
+    for (const line of [`type ${name} = integer`, `decorator @${name}()`, `dimension ${name} {`, `lookup ${name} {`, `constraint ${name} {`, `attr ${name}: integer`, `id ${name}: string`]) {
+      expectScope(line, name, 'invalid.illegal.reserved-calculation-type.yambl');
+    }
+    const line = `dimension d { value ${name}: string }`;
+    const token = grammar.tokenizeLine(line, textmate.INITIAL).tokens.find(t => t.startIndex <= line.indexOf(name) && line.indexOf(name) < t.endIndex);
+    assert.ok(!token.scopes.includes('invalid.illegal.reserved-calculation-type.yambl'), name);
+    const commentedLine = `dimension d { value ${name} # comment`;
+    const commentedToken = grammar.tokenizeLine(commentedLine, textmate.INITIAL).tokens.find(t => t.startIndex <= commentedLine.indexOf(name) && commentedLine.indexOf(name) < t.endIndex);
+    assert.ok(!commentedToken.scopes.includes('invalid.illegal.reserved-calculation-type.yambl'), name);
+    for (const allowed of [`let ${name} = 1`, `decorator @note(${name}: string)`, `dimension d { hierarchy ${name}: Hierarchy }`, `lookup by_id { ${name} = self.id::value() }`]) {
+      const token = grammar.tokenizeLine(allowed, textmate.INITIAL).tokens.find(t => t.startIndex <= allowed.indexOf(name) && allowed.indexOf(name) < t.endIndex);
+      assert.ok(!token.scopes.includes('invalid.illegal.reserved-calculation-type.yambl'), allowed);
+    }
+    checks++;
+  }
+  expectScope('value normal_record {', 'normal_record', 'support.type.yambl');
   expectScope("'Currencies.CNY'", 'Currencies', 'string.quoted.single.yambl');
   expectScope('# Currencies.CNY', 'Currencies', 'comment.line.number-sign.yambl');
   expectScope('@temporal(as_of_date: date)', '@temporal', 'entity.name.function.yambl');
