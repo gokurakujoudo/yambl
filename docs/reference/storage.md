@@ -121,6 +121,11 @@ lookup；其他内嵌内置实体自身声明 lookup 时，生成阶段报错，
 Decodes 条目主键为 `(decodes_id, code)`；Hierarchy 条目主键为 `(hierarchy_id, ordering)`。
 条目字段来自 IR 内携带的 value 定义，整数 ordering 使用精确 TEXT。DDL 初始化所有已声明
 字典及其条目，包括内置 flags 自动生成的 None/All，也初始化具名 Hierarchy 及条目。模型声明的 Hierarchy 内容受保护，运行时可增加条目。带引号的外部字典不创建伪造实例。
+计算可通过实体引用读取 `Decodes.entries` 和 `Hierarchy.hierarchy_entries`，并对这些字段
+使用 `::value()`、`::records()` 或 `::best_available()`；结果中的条目为相应的结构值。
+例如，实体字段 `dictionary: Decodes` 可用
+`self.dictionary::value().entries::best_available().value` 取得其字典条目集合，
+再用 `.all(e -> e.ordering > 0)` 检查条目的排序值。
 自动子类型字典也使用 Decodes 存储，身份为实体 qualified name 加 `::subtypes`；字典和
 条目只读。其条目按[子类型字典规则](syntax.md#自动子类型字典)派生，生成的 Python code
 类型名须合法且确定。初始化和双后端只读保护已完成候选验证；综合验收与完整门禁仍待完成。
