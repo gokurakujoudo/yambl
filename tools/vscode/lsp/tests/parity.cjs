@@ -24,6 +24,10 @@ const lookupSemanticStart = cases.length;
 cases.push(...require('./lookup-semantic-cases.json'));
 const lookupSemanticEnd = cases.length;
 const workspace = path.resolve(__dirname, '../../../../..');
+const compilerFixtures = path.join(workspace, 'yambl-compiler/tests/fixtures/editor');
+for (const name of ['cases.json', 'expression-cases.json', 'flags-cases.json', 'decorator-cases.json', 'transaction-cases.json', 'transaction-image-cases.json', 'transaction-type-cases.json']) {
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(compilerFixtures, name), 'utf8')), JSON.parse(fs.readFileSync(path.join(__dirname, name), 'utf8')), `Compiler fixture differs: ${name}`);
+}
 const model = path.join(__dirname, 'fixtures', 'example', 'model');
 const files = require('../service.cjs').sources(model);
 cases.push(files.map(file => fs.readFileSync(file, 'utf8')));
